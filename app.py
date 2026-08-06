@@ -14,8 +14,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
-# ==================== MODELS ====================
-
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -35,6 +33,7 @@ class Channel(db.Model):
     subscribers_count = db.Column(db.Integer, default=0)
     views = db.Column(db.Integer, default=0)
     is_boosted = db.Column(db.Boolean, default=False)
+    boost_level = db.Column(db.String(20), default='')
     boost_until = db.Column(db.DateTime, nullable=True)
 
 class Subscription(db.Model):
@@ -71,8 +70,6 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
 
-# ==================== HELPERS ====================
-
 def current_user():
     if 'user_id' in session:
         return User.query.get(session['user_id'])
@@ -87,8 +84,6 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
-# ==================== ROUTES ====================
-
 @app.route('/')
 def index():
     user = current_user()
@@ -100,34 +95,26 @@ def index():
 def auth():
     if current_user():
         return redirect(url_for('index'))
-    
     if request.method == 'POST':
         action = request.form.get('action')
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-
         if not username or not password:
             return render_template('auth.html', error='Заполните все поля')
-
         if action == 'register':
             if User.query.filter_by(username=username).first():
                 return render_template('auth.html', error='Логин уже занят')
-            user = User(
-                username=username,
-                password_hash=generate_password_hash(password)
-            )
+            user = User(username=username, password_hash=generate_password_hash(password))
             db.session.add(user)
             db.session.commit()
             session['user_id'] = user.id
             return redirect(url_for('index'))
-
         elif action == 'login':
             user = User.query.filter_by(username=username).first()
             if user and check_password_hash(user.password_hash, password):
                 session['user_id'] = user.id
                 return redirect(url_for('index'))
             return render_template('auth.html', error='Неверный логин или пароль')
-
     return render_template('auth.html')
 
 @app.route('/logout')
@@ -135,25 +122,41 @@ def logout():
     session.clear()
     return redirect(url_for('auth'))
 
-# ---------- API ----------
-
 @app.route('/api/channels')
 @login_required
 def api_channels():
     sort = request.args.get('sort', 'today')
-    channels = Channel.query.order_by(Channel.subscribers_count.desc()).all()
-    
-    result = []
+    now = datetime.utcnow()
+    channels = Channel.query.all()
+    scored = []
     for ch in channels:
+        posts = Post.query.filter_by(channel_id=ch.id).all()
+        recent_posts = recent_likes = 0
+        if sort == 'today':
+            cutoff = now - timedelta(hours=24)
+        elif sort == 'week':
+            cutoff = now - timedelta(days=7)
+        elif sort == 'month':
+            cutoff = now - timedelta(days=30)
+        else:
+            cutoff = datetime(2000, 1, 1)
+        for p in posts:
+            if p.created_at >= cutoff:
+                recent_posts += 1
+                recent_likes += p.likes
+        score = ch.subscribers_count * 3 + recent_posts * 15 + recent_likes * 5 + ch.views
+        if ch.is_boosted and ch.boost_until and ch.boost_until > now:
+            score += 100000 if ch.boost_level == 'gold' else 50000 if ch.boost_level == 'silver' else 20000
+        scored.append((score, ch))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    result = []
+    for _, ch in scored:
         result.append({
-            'id': ch.id,
-            'name': ch.name,
-            'description': ch.description,
-            'avatar': ch.avatar,
-            'subscribers': ch.subscribers_count,
-            'views': ch.views,
+            'id': ch.id, 'name': ch.name, 'description': ch.description, 'avatar': ch.avatar,
+            'subscribers': ch.subscribers_count, 'views': ch.views,
             'created_at': ch.created_at.strftime('%d.%m.%Y'),
-            'is_boosted': ch.is_boosted
+            'is_boosted': bool(ch.is_boosted and ch.boost_until and ch.boost_until > now),
+            'boost_level': ch.boost_level or ''
         })
     return jsonify(result)
 
@@ -161,19 +164,14 @@ def api_channels():
 @login_required
 def api_my_subscriptions():
     user = current_user()
-    subs = Subscription.query.filter_by(user_id=user.id).all()
     result = []
-    for s in subs:
+    for s in Subscription.query.filter_by(user_id=user.id).all():
         ch = Channel.query.get(s.channel_id)
-        if not ch:
-            continue
-        last_post = Post.query.filter_by(channel_id=ch.id).order_by(Post.created_at.desc()).first()
+        if not ch: continue
+        last = Post.query.filter_by(channel_id=ch.id).order_by(Post.created_at.desc()).first()
         result.append({
-            'id': ch.id,
-            'name': ch.name,
-            'avatar': ch.avatar,
-            'unread': s.unread,
-            'last_message': (last_post.content[:50] + '...') if last_post else 'Нет постов',
+            'id': ch.id, 'name': ch.name, 'avatar': ch.avatar, 'unread': s.unread,
+            'last_message': (last.content[:55] + '...') if last else 'Нет постов',
             'notifications': s.notifications
         })
     return jsonify(result)
@@ -185,12 +183,8 @@ def api_channel(channel_id):
     user = current_user()
     sub = Subscription.query.filter_by(user_id=user.id, channel_id=channel_id).first()
     return jsonify({
-        'id': ch.id,
-        'name': ch.name,
-        'description': ch.description,
-        'avatar': ch.avatar,
-        'subscribers': ch.subscribers_count,
-        'is_subscribed': bool(sub),
+        'id': ch.id, 'name': ch.name, 'description': ch.description, 'avatar': ch.avatar,
+        'subscribers': ch.subscribers_count, 'is_subscribed': bool(sub),
         'is_owner': ch.owner_id == user.id
     })
 
@@ -199,19 +193,13 @@ def api_channel(channel_id):
 def join_channel(channel_id):
     user = current_user()
     ch = Channel.query.get_or_404(channel_id)
-    existing = Subscription.query.filter_by(user_id=user.id, channel_id=channel_id).first()
-    if existing:
+    if Subscription.query.filter_by(user_id=user.id, channel_id=channel_id).first():
         return jsonify({'status': 'already'})
-    
-    sub = Subscription(user_id=user.id, channel_id=channel_id)
+    db.session.add(Subscription(user_id=user.id, channel_id=channel_id))
     ch.subscribers_count += 1
-    db.session.add(sub)
-
     if ch.subscribers_count % 10 == 0:
         owner = User.query.get(ch.owner_id)
-        if owner:
-            owner.crystals += 1
-
+        if owner: owner.crystals += 5
     db.session.commit()
     return jsonify({'status': 'joined', 'subscribers': ch.subscribers_count})
 
@@ -222,7 +210,7 @@ def leave_channel(channel_id):
     sub = Subscription.query.filter_by(user_id=user.id, channel_id=channel_id).first()
     if sub:
         ch = Channel.query.get(channel_id)
-        if ch:
+        if ch and ch.owner_id != user.id:
             ch.subscribers_count = max(0, ch.subscribers_count - 1)
         db.session.delete(sub)
         db.session.commit()
@@ -232,28 +220,17 @@ def leave_channel(channel_id):
 @login_required
 def create_channel():
     user = current_user()
-    data = request.json
+    data = request.json or {}
     name = data.get('name', '').strip()
     description = data.get('description', '').strip()
-
     if not name:
         return jsonify({'error': 'Название обязательно'}), 400
-
-    ch = Channel(
-        name=name,
-        description=description,
-        owner_id=user.id,
-        subscribers_count=1
-    )
+    ch = Channel(name=name, description=description, owner_id=user.id, subscribers_count=1)
     db.session.add(ch)
     db.session.flush()
-
-    sub = Subscription(user_id=user.id, channel_id=ch.id)
-    db.session.add(sub)
-
+    db.session.add(Subscription(user_id=user.id, channel_id=ch.id))
     user.crystals += 10
     db.session.commit()
-
     return jsonify({'id': ch.id, 'name': ch.name})
 
 @app.route('/api/channel/<int:channel_id>/posts')
@@ -264,14 +241,13 @@ def channel_posts(channel_id):
     for p in posts:
         author = User.query.get(p.author_id)
         result.append({
-            'id': p.id,
-            'content': p.content,
+            'id': p.id, 'content': p.content,
             'author': author.username if author else '?',
-            'likes': p.likes,
-            'comments': p.comments_count,
-            'views': p.views,
+            'likes': p.likes, 'views': p.views,
             'created_at': p.created_at.strftime('%d.%m %H:%M')
         })
+        p.views += 1
+    db.session.commit()
     return jsonify(result)
 
 @app.route('/api/channel/<int:channel_id>/post', methods=['POST'])
@@ -279,22 +255,29 @@ def channel_posts(channel_id):
 def create_post(channel_id):
     user = current_user()
     ch = Channel.query.get_or_404(channel_id)
-    
     if ch.owner_id != user.id:
         return jsonify({'error': 'Нет прав'}), 403
-
-    content = request.json.get('content', '').strip()
+    content = (request.json or {}).get('content', '').strip()
     if not content:
         return jsonify({'error': 'Пустой пост'}), 400
-
-    post = Post(
-        channel_id=channel_id,
-        author_id=user.id,
-        content=content
-    )
+    post = Post(channel_id=channel_id, author_id=user.id, content=content)
     db.session.add(post)
+    for s in Subscription.query.filter_by(channel_id=channel_id).all():
+        if s.user_id != user.id:
+            s.unread += 1
     db.session.commit()
     return jsonify({'id': post.id, 'status': 'ok'})
+
+@app.route('/api/post/<int:post_id>/like', methods=['POST'])
+@login_required
+def like_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    post.likes += 1
+    if post.likes == 50:
+        author = User.query.get(post.author_id)
+        if author: author.crystals += 5
+    db.session.commit()
+    return jsonify({'likes': post.likes})
 
 @app.route('/api/profile')
 @login_required
@@ -305,60 +288,83 @@ def api_profile():
         ((Friendship.user_id == user.id) | (Friendship.friend_id == user.id)) &
         (Friendship.status == 'accepted')
     ).count()
-
     return jsonify({
-        'username': user.username,
-        'status': user.status,
-        'avatar': user.avatar,
-        'crystals': user.crystals,
-        'channels': my_channels,
-        'friends': friends_count
+        'username': user.username, 'status': user.status, 'avatar': user.avatar,
+        'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count
     })
 
 @app.route('/api/users/search')
 @login_required
 def search_users():
     q = request.args.get('q', '').strip()
-    if len(q) < 2:
-        return jsonify([])
+    if len(q) < 2: return jsonify([])
     users = User.query.filter(User.username.ilike(f'%{q}%')).limit(20).all()
     me = current_user()
     result = []
     for u in users:
-        if u.id == me.id:
-            continue
-        friendship = Friendship.query.filter(
+        if u.id == me.id: continue
+        fr = Friendship.query.filter(
             ((Friendship.user_id == me.id) & (Friendship.friend_id == u.id)) |
             ((Friendship.user_id == u.id) & (Friendship.friend_id == me.id))
         ).first()
-        status = friendship.status if friendship else 'none'
-        result.append({
-            'id': u.id,
-            'username': u.username,
-            'avatar': u.avatar,
-            'friendship': status
-        })
+        result.append({'id': u.id, 'username': u.username, 'avatar': u.avatar,
+                       'friendship': fr.status if fr else 'none'})
     return jsonify(result)
 
 @app.route('/api/friends/request', methods=['POST'])
 @login_required
 def friend_request():
     me = current_user()
-    friend_id = request.json.get('user_id')
+    friend_id = (request.json or {}).get('user_id')
     if not friend_id or friend_id == me.id:
         return jsonify({'error': 'Некорректный ID'}), 400
-
     existing = Friendship.query.filter(
         ((Friendship.user_id == me.id) & (Friendship.friend_id == friend_id)) |
         ((Friendship.user_id == friend_id) & (Friendship.friend_id == me.id))
     ).first()
     if existing:
         return jsonify({'status': existing.status})
-
-    fr = Friendship(user_id=me.id, friend_id=friend_id, status='pending')
-    db.session.add(fr)
+    db.session.add(Friendship(user_id=me.id, friend_id=friend_id, status='pending'))
     db.session.commit()
     return jsonify({'status': 'pending'})
+
+@app.route('/api/friends/requests')
+@login_required
+def get_requests():
+    me = current_user()
+    result = []
+    for r in Friendship.query.filter_by(friend_id=me.id, status='pending').all():
+        u = User.query.get(r.user_id)
+        if u:
+            result.append({'id': r.id, 'user_id': u.id, 'username': u.username})
+    return jsonify(result)
+
+@app.route('/api/friends/respond', methods=['POST'])
+@login_required
+def respond_request():
+    me = current_user()
+    data = request.json or {}
+    fr = Friendship.query.get(data.get('request_id'))
+    if not fr or fr.friend_id != me.id:
+        return jsonify({'error': 'Не найдено'}), 404
+    fr.status = 'accepted' if data.get('action') == 'accept' else 'rejected'
+    db.session.commit()
+    return jsonify({'status': fr.status})
+
+@app.route('/api/friends')
+@login_required
+def get_friends():
+    me = current_user()
+    result = []
+    for f in Friendship.query.filter(
+        ((Friendship.user_id == me.id) | (Friendship.friend_id == me.id)) &
+        (Friendship.status == 'accepted')
+    ).all():
+        fid = f.friend_id if f.user_id == me.id else f.user_id
+        u = User.query.get(fid)
+        if u:
+            result.append({'id': u.id, 'username': u.username, 'avatar': u.avatar})
+    return jsonify(result)
 
 @app.route('/api/messages/<int:user_id>')
 @login_required
@@ -368,19 +374,35 @@ def get_messages(user_id):
         ((Message.sender_id == me.id) & (Message.receiver_id == user_id)) |
         ((Message.sender_id == user_id) & (Message.receiver_id == me.id))
     ).order_by(Message.created_at.asc()).limit(100).all()
+    return jsonify([{
+        'id': m.id, 'content': m.content, 'is_mine': m.sender_id == me.id,
+        'is_super': m.is_super, 'created_at': m.created_at.strftime('%H:%M')
+    } for m in messages])
 
-    result = []
-    for m in messages:
-        result.append({
-            'id': m.id,
-            'content': m.content,
-            'is_mine': m.sender_id == me.id,
-            'is_super': m.is_super,
-            'created_at': m.created_at.strftime('%H:%M')
-        })
-    return jsonify(result)
-
-# ==================== SOCKETIO ====================
+@app.route('/api/shop/boost', methods=['POST'])
+@login_required
+def buy_boost():
+    user = current_user()
+    data = request.json or {}
+    channel_id = data.get('channel_id')
+    level = data.get('level')
+    prices = {'bronze': 50, 'silver': 150, 'gold': 350}
+    hours = {'bronze': 12, 'silver': 24, 'gold': 48}
+    if level not in prices:
+        return jsonify({'error': 'Неверный уровень'}), 400
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    cost = prices[level]
+    if user.crystals < cost:
+        return jsonify({'error': f'Нужно {cost} ✦'}), 400
+    user.crystals -= cost
+    ch.is_boosted = True
+    ch.boost_level = level
+    ch.boost_until = datetime.utcnow() + timedelta(hours=hours[level])
+    db.session.commit()
+    return jsonify({'status': 'ok', 'crystals': user.crystals,
+                    'boost_until': ch.boost_until.strftime('%d.%m %H:%M')})
 
 @socketio.on('connect')
 def on_connect():
@@ -391,44 +413,26 @@ def on_connect():
 @socketio.on('send_message')
 def handle_message(data):
     user = current_user()
-    if not user:
-        return
+    if not user: return
     receiver_id = data.get('receiver_id')
     content = data.get('content', '').strip()
     is_super = data.get('is_super', False)
-
-    if not content or not receiver_id:
-        return
-
+    if not content or not receiver_id: return
     if is_super and user.crystals < 30:
-        emit('error', {'msg': 'Недостаточно кристаллов'})
+        emit('error', {'msg': 'Недостаточно кристаллов (30 ✦)'})
         return
-
-    msg = Message(
-        sender_id=user.id,
-        receiver_id=receiver_id,
-        content=content,
-        is_super=is_super
-    )
+    msg = Message(sender_id=user.id, receiver_id=receiver_id, content=content, is_super=is_super)
     if is_super:
         user.crystals -= 30
-
     db.session.add(msg)
     db.session.commit()
-
     payload = {
-        'id': msg.id,
-        'content': content,
-        'sender_id': user.id,
-        'sender_name': user.username,
-        'is_super': is_super,
+        'id': msg.id, 'content': content, 'sender_id': user.id,
+        'sender_name': user.username, 'is_super': is_super,
         'created_at': msg.created_at.strftime('%H:%M')
     }
-
     emit('new_message', payload, room=f'user_{receiver_id}')
     emit('new_message', {**payload, 'is_mine': True}, room=f'user_{user.id}')
-
-# ==================== INIT ====================
 
 with app.app_context():
     db.create_all()
