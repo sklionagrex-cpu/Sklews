@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sklews</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <nav class="bottom-nav">
+            <button class="nav-btn active" data-tab="home">
+                <i class="fa-solid fa-house icon"></i>
+                <span>Лента</span>
+            </button>
+            <button class="nav-btn" data-tab="create">
+                <i class="fa-solid fa-plus icon"></i>
+                <span>Создать</span>
+            </button>
+            <button class="nav-btn" data-tab="chats">
+                <i class="fa-solid fa-comments icon"></i>
+                <span>Чаты</span>
+            </button>
+            <button class="nav-btn" data-tab="profile">
+                <i class="fa-solid fa-user icon"></i>
+                <span>Профиль</span>
+            </button>
+        </nav>
+
+        <!-- HOME -->
+        <div id="screen-home" class="screen active">
+            <header class="header">
+                <div class="header-logo">Sklews</div>
+            </header>
+
+            <div class="filters">
+                <span class="filters-label">Сортировка</span>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-sort="today">Сегодня</button>
+                    <button class="filter-btn" data-sort="week">Неделя</button>
+                    <button class="filter-btn" data-sort="month">Месяц</button>
+                    <button class="filter-btn" data-sort="all">Всё время</button>
+                </div>
+            </div>
+
+            <div id="channels-feed" class="feed"></div>
+
+            <div class="section-title">Мои подписки</div>
+            <div id="my-subs" class="feed"></div>
+        </div>
+
+        <!-- CREATE -->
+        <div id="screen-create" class="screen">
+            <header class="header">
+                <h1>Мои каналы</h1>
+            </header>
+            <div style="padding: 0 16px;">
+                <button id="btn-create-channel" class="btn btn-primary full">
+                    <i class="fa-solid fa-plus"></i> Создать канал
+                </button>
+            </div>
+            <div id="my-channels-list" class="feed"></div>
+        </div>
+
+        <!-- CHATS -->
+        <div id="screen-chats" class="screen">
+            <header class="header">
+                <h1>Чаты</h1>
+            </header>
+            <div class="search-box">
+                <input type="text" id="search-users" placeholder="Найти пользователя...">
+            </div>
+            <div id="search-results" class="feed"></div>
+            <div id="chats-list" class="feed"></div>
+        </div>
+
+        <!-- PROFILE -->
+        <div id="screen-profile" class="screen">
+            <header class="header">
+                <h1>Профиль</h1>
+                <button id="btn-logout" class="btn-icon"><i class="fa-solid fa-right-from-bracket"></i></button>
+            </header>
+            <div class="profile-card">
+                <div class="avatar-large" id="profile-avatar">?</div>
+                <h2 id="profile-username">—</h2>
+                <p id="profile-status" class="status-text"></p>
+                <div class="crystals-badge">✦ <span id="profile-crystals">0</span></div>
+                <div class="profile-stats">
+                    <div>
+                        <span id="profile-friends">0</span>
+                        Друзья
+                    </div>
+                    <div>
+                        <span id="profile-channels">0</span>
+                        Каналы
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CHANNEL VIEW -->
+        <div id="screen-channel" class="screen">
+            <header class="header">
+                <button class="btn-back" id="btn-back-channel"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1 id="channel-title">Канал</h1>
+                <div style="width:40px;"></div>
+            </header>
+            <div class="channel-header">
+                <div class="channel-avatar-big" id="channel-avatar">?</div>
+                <h2 id="channel-name" style="font-size:22px;margin-bottom:4px;"></h2>
+                <p id="channel-subs" class="muted"></p>
+                <p id="channel-desc" class="desc"></p>
+                <div class="channel-actions">
+                    <button id="btn-join" class="btn btn-primary">Вступить</button>
+                </div>
+            </div>
+            <div id="posts-feed" class="feed"></div>
+            <div style="padding: 0 16px 20px;">
+                <button id="btn-add-post" class="btn btn-primary full hidden">
+                    <i class="fa-solid fa-plus"></i> Добавить пост
+                </button>
+            </div>
+        </div>
+
+        <!-- CHAT VIEW -->
+        <div id="screen-chat" class="screen">
+            <header class="header">
+                <button class="btn-back" id="btn-back-chat"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1 id="chat-title">Чат</h1>
+                <div style="width:40px;"></div>
+            </header>
+            <div id="messages" class="messages"></div>
+            <div class="chat-input-area">
+                <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off">
+                <button id="btn-send" class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+        </div>
+
+        <!-- CREATE CHANNEL MODAL -->
+        <div id="modal-create" class="modal hidden">
+            <div class="modal-content">
+                <h3>Новый канал</h3>
+                <input type="text" id="new-channel-name" placeholder="Название канала" maxlength="50">
+                <textarea id="new-channel-desc" placeholder="Описание (необязательно)" maxlength="300"></textarea>
+                <div class="modal-actions">
+                    <button id="btn-cancel-create" class="btn btn-secondary">Отмена</button>
+                    <button id="btn-confirm-create" class="btn btn-primary">Создать</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/script.js"></script>
+</body>
+</html>
