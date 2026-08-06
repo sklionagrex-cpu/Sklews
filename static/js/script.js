@@ -325,38 +325,65 @@ document.getElementById('profile-status').onclick = () => document.getElementByI
 document.getElementById('btn-daily').onclick = async () => {
     const res = await fetch('/api/daily_bonus', { method: 'POST' });
     const data = await res.json();
-    alert(data.error || `+${data.bonus} ✦ получено!`);
+    if (data.error) showToast('Бонус', data.error, '⏳');
+    else showToast('Бонус дня', `+${data.bonus} ✦ зачислено на баланс`, '✦');
     loadProfile();
 };
 document.getElementById('crystals-badge').onclick = () => document.getElementById('btn-daily').click();
 
-document.getElementById('btn-open-shop').onclick = () => {
-    loadProfile();
+document.getElementById('btn-open-shop').onclick = async () => {
+    await loadProfile();
+    // load my channels into select
+    try {
+        const res = await fetch('/api/my_channels');
+        const channels = await res.json();
+        const sel = document.getElementById('shop-channel-select');
+        sel.innerHTML = '';
+        if (!channels.length) {
+            sel.innerHTML = '<option value="">Нет каналов — создайте канал</option>';
+        } else {
+            channels.forEach(ch => {
+                const o = document.createElement('option');
+                o.value = ch.id;
+                o.textContent = ch.name + (ch.is_boosted ? ' (буст)' : '');
+                sel.appendChild(o);
+            });
+            if (selectedBoostChannelId) sel.value = selectedBoostChannelId;
+        }
+    } catch(e) { console.error(e); }
     document.getElementById('modal-shop').classList.remove('hidden');
 };
 document.getElementById('btn-close-shop').onclick = () => document.getElementById('modal-shop').classList.add('hidden');
 
 document.querySelectorAll('.btn-boost').forEach(btn => {
     btn.onclick = async () => {
-        if (!selectedBoostChannelId) return alert('Сначала выберите канал в разделе «Создать» (кнопка Буст)');
+        const sel = document.getElementById('shop-channel-select');
+        const channelId = parseInt(sel.value);
+        if (!channelId) return showToast('Ошибка', 'Сначала создайте канал и выберите его', '!');
         const res = await fetch('/api/shop/boost', {
             method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ channel_id: selectedBoostChannelId, level: btn.dataset.level })
+            body: JSON.stringify({ channel_id: channelId, level: btn.dataset.level })
         });
         const data = await res.json();
-        if (data.error) alert(data.error);
+        if (data.error) showToast('Ошибка', data.error, '!');
         else {
-            alert(`Буст активирован до ${data.boost_until}\nОсталось: ${data.crystals} ✦`);
+            document.getElementById('modal-shop').classList.add('hidden');
+            showToast('Буст активен', `До ${data.boost_until}. Осталось ${data.crystals} ✦`, '🚀');
             loadProfile();
             loadMyChannels();
+            loadChannels();
         }
     };
 });
 document.getElementById('btn-buy-premium').onclick = async () => {
     const res = await fetch('/api/shop/premium', { method: 'POST' });
     const data = await res.json();
-    if (data.error) alert(data.error);
-    else { alert('Премиум на 30 дней!'); loadProfile(); }
+    if (data.error) showToast('Ошибка', data.error, '!');
+    else {
+        document.getElementById('modal-shop').classList.add('hidden');
+        showToast('Премиум', 'Активирован на 30 дней 💎', '💎');
+        loadProfile();
+    }
 };
 
 // Analytics
@@ -364,8 +391,14 @@ document.getElementById('btn-analytics').onclick = async () => {
     showScreen('screen-analytics');
     const res = await fetch(`/api/channel/${currentChannelId}/analytics`);
     const d = await res.json();
+    if (d.error) {
+        document.getElementById('analytics-content').innerHTML = `<div class="empty-state">${d.error}</div>`;
+        return;
+    }
+    const avg = d.posts ? Math.round(d.views / d.posts) : 0;
     document.getElementById('analytics-content').innerHTML = `
-        <div class="profile-card" style="margin:0">
+        <div class="profile-card" style="margin:0 0 16px">
+            <h3 style="margin-bottom:16px;font-size:16px">Общая статистика</h3>
             <div class="profile-stats" style="margin-top:0">
                 <div><span>${d.subscribers}</span>Подписчики</div>
                 <div><span>${d.posts}</span>Посты</div>
@@ -374,7 +407,11 @@ document.getElementById('btn-analytics').onclick = async () => {
                 <div><span>${d.likes}</span>Лайки</div>
                 <div><span>${d.views}</span>Просмотры</div>
             </div>
-            <p style="margin-top:16px;color:var(--muted);font-size:13px">Создан: ${d.created_at}</p>
+        </div>
+        <div class="channel-card" style="flex-direction:column;align-items:stretch">
+            <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="color:var(--muted)">Средний охват поста</span><strong>${avg}</strong></div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="color:var(--muted)">Дата создания</span><strong>${d.created_at}</strong></div>
+            <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Лайков на пост</span><strong>${d.posts ? (d.likes/d.posts).toFixed(1) : 0}</strong></div>
         </div>`;
 };
 document.getElementById('btn-back-analytics').onclick = () => openChannel(currentChannelId);
@@ -508,6 +545,15 @@ socket.on('new_message', data => {
     box.scrollTop = box.scrollHeight;
 });
 socket.on('error', d => alert(d.msg || 'Ошибка'));
+
+
+function showToast(title, text, icon) {
+    document.getElementById('toast-title').textContent = title || 'Готово';
+    document.getElementById('toast-text').textContent = text || '';
+    document.getElementById('toast-icon').textContent = icon || '✦';
+    document.getElementById('modal-toast').classList.remove('hidden');
+}
+document.getElementById('btn-toast-ok').onclick = () => document.getElementById('modal-toast').classList.add('hidden');
 
 function escapeHtml(t) {
     if (!t) return '';

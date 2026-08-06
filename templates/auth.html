@@ -3,42 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sklews</title>
+    <title>Sklews — Вход</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <style>
-        .auth-tabs {
-            display: flex;
-            gap: 8px;
+        .auth-form input {
+            width: 100%;
+            padding: 16px 18px;
+            margin-bottom: 12px;
             background: var(--card);
-            padding: 5px;
+            border: 1px solid var(--border);
             border-radius: 14px;
-            margin-bottom: 28px;
-        }
-
-        .auth-tab {
-            flex: 1;
-            padding: 12px 0;
-            border: none;
-            border-radius: 11px;
-            background: transparent;
-            color: var(--muted);
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .auth-tab.active {
-            background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-            color: white;
-            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35);
-        }
-
-        .auth-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 20px;
             color: var(--text);
+            font-size: 16px;
+            outline: none;
+            transition: 0.2s;
+        }
+        .auth-form input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--purple-glow);
+        }
+        .auth-form input::placeholder { color: var(--muted); }
+        .error {
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin-bottom: 18px;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -51,51 +43,34 @@
         <div class="error">{{ error }}</div>
         {% endif %}
 
-        <!-- Переключатель режимов -->
         <div class="auth-tabs">
-            <button type="button" class="auth-tab active" id="tab-register">Создать</button>
-            <button type="button" class="auth-tab" id="tab-login">Войти</button>
+            <button type="button" class="auth-tab active" id="tab-login">Войти</button>
+            <button type="button" class="auth-tab" id="tab-register">Создать</button>
         </div>
 
-        <div class="auth-title" id="auth-title">Создание аккаунта</div>
-
         <form method="POST" class="auth-form" id="authForm">
-            <input type="hidden" name="action" id="form-action" value="register">
-            
+            <input type="hidden" name="action" id="form-action" value="login">
             <input type="text" name="username" placeholder="Логин" required autocomplete="username" autofocus>
             <input type="password" name="password" placeholder="Пароль" required autocomplete="current-password">
-            
-            <button type="submit" class="btn btn-primary full" id="submit-btn" style="margin-top: 18px;">
-                Создать аккаунт
-            </button>
+            <button type="submit" class="btn btn-primary full" id="submit-btn" style="margin-top:8px;width:100%">Войти</button>
         </form>
     </div>
-
     <script>
         const tabRegister = document.getElementById('tab-register');
         const tabLogin = document.getElementById('tab-login');
         const formAction = document.getElementById('form-action');
-        const authTitle = document.getElementById('auth-title');
         const submitBtn = document.getElementById('submit-btn');
-
         function setMode(mode) {
             if (mode === 'register') {
-                tabRegister.classList.add('active');
-                tabLogin.classList.remove('active');
-                formAction.value = 'register';
-                authTitle.textContent = 'Создание аккаунта';
-                submitBtn.textContent = 'Создать аккаунт';
+                tabRegister.classList.add('active'); tabLogin.classList.remove('active');
+                formAction.value = 'register'; submitBtn.textContent = 'Создать аккаунт';
             } else {
-                tabLogin.classList.add('active');
-                tabRegister.classList.remove('active');
-                formAction.value = 'login';
-                authTitle.textContent = 'Вход в аккаунт';
-                submitBtn.textContent = 'Войти';
+                tabLogin.classList.add('active'); tabRegister.classList.remove('active');
+                formAction.value = 'login'; submitBtn.textContent = 'Войти';
             }
         }
-
-        tabRegister.addEventListener('click', () => setMode('register'));
-        tabLogin.addEventListener('click', () => setMode('login'));
+        tabRegister.onclick = () => setMode('register');
+        tabLogin.onclick = () => setMode('login');
     </script>
 </body>
 </html>

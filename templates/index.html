@@ -159,15 +159,27 @@
         </div>
 
         <div id="modal-shop" class="modal hidden">
-            <div class="modal-content" style="max-height:80vh;overflow-y:auto">
+            <div class="modal-content" style="max-height:85vh;overflow-y:auto">
                 <h3>Магазин ✦</h3>
-                <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Баланс: <span id="shop-balance">0</span> ✦</p>
-                <div class="shop-item"><div><strong>Бронзовый буст</strong><p>12ч, +5 позиций</p></div><button class="btn btn-primary btn-boost" data-level="bronze">50 ✦</button></div>
-                <div class="shop-item"><div><strong>Серебряный буст</strong><p>24ч, Топ-10</p></div><button class="btn btn-primary btn-boost" data-level="silver">150 ✦</button></div>
-                <div class="shop-item"><div><strong>Золотой буст</strong><p>48ч, закреп сверху</p></div><button class="btn btn-primary btn-boost" data-level="gold">350 ✦</button></div>
-                <div class="shop-item"><div><strong>Премиум 30 дней</strong><p>Иконка 💎, приоритет</p></div><button class="btn btn-primary" id="btn-buy-premium">200 ✦</button></div>
-                <p class="shop-hint">Сначала выберите канал в «Создать» (кнопка Буст)</p>
-                <button id="btn-close-shop" class="btn btn-secondary full" style="margin-top:12px">Закрыть</button>
+                <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Баланс: <strong id="shop-balance" style="color:var(--accent3)">0</strong> ✦</p>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Канал для буста</label>
+                <select id="shop-channel-select" style="width:100%;padding:12px 14px;margin-bottom:16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px">
+                    <option value="">Загрузка...</option>
+                </select>
+                <div class="shop-item"><div><strong>Бронзовый буст</strong><p>12 часов · поднятие в ленте</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="bronze">50 ✦</button></div>
+                <div class="shop-item"><div><strong>Серебряный буст</strong><p>24 часа · Топ-10</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="silver">150 ✦</button></div>
+                <div class="shop-item"><div><strong>Золотой буст</strong><p>48 часов · закреп сверху</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="gold">350 ✦</button></div>
+                <div class="shop-item"><div><strong>Премиум 30 дней</strong><p>💎 в профиле и чатах</p></div><button class="btn btn-primary btn-sm" id="btn-buy-premium">200 ✦</button></div>
+                <button id="btn-close-shop" class="btn btn-secondary full" style="margin-top:16px">Закрыть</button>
+            </div>
+        </div>
+
+        <div id="modal-toast" class="modal hidden">
+            <div class="modal-content" style="text-align:center;padding:28px 24px">
+                <div id="toast-icon" style="font-size:36px;margin-bottom:12px">✦</div>
+                <h3 id="toast-title" style="margin-bottom:8px">Готово</h3>
+                <p id="toast-text" style="color:var(--muted);font-size:14px;margin-bottom:20px"></p>
+                <button id="btn-toast-ok" class="btn btn-primary full">Ок</button>
             </div>
         </div>
 
