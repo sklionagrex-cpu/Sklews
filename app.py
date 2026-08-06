@@ -21,7 +21,12 @@ class User(db.Model):
     avatar = db.Column(db.String(256), default='')
     status = db.Column(db.String(120), default='')
     crystals = db.Column(db.Integer, default=0)
+    is_premium = db.Column(db.Boolean, default=False)
+    premium_until = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_daily = db.Column(db.DateTime, nullable=True)
+    referral_code = db.Column(db.String(20), unique=True, nullable=True)
+    referred_by = db.Column(db.Integer, nullable=True)
 
 class Channel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -35,6 +40,7 @@ class Channel(db.Model):
     is_boosted = db.Column(db.Boolean, default=False)
     boost_level = db.Column(db.String(20), default='')
     boost_until = db.Column(db.DateTime, nullable=True)
+    accent_color = db.Column(db.String(20), default='#8b5cf6')
 
 class Subscription(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -49,10 +55,13 @@ class Post(db.Model):
     channel_id = db.Column(db.Integer, db.ForeignKey('channel.id'), nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     content = db.Column(db.Text, nullable=False)
+    media_type = db.Column(db.String(20), default='text')  # text / photo / video / circle
+    media_url = db.Column(db.String(500), default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     likes = db.Column(db.Integer, default=0)
     comments_count = db.Column(db.Integer, default=0)
     views = db.Column(db.Integer, default=0)
+    is_pinned = db.Column(db.Boolean, default=False)
 
 class Friendship(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -70,6 +79,19 @@ class Message(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_read = db.Column(db.Boolean, default=False)
 
+class ChannelRole(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    channel_id = db.Column(db.Integer, db.ForeignKey('channel.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    role = db.Column(db.String(20), default='moderator')  # admin / moderator / coauthor
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 def current_user():
     if 'user_id' in session:
         return User.query.get(session['user_id'])
@@ -83,6 +105,18 @@ def login_required(f):
             return redirect(url_for('auth'))
         return f(*args, **kwargs)
     return decorated
+
+def can_post(user, channel):
+    if channel.owner_id == user.id:
+        return True
+    role = ChannelRole.query.filter_by(channel_id=channel.id, user_id=user.id).first()
+    return role and role.role in ('admin', 'coauthor')
+
+def can_moderate(user, channel):
+    if channel.owner_id == user.id:
+        return True
+    role = ChannelRole.query.filter_by(channel_id=channel.id, user_id=user.id).first()
+    return role and role.role in ('admin', 'moderator')
 
 @app.route('/')
 def index():
@@ -104,7 +138,8 @@ def auth():
         if action == 'register':
             if User.query.filter_by(username=username).first():
                 return render_template('auth.html', error='Логин уже занят')
-            user = User(username=username, password_hash=generate_password_hash(password))
+            user = User(username=username, password_hash=generate_password_hash(password),
+                        referral_code=secrets.token_hex(4))
             db.session.add(user)
             db.session.commit()
             session['user_id'] = user.id
@@ -122,41 +157,52 @@ def logout():
     session.clear()
     return redirect(url_for('auth'))
 
+# ==================== CHANNELS ====================
+
 @app.route('/api/channels')
 @login_required
 def api_channels():
     sort = request.args.get('sort', 'today')
     now = datetime.utcnow()
+    # clean expired boosts
+    for ch in Channel.query.filter(Channel.is_boosted == True).all():
+        if ch.boost_until and ch.boost_until < now:
+            ch.is_boosted = False
+            ch.boost_level = ''
+            ch.boost_until = None
+    db.session.commit()
+
     channels = Channel.query.all()
     scored = []
     for ch in channels:
         posts = Post.query.filter_by(channel_id=ch.id).all()
         recent_posts = recent_likes = 0
-        if sort == 'today':
-            cutoff = now - timedelta(hours=24)
-        elif sort == 'week':
-            cutoff = now - timedelta(days=7)
-        elif sort == 'month':
-            cutoff = now - timedelta(days=30)
-        else:
-            cutoff = datetime(2000, 1, 1)
+        if sort == 'today': cutoff = now - timedelta(hours=24)
+        elif sort == 'week': cutoff = now - timedelta(days=7)
+        elif sort == 'month': cutoff = now - timedelta(days=30)
+        else: cutoff = datetime(2000, 1, 1)
         for p in posts:
             if p.created_at >= cutoff:
                 recent_posts += 1
                 recent_likes += p.likes
         score = ch.subscribers_count * 3 + recent_posts * 15 + recent_likes * 5 + ch.views
-        if ch.is_boosted and ch.boost_until and ch.boost_until > now:
-            score += 100000 if ch.boost_level == 'gold' else 50000 if ch.boost_level == 'silver' else 20000
-        scored.append((score, ch))
+        if ch.is_boosted:
+            score += {'gold': 100000, 'silver': 50000, 'bronze': 20000}.get(ch.boost_level, 10000)
+        scored.append((score, ch, recent_posts))
     scored.sort(key=lambda x: x[0], reverse=True)
     result = []
-    for _, ch in scored:
+    for score, ch, rp in scored:
+        label = ''
+        if ch.is_boosted:
+            label = {'gold': '👑 Легенда', 'silver': '⭐ Популярный', 'bronze': '🔥 В тренде'}.get(ch.boost_level, '🔥')
+        elif rp > 5:
+            label = f'+{rp} постов'
         result.append({
             'id': ch.id, 'name': ch.name, 'description': ch.description, 'avatar': ch.avatar,
             'subscribers': ch.subscribers_count, 'views': ch.views,
             'created_at': ch.created_at.strftime('%d.%m.%Y'),
-            'is_boosted': bool(ch.is_boosted and ch.boost_until and ch.boost_until > now),
-            'boost_level': ch.boost_level or ''
+            'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '', 'label': label,
+            'accent': ch.accent_color or '#8b5cf6'
         })
     return jsonify(result)
 
@@ -182,10 +228,15 @@ def api_channel(channel_id):
     ch = Channel.query.get_or_404(channel_id)
     user = current_user()
     sub = Subscription.query.filter_by(user_id=user.id, channel_id=channel_id).first()
+    role = ChannelRole.query.filter_by(channel_id=channel_id, user_id=user.id).first()
     return jsonify({
         'id': ch.id, 'name': ch.name, 'description': ch.description, 'avatar': ch.avatar,
         'subscribers': ch.subscribers_count, 'is_subscribed': bool(sub),
-        'is_owner': ch.owner_id == user.id
+        'is_owner': ch.owner_id == user.id,
+        'role': 'owner' if ch.owner_id == user.id else (role.role if role else None),
+        'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '',
+        'accent': ch.accent_color or '#8b5cf6',
+        'notifications': sub.notifications if sub else True
     })
 
 @app.route('/api/channel/<int:channel_id>/join', methods=['POST'])
@@ -197,9 +248,11 @@ def join_channel(channel_id):
         return jsonify({'status': 'already'})
     db.session.add(Subscription(user_id=user.id, channel_id=channel_id))
     ch.subscribers_count += 1
-    if ch.subscribers_count % 10 == 0:
-        owner = User.query.get(ch.owner_id)
-        if owner: owner.crystals += 5
+    owner = User.query.get(ch.owner_id)
+    if owner:
+        if ch.subscribers_count % 10 == 0: owner.crystals += 5
+        if ch.subscribers_count == 50: owner.crystals += 15
+        if ch.subscribers_count == 100: owner.crystals += 30
     db.session.commit()
     return jsonify({'status': 'joined', 'subscribers': ch.subscribers_count})
 
@@ -216,6 +269,17 @@ def leave_channel(channel_id):
         db.session.commit()
     return jsonify({'status': 'left'})
 
+@app.route('/api/channel/<int:channel_id>/notifications', methods=['POST'])
+@login_required
+def toggle_notifications(channel_id):
+    user = current_user()
+    sub = Subscription.query.filter_by(user_id=user.id, channel_id=channel_id).first()
+    if not sub:
+        return jsonify({'error': 'Не подписан'}), 400
+    sub.notifications = not sub.notifications
+    db.session.commit()
+    return jsonify({'notifications': sub.notifications})
+
 @app.route('/api/channel/create', methods=['POST'])
 @login_required
 def create_channel():
@@ -231,19 +295,19 @@ def create_channel():
     db.session.add(Subscription(user_id=user.id, channel_id=ch.id))
     user.crystals += 10
     db.session.commit()
-    return jsonify({'id': ch.id, 'name': ch.name})
+    return jsonify({'id': ch.id, 'name': ch.name, 'crystals': user.crystals})
 
 @app.route('/api/channel/<int:channel_id>/posts')
 @login_required
 def channel_posts(channel_id):
-    posts = Post.query.filter_by(channel_id=channel_id).order_by(Post.created_at.desc()).limit(50).all()
+    posts = Post.query.filter_by(channel_id=channel_id).order_by(Post.is_pinned.desc(), Post.created_at.desc()).limit(50).all()
     result = []
     for p in posts:
         author = User.query.get(p.author_id)
         result.append({
-            'id': p.id, 'content': p.content,
-            'author': author.username if author else '?',
-            'likes': p.likes, 'views': p.views,
+            'id': p.id, 'content': p.content, 'author': author.username if author else '?',
+            'likes': p.likes, 'views': p.views, 'is_pinned': p.is_pinned,
+            'media_type': p.media_type, 'media_url': p.media_url,
             'created_at': p.created_at.strftime('%d.%m %H:%M')
         })
         p.views += 1
@@ -255,15 +319,17 @@ def channel_posts(channel_id):
 def create_post(channel_id):
     user = current_user()
     ch = Channel.query.get_or_404(channel_id)
-    if ch.owner_id != user.id:
-        return jsonify({'error': 'Нет прав'}), 403
-    content = (request.json or {}).get('content', '').strip()
+    if not can_post(user, ch):
+        return jsonify({'error': 'Нет прав на публикацию'}), 403
+    data = request.json or {}
+    content = data.get('content', '').strip()
     if not content:
         return jsonify({'error': 'Пустой пост'}), 400
-    post = Post(channel_id=channel_id, author_id=user.id, content=content)
+    post = Post(channel_id=channel_id, author_id=user.id, content=content,
+                media_type=data.get('media_type', 'text'), media_url=data.get('media_url', ''))
     db.session.add(post)
     for s in Subscription.query.filter_by(channel_id=channel_id).all():
-        if s.user_id != user.id:
+        if s.user_id != user.id and s.notifications:
             s.unread += 1
     db.session.commit()
     return jsonify({'id': post.id, 'status': 'ok'})
@@ -273,11 +339,72 @@ def create_post(channel_id):
 def like_post(post_id):
     post = Post.query.get_or_404(post_id)
     post.likes += 1
-    if post.likes == 50:
+    if post.likes in (50, 200):
         author = User.query.get(post.author_id)
-        if author: author.crystals += 5
+        if author:
+            author.crystals += 5 if post.likes == 50 else 15
     db.session.commit()
     return jsonify({'likes': post.likes})
+
+@app.route('/api/post/<int:post_id>/pin', methods=['POST'])
+@login_required
+def pin_post(post_id):
+    user = current_user()
+    post = Post.query.get_or_404(post_id)
+    ch = Channel.query.get(post.channel_id)
+    if not can_moderate(user, ch):
+        return jsonify({'error': 'Нет прав'}), 403
+    # unpin others
+    Post.query.filter_by(channel_id=ch.id, is_pinned=True).update({'is_pinned': False})
+    post.is_pinned = True
+    db.session.commit()
+    return jsonify({'status': 'pinned'})
+
+# ==================== ROLES ====================
+
+@app.route('/api/channel/<int:channel_id>/roles')
+@login_required
+def get_roles(channel_id):
+    ch = Channel.query.get_or_404(channel_id)
+    user = current_user()
+    if ch.owner_id != user.id and not can_moderate(user, ch):
+        return jsonify({'error': 'Нет прав'}), 403
+    roles = ChannelRole.query.filter_by(channel_id=channel_id).all()
+    result = []
+    for r in roles:
+        u = User.query.get(r.user_id)
+        if u:
+            result.append({'id': r.id, 'user_id': u.id, 'username': u.username, 'role': r.role})
+    # owner
+    owner = User.query.get(ch.owner_id)
+    if owner:
+        result.insert(0, {'id': 0, 'user_id': owner.id, 'username': owner.username, 'role': 'owner'})
+    return jsonify(result)
+
+@app.route('/api/channel/<int:channel_id>/roles', methods=['POST'])
+@login_required
+def add_role(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    data = request.json or {}
+    target_id = data.get('user_id')
+    role = data.get('role', 'moderator')
+    if role not in ('admin', 'moderator', 'coauthor'):
+        return jsonify({'error': 'Неверная роль'}), 400
+    target = User.query.get(target_id)
+    if not target:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+    existing = ChannelRole.query.filter_by(channel_id=channel_id, user_id=target_id).first()
+    if existing:
+        existing.role = role
+    else:
+        db.session.add(ChannelRole(channel_id=channel_id, user_id=target_id, role=role))
+    db.session.commit()
+    return jsonify({'status': 'ok', 'role': role})
+
+# ==================== PROFILE ====================
 
 @app.route('/api/profile')
 @login_required
@@ -290,8 +417,35 @@ def api_profile():
     ).count()
     return jsonify({
         'username': user.username, 'status': user.status, 'avatar': user.avatar,
-        'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count
+        'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
+        'is_premium': user.is_premium, 'referral_code': user.referral_code or ''
     })
+
+@app.route('/api/profile/update', methods=['POST'])
+@login_required
+def update_profile():
+    user = current_user()
+    data = request.json or {}
+    if 'status' in data:
+        user.status = str(data['status'])[:120]
+    if 'avatar' in data:
+        user.avatar = str(data['avatar'])[:256]
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+@app.route('/api/daily_bonus', methods=['POST'])
+@login_required
+def daily_bonus():
+    user = current_user()
+    now = datetime.utcnow()
+    if user.last_daily and (now - user.last_daily).days < 1:
+        return jsonify({'error': 'Бонус уже получен сегодня', 'crystals': user.crystals}), 400
+    user.crystals += 5
+    user.last_daily = now
+    db.session.commit()
+    return jsonify({'status': 'ok', 'crystals': user.crystals, 'bonus': 5})
+
+# ==================== FRIENDS ====================
 
 @app.route('/api/users/search')
 @login_required
@@ -307,8 +461,11 @@ def search_users():
             ((Friendship.user_id == me.id) & (Friendship.friend_id == u.id)) |
             ((Friendship.user_id == u.id) & (Friendship.friend_id == me.id))
         ).first()
-        result.append({'id': u.id, 'username': u.username, 'avatar': u.avatar,
-                       'friendship': fr.status if fr else 'none'})
+        result.append({
+            'id': u.id, 'username': u.username, 'avatar': u.avatar,
+            'status': u.status, 'friendship': fr.status if fr else 'none',
+            'is_premium': u.is_premium
+        })
     return jsonify(result)
 
 @app.route('/api/friends/request', methods=['POST'])
@@ -363,7 +520,7 @@ def get_friends():
         fid = f.friend_id if f.user_id == me.id else f.user_id
         u = User.query.get(fid)
         if u:
-            result.append({'id': u.id, 'username': u.username, 'avatar': u.avatar})
+            result.append({'id': u.id, 'username': u.username, 'avatar': u.avatar, 'status': u.status})
     return jsonify(result)
 
 @app.route('/api/messages/<int:user_id>')
@@ -378,6 +535,8 @@ def get_messages(user_id):
         'id': m.id, 'content': m.content, 'is_mine': m.sender_id == me.id,
         'is_super': m.is_super, 'created_at': m.created_at.strftime('%H:%M')
     } for m in messages])
+
+# ==================== SHOP ====================
 
 @app.route('/api/shop/boost', methods=['POST'])
 @login_required
@@ -403,6 +562,68 @@ def buy_boost():
     db.session.commit()
     return jsonify({'status': 'ok', 'crystals': user.crystals,
                     'boost_until': ch.boost_until.strftime('%d.%m %H:%M')})
+
+@app.route('/api/shop/premium', methods=['POST'])
+@login_required
+def buy_premium():
+    user = current_user()
+    if user.crystals < 200:
+        return jsonify({'error': 'Нужно 200 ✦'}), 400
+    user.crystals -= 200
+    user.is_premium = True
+    user.premium_until = datetime.utcnow() + timedelta(days=30)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'crystals': user.crystals})
+
+@app.route('/api/shop/theme', methods=['POST'])
+@login_required
+def buy_theme():
+    user = current_user()
+    data = request.json or {}
+    channel_id = data.get('channel_id')
+    color = data.get('color', '#8b5cf6')
+    if user.crystals < 100:
+        return jsonify({'error': 'Нужно 100 ✦'}), 400
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    user.crystals -= 100
+    ch.accent_color = color
+    db.session.commit()
+    return jsonify({'status': 'ok', 'crystals': user.crystals, 'accent': color})
+
+@app.route('/api/my_channels')
+@login_required
+def my_channels():
+    user = current_user()
+    channels = Channel.query.filter_by(owner_id=user.id).all()
+    return jsonify([{
+        'id': ch.id, 'name': ch.name, 'subscribers': ch.subscribers_count,
+        'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '',
+        'accent': ch.accent_color or '#8b5cf6'
+    } for ch in channels])
+
+# ==================== ANALYTICS (basic) ====================
+
+@app.route('/api/channel/<int:channel_id>/analytics')
+@login_required
+def channel_analytics(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    posts = Post.query.filter_by(channel_id=channel_id).all()
+    total_likes = sum(p.likes for p in posts)
+    total_views = sum(p.views for p in posts)
+    return jsonify({
+        'subscribers': ch.subscribers_count,
+        'posts': len(posts),
+        'likes': total_likes,
+        'views': total_views,
+        'created_at': ch.created_at.strftime('%d.%m.%Y')
+    })
+
+# ==================== SOCKETIO ====================
 
 @socketio.on('connect')
 def on_connect():

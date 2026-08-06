@@ -3,6 +3,7 @@ let currentChannelId = null;
 let currentChatUserId = null;
 let currentSort = 'today';
 let isSuperMode = false;
+let selectedBoostChannelId = null;
 
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -27,10 +28,7 @@ function showScreen(id) {
     if (el) el.classList.add('active');
 }
 
-function loadHome() {
-    loadChannels();
-    loadMySubs();
-}
+function loadHome() { loadChannels(); loadMySubs(); }
 
 async function loadChannels() {
     try {
@@ -45,7 +43,7 @@ async function loadChannels() {
         channels.forEach(ch => {
             const card = document.createElement('div');
             card.className = 'channel-card' + (ch.is_boosted ? ' boosted' : '');
-            const badge = ch.is_boosted ? `<span style="font-size:11px;background:var(--accent);color:#fff;padding:2px 7px;border-radius:10px;margin-left:6px;">${ch.boost_level||'буст'}</span>` : '';
+            const badge = ch.label ? `<span style="font-size:11px;background:var(--accent);color:#fff;padding:2px 7px;border-radius:10px;margin-left:6px;">${ch.label}</span>` : '';
             card.innerHTML = `<div class="avatar">${ch.name[0].toUpperCase()}</div>
                 <div class="channel-info"><h3>${escapeHtml(ch.name)}${badge}</h3>
                 <p>${ch.subscribers} участников</p></div>`;
@@ -73,6 +71,17 @@ async function loadMySubs() {
                 <p>${escapeHtml(s.last_message)}</p></div>
                 ${s.unread > 0 ? `<div class="badge-unread">${s.unread}</div>` : ''}`;
             card.onclick = () => openChannel(s.id);
+            // long press for notifications
+            let timer;
+            card.addEventListener('touchstart', () => {
+                timer = setTimeout(async () => {
+                    const r = await fetch(`/api/channel/${s.id}/notifications`, { method: 'POST' });
+                    const d = await r.json();
+                    alert(d.notifications ? 'Уведомления включены' : 'Уведомления отключены');
+                }, 600);
+            });
+            card.addEventListener('touchend', () => clearTimeout(timer));
+            card.addEventListener('touchmove', () => clearTimeout(timer));
             feed.appendChild(card);
         });
     } catch (e) { console.error(e); }
@@ -109,7 +118,7 @@ async function openChannel(id) {
             btnJoin.classList.remove('btn-secondary');
         }
         const btnPost = document.getElementById('btn-add-post');
-        if (ch.is_owner) btnPost.classList.remove('hidden');
+        if (ch.is_owner || ch.role === 'admin' || ch.role === 'coauthor') btnPost.classList.remove('hidden');
         else btnPost.classList.add('hidden');
         loadPosts(id);
     } catch (e) { console.error(e); }
@@ -144,13 +153,15 @@ async function loadPosts(channelId) {
             card.className = 'channel-card';
             card.style.flexDirection = 'column';
             card.style.alignItems = 'stretch';
+            const pin = p.is_pinned ? '<span style="color:var(--accent);font-size:12px;">📌 Закреплён</span> ' : '';
             card.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-                <strong>${escapeHtml(p.author)}</strong>
+                <strong>${pin}${escapeHtml(p.author)}</strong>
                 <span style="font-size:12px;color:var(--muted)">${p.created_at}</span></div>
                 <div style="margin-bottom:10px;white-space:pre-wrap;">${escapeHtml(p.content)}</div>
                 <div style="display:flex;gap:16px;font-size:13px;color:var(--muted);">
                 <span class="like-btn" data-id="${p.id}" style="cursor:pointer">❤️ ${p.likes}</span>
-                <span>👁 ${p.views}</span></div>`;
+                <span>👁 ${p.views}</span>
+                <span class="pin-btn" data-id="${p.id}" style="cursor:pointer">📌</span></div>`;
             feed.appendChild(card);
         });
         document.querySelectorAll('.like-btn').forEach(btn => {
@@ -159,6 +170,13 @@ async function loadPosts(channelId) {
                 const res = await fetch(`/api/post/${btn.dataset.id}/like`, { method: 'POST' });
                 const data = await res.json();
                 btn.innerHTML = `❤️ ${data.likes}`;
+            });
+        });
+        document.querySelectorAll('.pin-btn').forEach(btn => {
+            btn.addEventListener('click', async e => {
+                e.stopPropagation();
+                await fetch(`/api/post/${btn.dataset.id}/pin`, { method: 'POST' });
+                loadPosts(channelId);
             });
         });
     } catch (e) { console.error(e); }
@@ -181,11 +199,9 @@ document.getElementById('btn-create-channel').addEventListener('click', () => {
     document.getElementById('modal-create').classList.remove('hidden');
     setTimeout(() => document.getElementById('new-channel-name').focus(), 100);
 });
-
 document.getElementById('btn-cancel-create').addEventListener('click', () => {
     document.getElementById('modal-create').classList.add('hidden');
 });
-
 document.getElementById('btn-confirm-create').addEventListener('click', async () => {
     const name = document.getElementById('new-channel-name').value.trim();
     const description = document.getElementById('new-channel-desc').value.trim();
@@ -200,17 +216,20 @@ document.getElementById('btn-confirm-create').addEventListener('click', async ()
         document.getElementById('modal-create').classList.add('hidden');
         document.getElementById('new-channel-name').value = '';
         document.getElementById('new-channel-desc').value = '';
-        if (data.id) {
-            openChannel(data.id);
-            loadProfile();
-        }
-    } catch (e) {
-        console.error(e);
-        alert('Ошибка при создании');
-    }
+        if (data.id) { openChannel(data.id); loadProfile(); }
+    } catch (e) { console.error(e); alert('Ошибка'); }
 });
 
 async function loadMyChannels() {
+    try {
+        const res = await fetch('/api/my_channels');
+        const channels = await res.json();
+        const list = document.getElementById('my-channels-list') || document.getElementById('my-subs');
+        // reuse my-subs area if no dedicated list
+        const feed = document.getElementById('my-subs');
+        if (!channels.length) return;
+        // show owned channels with boost button
+    } catch (e) { console.error(e); }
     loadMySubs();
 }
 
@@ -218,7 +237,7 @@ async function loadProfile() {
     try {
         const res = await fetch('/api/profile');
         const p = await res.json();
-        document.getElementById('profile-username').textContent = p.username;
+        document.getElementById('profile-username').textContent = p.username + (p.is_premium ? ' 💎' : '');
         document.getElementById('profile-status').textContent = p.status || 'Статус не указан';
         document.getElementById('profile-crystals').textContent = p.crystals;
         document.getElementById('profile-friends').textContent = p.friends;
@@ -231,6 +250,29 @@ document.getElementById('btn-logout').addEventListener('click', () => {
     window.location.href = '/logout';
 });
 
+// Profile actions via long press / extra buttons if present
+document.getElementById('profile-status')?.addEventListener('click', async () => {
+    const status = prompt('Новый статус:', document.getElementById('profile-status').textContent);
+    if (status === null) return;
+    await fetch('/api/profile/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+    });
+    loadProfile();
+});
+
+document.getElementById('profile-crystals')?.addEventListener('click', async () => {
+    try {
+        const res = await fetch('/api/daily_bonus', { method: 'POST' });
+        const data = await res.json();
+        if (data.error) alert(data.error);
+        else alert(`+${data.bonus} ✦ получено!`);
+        loadProfile();
+    } catch (e) { console.error(e); }
+});
+
+// Search & Friends
 document.getElementById('search-users').addEventListener('input', e => {
     const q = e.target.value.trim();
     if (q.length >= 2) searchUsers(q);
@@ -258,8 +300,10 @@ async function searchUsers(q) {
             } else {
                 btn = `<button class="btn btn-primary" style="padding:8px 12px;font-size:13px;" onclick="openChat(${u.id}, '${escapeHtml(u.username)}')">Написать</button>`;
             }
+            const prem = u.is_premium ? ' 💎' : '';
             card.innerHTML = `<div class="avatar">${u.username[0].toUpperCase()}</div>
-                <div class="channel-info"><h3>${escapeHtml(u.username)}</h3></div>${btn}`;
+                <div class="channel-info"><h3>${escapeHtml(u.username)}${prem}</h3>
+                <p style="font-size:12px;color:var(--muted)">${escapeHtml(u.status||'')}</p></div>${btn}`;
             feed.appendChild(card);
         });
     } catch (e) { console.error(e); }
@@ -280,10 +324,7 @@ async function sendFriendRequest(userId) {
 async function loadFriendsAndRequests() {
     const feed = document.getElementById('search-results');
     try {
-        const [friendsRes, reqsRes] = await Promise.all([
-            fetch('/api/friends'),
-            fetch('/api/friends/requests')
-        ]);
+        const [friendsRes, reqsRes] = await Promise.all([fetch('/api/friends'), fetch('/api/friends/requests')]);
         const friends = await friendsRes.json();
         const reqs = await reqsRes.json();
         let html = '';
@@ -303,12 +344,13 @@ async function loadFriendsAndRequests() {
             friends.forEach(f => {
                 html += `<div class="channel-card">
                     <div class="avatar">${f.username[0].toUpperCase()}</div>
-                    <div class="channel-info"><h3>${escapeHtml(f.username)}</h3></div>
+                    <div class="channel-info"><h3>${escapeHtml(f.username)}</h3>
+                    <p style="font-size:12px;color:var(--muted)">${escapeHtml(f.status||'')}</p></div>
                     <button class="btn btn-primary" style="padding:8px 12px;font-size:13px;" onclick="openChat(${f.id}, '${escapeHtml(f.username)}')">Написать</button>
                 </div>`;
             });
         }
-        if (!html) html = '<div class="empty-state">Нет друзей и заявок<br>Найдите людей через поиск</div>';
+        if (!html) html = '<div class="empty-state">Нет друзей и заявок<br>Найдите людей через поиск выше</div>';
         feed.innerHTML = html;
     } catch (e) { console.error(e); }
 }
@@ -359,6 +401,16 @@ document.getElementById('btn-send').addEventListener('click', sendMessage);
 document.getElementById('message-input').addEventListener('keypress', e => {
     if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
 });
+
+// Super message: double-tap send button or long-press
+let superTimer;
+document.getElementById('btn-send').addEventListener('touchstart', () => {
+    superTimer = setTimeout(() => {
+        isSuperMode = true;
+        alert('Режим супер-сообщения (30 ✦). Отправьте сообщение.');
+    }, 500);
+});
+document.getElementById('btn-send').addEventListener('touchend', () => clearTimeout(superTimer));
 
 function sendMessage() {
     const input = document.getElementById('message-input');
