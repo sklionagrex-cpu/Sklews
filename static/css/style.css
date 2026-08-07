@@ -877,3 +877,52 @@ body:has(#screen-chat.active) .bottom-nav {
     font-size: 44px;
 }
 .media-clickable { cursor: zoom-in; }
+
+.profile-hero {
+    height: 52vh;
+    min-height: 280px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background: linear-gradient(180deg, var(--card) 0%, var(--bg) 100%);
+}
+.avatar-hero {
+    width: 140px;
+    height: 140px;
+    border-radius: 44px;
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 52px;
+    font-weight: 700;
+    color: #fff;
+    box-shadow: 0 12px 40px var(--purple-glow);
+    margin-bottom: 16px;
+}
+.profile-hero-info { text-align: center; }
+.profile-hero-info h2 { font-size: 24px; margin-bottom: 6px; }
+.profile-gear {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+}
+.profile-back {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 5;
+}
+.profile-bottom-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 16px;
+}
+#media-lightbox img, #media-lightbox video {
+    max-width: 100%;
+    max-height: 85vh;
+    touch-action: none;
+}

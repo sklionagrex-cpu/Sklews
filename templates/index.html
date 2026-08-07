@@ -84,20 +84,19 @@
             <div id="search-results" class="feed"></div>
         </div>
 
-        <div id="screen-profile" class="screen">
-            <header class="header">
-                <h1>Профиль</h1>
-                <button id="btn-settings" class="btn-icon"><i class="fa-solid fa-gear"></i></button>
-            </header>
-            <div class="profile-card profile-full">
-                <div class="avatar-large" id="profile-avatar">?</div>
-                <h2 id="profile-username">—</h2>
-                <p id="profile-status" class="status-text">Статус не указан</p>
-                <div class="crystals-badge" id="crystals-badge"><i class="fa-solid fa-gem"></i> <span id="profile-crystals">0</span></div>
-                <div class="profile-actions" style="grid-template-columns:1fr 1fr">
-                    <button id="btn-open-friends" class="btn btn-secondary"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span></button>
-                    <button id="btn-open-subs" class="btn btn-secondary"><i class="fa-solid fa-bookmark"></i> Подписки</button>
+        <div id="screen-profile" class="screen" style="overflow:hidden">
+            <div class="profile-hero">
+                <div class="avatar-hero" id="profile-avatar">?</div>
+                <button id="btn-settings" class="btn-icon profile-gear"><i class="fa-solid fa-gear"></i></button>
+                <div class="profile-hero-info">
+                    <h2 id="profile-username">—</h2>
+                    <p id="profile-status" class="status-text">Статус не указан</p>
+                    <div class="crystals-badge" id="crystals-badge"><i class="fa-solid fa-gem"></i> <span id="profile-crystals">0</span></div>
                 </div>
+            </div>
+            <div class="profile-bottom-actions">
+                <button id="btn-open-friends" class="btn btn-secondary"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span></button>
+                <button id="btn-open-subs" class="btn btn-secondary"><i class="fa-solid fa-bookmark"></i> Подписки</button>
             </div>
         </div>
 
@@ -134,24 +133,22 @@
         </div>
 
         <!-- USER PROFILE -->
-        <div id="screen-user" class="screen">
-            <header class="header">
-                <button class="btn-back" id="btn-back-user"><i class="fa-solid fa-arrow-left"></i></button>
-                <h1>Профиль</h1>
-                <div style="width:40px"></div>
-            </header>
-            <div class="profile-card profile-full">
-                <div class="avatar-large" id="user-avatar">?</div>
-                <h2 id="user-username">—</h2>
-                <p id="user-status" class="status-text"></p>
-                <div class="profile-stats" id="user-stats">
-                    <div><span id="user-friends">0</span>Друзья</div>
-                    <div><span id="user-channels">0</span>Каналы</div>
+        <div id="screen-user" class="screen" style="overflow:hidden">
+            <button class="btn-icon profile-back" id="btn-back-user"><i class="fa-solid fa-arrow-left"></i></button>
+            <div class="profile-hero">
+                <div class="avatar-hero" id="user-avatar">?</div>
+                <div class="profile-hero-info">
+                    <h2 id="user-username">—</h2>
+                    <p id="user-status" class="status-text"></p>
                 </div>
-                <div class="profile-actions" style="grid-template-columns:1fr 1fr;margin-top:20px">
-                    <button id="btn-user-friend" class="btn btn-secondary">Добавить</button>
-                    <button id="btn-user-message" class="btn btn-primary">Написать</button>
-                </div>
+            </div>
+            <div class="profile-bottom-actions" style="grid-template-columns:1fr 1fr 1fr">
+                <button id="btn-user-friends-list" class="btn btn-secondary"><i class="fa-solid fa-user-group"></i> Друзья <span id="user-friends">0</span></button>
+                <button id="btn-user-channels-list" class="btn btn-secondary"><i class="fa-solid fa-bookmark"></i> Подписки <span id="user-channels">0</span></button>
+                <button id="btn-user-friend" class="btn btn-secondary">Добавить</button>
+            </div>
+            <div style="padding:0 16px 16px">
+                <button id="btn-user-message" class="btn btn-primary full"><i class="fa-solid fa-paper-plane"></i> Написать</button>
             </div>
         </div>
 
@@ -189,7 +186,11 @@
             <header class="header">
                 <button class="btn-back" id="btn-back-channel"><i class="fa-solid fa-arrow-left"></i></button>
                 <h1 id="channel-title">Канал</h1>
-                <button class="btn-icon" id="btn-channel-menu"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                <div style="display:flex;gap:6px">
+                    <button class="btn-icon hidden" id="btn-edit-channel"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn-icon hidden" id="btn-analytics"><i class="fa-solid fa-chart-line"></i></button>
+                    <button class="btn-icon" id="btn-channel-menu"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                </div>
             </header>
             <div class="channel-header" id="channel-card-view">
                 <div class="channel-avatar-big" id="channel-avatar">?</div>
@@ -199,8 +200,7 @@
                 <div class="channel-actions">
                     <button id="btn-join" class="btn btn-primary">Вступить</button>
                     <button id="btn-watch" class="btn btn-secondary">Читать</button>
-                    <button id="btn-edit-channel" class="btn btn-secondary hidden">Редактор</button>
-                    <button id="btn-analytics" class="btn btn-secondary hidden">Аналитика</button>
+                    <button id="btn-open-posts" class="btn btn-primary hidden">К постам</button>
                 </div>
             </div>
         </div>

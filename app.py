@@ -194,9 +194,11 @@ def api_channels():
 
     me = current_user()
     sub_ids = {s.channel_id for s in Subscription.query.filter_by(user_id=me.id).all()}
-    channels = Channel.query.filter(Channel.owner_id != me.id).all()
+    channels = Channel.query.all()
     scored = []
     for ch in channels:
+        if ch.owner_id == me.id:
+            continue
         if ch.id in sub_ids:
             continue
         posts = Post.query.filter_by(channel_id=ch.id).all()
@@ -344,7 +346,7 @@ def channel_posts(channel_id):
             'likes': p.likes, 'comments': p.comments_count, 'views': p.views, 'is_pinned': p.is_pinned,
             'media_type': p.media_type, 'media_url': p.media_url,
             'liked': liked, 'reactions': reacts, 'my_reaction': my_react.emoji if my_react else None,
-            'created_at': p.created_at.strftime('%d.%m %H:%M')
+            'created_at': p.created_at.strftime('%H:%M')
         })
     db.session.commit()
     return jsonify(result)
@@ -742,7 +744,7 @@ def get_comments(post_id):
         result.append({
             'id': c.id, 'content': c.content,
             'username': u.username if u else '?',
-            'created_at': c.created_at.strftime('%d.%m %H:%M')
+            'created_at': c.created_at.strftime('%H:%M')
         })
     return jsonify(result)
 

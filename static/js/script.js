@@ -173,17 +173,28 @@ async function openChannel(id) {
             head.style.background = 'linear-gradient(to bottom, rgba(12,10,20,0.4), var(--bg)), url(' + ch.avatar + ') center/cover';
         } else head.style.background = '';
         const btnJoin = document.getElementById('btn-join');
-        if (ch.is_subscribed) {
+        const btnWatch = document.getElementById('btn-watch');
+        const btnPosts = document.getElementById('btn-open-posts');
+        if (ch.is_owner) {
+            btnJoin.classList.add('hidden');
+            btnWatch.classList.add('hidden');
+            btnPosts.classList.remove('hidden');
+        } else if (ch.is_subscribed) {
             btnJoin.textContent = 'Покинуть';
-            btnJoin.classList.remove('btn-primary'); btnJoin.classList.add('btn-secondary');
+            btnJoin.classList.remove('btn-primary', 'hidden'); btnJoin.classList.add('btn-secondary');
+            btnWatch.classList.add('hidden');
+            btnPosts.classList.remove('hidden');
         } else {
             btnJoin.textContent = 'Вступить';
-            btnJoin.classList.add('btn-primary'); btnJoin.classList.remove('btn-secondary');
+            btnJoin.classList.add('btn-primary'); btnJoin.classList.remove('btn-secondary', 'hidden');
+            btnWatch.classList.remove('hidden');
+            btnPosts.classList.add('hidden');
         }
         document.getElementById('btn-analytics').classList.toggle('hidden', !ch.is_owner);
         document.getElementById('btn-edit-channel').classList.toggle('hidden', !ch.is_owner);
     } catch (e) { console.error(e); }
 }
+document.getElementById('btn-open-posts').onclick = () => openPostsPage(currentChannelId);
 
 document.getElementById('btn-back-channel').onclick = () => { showScreen('screen-home'); loadHome(); };
 document.getElementById('btn-watch').onclick = () => openPostsPage(currentChannelId);
@@ -324,11 +335,39 @@ document.querySelectorAll('.react-pick').forEach(btn => {
 function openLightbox(type, src) {
     const img = document.getElementById('lightbox-img');
     const vid = document.getElementById('lightbox-video');
+    lbScale = 1;
+    img.style.transform = 'scale(1)';
+    vid.style.transform = 'scale(1)';
     img.style.display = 'none'; vid.style.display = 'none'; vid.pause();
     if (type === 'video') { vid.src = src; vid.style.display = 'block'; }
     else { img.src = src; img.style.display = 'block'; }
     document.getElementById('media-lightbox').classList.remove('hidden');
 }
+let lbScale = 1;
+document.getElementById('media-lightbox').addEventListener('wheel', e => {
+    e.preventDefault();
+    lbScale = Math.min(4, Math.max(0.5, lbScale + (e.deltaY > 0 ? -0.15 : 0.15)));
+    const t = 'scale(' + lbScale + ')';
+    document.getElementById('lightbox-img').style.transform = t;
+    document.getElementById('lightbox-video').style.transform = t;
+}, { passive: false });
+// pinch
+let lastPinch = 0;
+document.getElementById('media-lightbox').addEventListener('touchmove', e => {
+    if (e.touches.length === 2) {
+        e.preventDefault();
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        if (lastPinch) {
+            lbScale = Math.min(4, Math.max(0.5, lbScale * (d / lastPinch)));
+            const t = 'scale(' + lbScale + ')';
+            document.getElementById('lightbox-img').style.transform = t;
+            document.getElementById('lightbox-video').style.transform = t;
+        }
+        lastPinch = d;
+    }
+}, { passive: false });
+document.getElementById('media-lightbox').addEventListener('touchend', () => { lastPinch = 0; });
+
 document.getElementById('btn-close-lightbox').onclick = () => {
     document.getElementById('media-lightbox').classList.add('hidden');
     document.getElementById('lightbox-video').pause();
@@ -417,7 +456,7 @@ document.getElementById('btn-confirm-create').onclick = async () => {
     });
     const data = await res.json();
     document.getElementById('modal-create').classList.add('hidden');
-    if (data.id) { openChannel(data.id); loadProfile(); loadMyChannels(); }
+    if (data.id) { openPostsPage(data.id); loadProfile(); loadMyChannels(); }
 };
 
 document.getElementById('btn-edit-channel').onclick = async () => {
@@ -585,6 +624,7 @@ async function openUserProfile(userId) {
     showScreen('screen-user');
     const res = await fetch('/api/user/' + userId);
     const u = await res.json();
+    window._viewUserId = u.id;
     document.getElementById('user-username').textContent = u.username + (u.is_premium ? ' 💎' : '');
     document.getElementById('user-status').textContent = u.status || '';
     document.getElementById('user-friends').textContent = u.friends_count === null ? '•' : (u.friends_count ?? 0);
@@ -617,6 +657,52 @@ async function openUserProfile(userId) {
         mb.onclick = () => openChat(u.id, u.username);
     }
 }
+
+document.getElementById('btn-user-friends-list')?.addEventListener('click', async () => {
+    const title = document.getElementById('user-username').textContent.replace(' 💎','');
+    // fetch by scanning - we need user id stored
+    if (!window._viewUserId) return;
+    const res = await fetch('/api/user/' + window._viewUserId + '/friends');
+    const data = await res.json();
+    if (data.error) return showToast('Приватность', data.error, '!');
+    const friends = data.friends || data;
+    showScreen('screen-friends');
+    document.querySelector('#screen-friends h1').textContent = 'Друзья';
+    const list = document.getElementById('friends-page-list');
+    list.innerHTML = '';
+    const arr = Array.isArray(friends) ? friends : [];
+    if (!arr.length) list.innerHTML = '<div class="empty-state">Пусто или скрыто</div>';
+    arr.forEach(f => {
+        const card = document.createElement('div');
+        card.className = 'channel-card';
+        card.innerHTML = avatarHtml(f.username, f.avatar) +
+            '<div class="channel-info"><h3>' + escapeHtml(f.username) + '</h3></div>';
+        card.onclick = () => openUserProfile(f.id);
+        list.appendChild(card);
+    });
+});
+document.getElementById('btn-user-channels-list')?.addEventListener('click', async () => {
+    if (!window._viewUserId) return;
+    const res = await fetch('/api/user/' + window._viewUserId + '/channels');
+    const data = await res.json();
+    if (data.error) return showToast('Приватность', data.error, '!');
+    const channels = data.channels || data;
+    showScreen('screen-subs');
+    document.querySelector('#screen-subs h1').textContent = 'Подписки';
+    const list = document.getElementById('subs-page-list');
+    list.innerHTML = '';
+    const arr = Array.isArray(channels) ? channels : [];
+    if (!arr.length) list.innerHTML = '<div class="empty-state">Пусто или скрыто</div>';
+    arr.forEach(ch => {
+        const card = document.createElement('div');
+        card.className = 'channel-card';
+        card.innerHTML = avatarHtml(ch.name, ch.avatar) +
+            '<div class="channel-info"><h3>' + escapeHtml(ch.name) + '</h3></div>';
+        card.onclick = () => openChannel(ch.id);
+        list.appendChild(card);
+    });
+});
+
 document.getElementById('btn-back-user').onclick = () => { showScreen('screen-chats'); };
 
 async function loadShop() {
