@@ -9,11 +9,11 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Sklews">
     <link rel="manifest" href="/static/manifest.json">
-    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v=5">
-    <link rel="icon" type="image/png" sizes="192x192" href="/static/apple-touch-icon.png?v=5">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v=6">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/apple-touch-icon.png?v=6">
 
     <title>Sklews</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260807f">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260807g">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -32,7 +32,7 @@
         <div id="screen-home" class="screen active">
             <header class="header">
                 <div class="brand-logo header-logo">
-                    <img src="/static/icon-192.png?v=5" alt="Sklews" width="34" height="34">
+                    <img src="/static/icon-192.png?v=6" alt="Sklews" width="34" height="34">
                     <span>Sklews</span>
                 </div>
             </header>
@@ -138,6 +138,26 @@
                 <button id="btn-open-friends" class="btn btn-secondary" style="position:relative"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span><span id="friends-req-badge" class="nav-badge hidden">0</span></button>
                 <button id="btn-open-subs" class="btn btn-secondary"><i class="fa-solid fa-bookmark"></i> Подписки</button>
             </div>
+            <div id="premium-wall-section" class="premium-wall-section">
+                <div class="premium-wall-head">
+                    <h3><i class="fa-solid fa-crown" style="color:#fbbf24"></i> Premium-лента</h3>
+                    <span class="premium-wall-hint">Только для Premium</span>
+                </div>
+                <div id="premium-wall-compose" class="premium-wall-compose hidden">
+                    <textarea id="wall-input" placeholder="Пост в профиль (видят только Premium)..." maxlength="2000" rows="3"></textarea>
+                    <div class="premium-wall-actions">
+                        <button type="button" id="btn-wall-photo" class="btn btn-secondary btn-sm"><i class="fa-solid fa-image"></i></button>
+                        <input type="file" id="wall-photo-input" accept="image/*" style="display:none">
+                        <button type="button" id="btn-wall-post" class="btn btn-primary btn-sm">Опубликовать</button>
+                    </div>
+                    <div id="wall-photo-preview" class="hidden" style="margin-top:8px"></div>
+                </div>
+                <div id="premium-wall-lock" class="premium-wall-lock hidden">
+                    <i class="fa-solid fa-lock"></i>
+                    <p>Лента профиля доступна только с Premium</p>
+                </div>
+                <div id="premium-wall-list" class="premium-wall-list"></div>
+            </div>
         </div>
 
         <div id="screen-friends" class="screen">
@@ -173,7 +193,7 @@
         </div>
 
         <!-- USER PROFILE -->
-        <div id="screen-user" class="screen" style="overflow:hidden">
+        <div id="screen-user" data-has-wall="1" class="screen" style="overflow:hidden">
             <button class="btn-icon profile-back" id="btn-back-user"><i class="fa-solid fa-arrow-left"></i></button>
             <div class="profile-hero" id="user-hero">
                 <div class="profile-banner" id="user-banner"></div>
@@ -190,6 +210,13 @@
             <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
                 <button id="btn-user-friend" class="btn btn-secondary full">Добавить в друзья</button>
                 <button id="btn-user-message" class="btn btn-primary full"><i class="fa-solid fa-paper-plane"></i> Написать</button>
+            </div>
+            <div id="user-premium-wall" class="premium-wall-section">
+                <div class="premium-wall-head">
+                    <h3><i class="fa-solid fa-crown" style="color:#fbbf24"></i> Premium-лента</h3>
+                </div>
+                <div id="user-wall-lock" class="premium-wall-lock hidden"><i class="fa-solid fa-lock"></i><p>Нужен Premium</p></div>
+                <div id="user-wall-list" class="premium-wall-list"></div>
             </div>
         </div>
 
@@ -447,24 +474,34 @@
         </div>
 
         <div id="modal-roles" class="modal hidden">
-            <div class="modal-content" style="max-height:85vh;overflow-y:auto">
-                <h3 style="margin-bottom:4px"><i class="fa-solid fa-user-shield" style="color:var(--accent)"></i> Команда канала</h3>
-                <p style="font-size:12px;color:var(--muted);margin-bottom:14px">Владелец, админы, модераторы и соавторы</p>
+            <div class="modal-content roles-modal-sheet">
+                <div class="roles-modal-head">
+                    <div>
+                        <h3><i class="fa-solid fa-user-shield"></i> Команда канала</h3>
+                        <p>Управляйте ролями участников</p>
+                    </div>
+                    <button type="button" id="btn-close-roles" class="btn-icon" title="Закрыть"><i class="fa-solid fa-xmark"></i></button>
+                </div>
                 <div id="roles-list" class="roles-modal-list"></div>
                 <div class="roles-add-box">
-                    <label>Назначить роль</label>
-                    <button id="btn-pick-role-user" class="btn btn-secondary full" style="margin-bottom:8px;justify-content:flex-start;text-align:left">
-                        <i class="fa-solid fa-user-plus"></i> <span id="role-picked-label">Выбрать пользователя</span>
+                    <div class="roles-add-title">Добавить в команду</div>
+                    <button id="btn-pick-role-user" class="role-pick-btn" type="button">
+                        <span class="role-pick-avatar"><i class="fa-solid fa-user-plus"></i></span>
+                        <span class="role-pick-text">
+                            <strong id="role-picked-label">Выбрать пользователя</strong>
+                            <small>Поиск по логину</small>
+                        </span>
+                        <i class="fa-solid fa-chevron-right" style="color:var(--muted)"></i>
                     </button>
                     <input type="hidden" id="role-picked-id" value="">
-                    <select id="role-select" style="width:100%;margin-bottom:10px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text)">
-                        <option value="coauthor">✦ Соавтор — может публиковать</option>
-                        <option value="moderator">🛡 Модератор — модерация</option>
-                        <option value="admin">👑 Админ — почти все права</option>
-                    </select>
-                    <button id="btn-add-role" class="btn btn-primary full"><i class="fa-solid fa-plus"></i> Назначить</button>
+                    <div class="role-type-grid" id="role-type-grid">
+                        <button type="button" class="role-type-chip active" data-role="coauthor"><span>✦</span> Соавтор</button>
+                        <button type="button" class="role-type-chip" data-role="moderator"><span>🛡</span> Модератор</button>
+                        <button type="button" class="role-type-chip" data-role="admin"><span>👑</span> Админ</button>
+                    </div>
+                    <input type="hidden" id="role-select" value="coauthor">
+                    <button id="btn-add-role" class="btn btn-primary full"><i class="fa-solid fa-check"></i> Назначить роль</button>
                 </div>
-                <button id="btn-close-roles" class="btn btn-secondary full" style="margin-top:12px">Закрыть</button>
             </div>
         </div>
 
@@ -593,6 +630,6 @@
             </div>
         </div>
     </div>
-    <script src="/static/js/script.js?v=20260807f"></script>
+    <script src="/static/js/script.js?v=20260807g"></script>
 </body>
 </html>

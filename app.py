@@ -163,6 +163,15 @@ class Comment(db.Model):
     media_type = db.Column(db.String(20), default='')  # photo
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class ProfilePost(db.Model):
+    """Premium-only wall posts on user profiles."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False, default='')
+    media_url = db.Column(db.String(500), default='')
+    media_type = db.Column(db.String(20), default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class MediaFile(db.Model):
     """Persistent media storage in DB (survives Render redeploys)."""
     id = db.Column(db.String(32), primary_key=True)
@@ -797,6 +806,7 @@ def api_profile():
         user.is_premium = False
         db.session.commit()
     return jsonify({
+        'id': user.id,
         'username': user.username, 'status': user.status, 'avatar': user.avatar,
         'banner': getattr(user, 'banner', '') or '',
         'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
@@ -1385,6 +1395,56 @@ def update_privacy():
     db.session.commit()
     return jsonify({'hide_friends': user.hide_friends, 'hide_channels': user.hide_channels})
 
+
+
+@app.route('/api/wall', methods=['POST'])
+@login_required
+def create_wall_post():
+    me = current_user()
+    if not premium_active(me):
+        return jsonify({'error': 'Только для Premium'}), 403
+    data = request.json or {}
+    content = (data.get('content') or '').strip()
+    media_url = (data.get('media_url') or '')[:500]
+    media_type = (data.get('media_type') or '')[:20]
+    if not content and not media_url:
+        return jsonify({'error': 'Пустой пост'}), 400
+    if len(content) > 2000:
+        return jsonify({'error': 'Слишком длинный текст'}), 400
+    post = ProfilePost(user_id=me.id, content=content, media_url=media_url, media_type=media_type)
+    db.session.add(post)
+    db.session.commit()
+    return jsonify({'id': post.id, 'status': 'ok'})
+
+@app.route('/api/wall/<int:user_id>')
+@login_required
+def get_wall(user_id):
+    me = current_user()
+    if not premium_active(me):
+        return jsonify({'error': 'premium_required', 'posts': []}), 403
+    posts = ProfilePost.query.filter_by(user_id=user_id).order_by(ProfilePost.created_at.desc()).limit(50).all()
+    result = []
+    for p in posts:
+        result.append({
+            'id': p.id,
+            'content': p.content,
+            'media_url': p.media_url or '',
+            'media_type': p.media_type or '',
+            'created_at': p.created_at.strftime('%d.%m %H:%M') if p.created_at else '',
+            'can_delete': p.user_id == me.id or is_admin_user(me),
+        })
+    return jsonify({'posts': result})
+
+@app.route('/api/wall/post/<int:post_id>', methods=['DELETE'])
+@login_required
+def delete_wall_post(post_id):
+    me = current_user()
+    p = ProfilePost.query.get_or_404(post_id)
+    if p.user_id != me.id and not is_admin_user(me):
+        return jsonify({'error': 'Нет доступа'}), 403
+    db.session.delete(p)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
 
 import uuid
 from flask import send_from_directory, Response

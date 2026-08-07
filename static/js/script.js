@@ -499,6 +499,9 @@ document.getElementById('btn-channel-menu').onclick = async () => {
 
 async function openRolesModal() {
     document.getElementById('modal-roles').classList.remove('hidden');
+    document.getElementById('role-picked-id').value = '';
+    const lab = document.getElementById('role-picked-label');
+    if (lab) lab.textContent = 'Выбрать пользователя';
     const res = await fetch('/api/channel/' + currentChannelId + '/roles');
     const roles = await res.json();
     const list = document.getElementById('roles-list');
@@ -548,6 +551,16 @@ document.getElementById('role-pick-search')?.addEventListener('input', async e =
         };
         list.appendChild(card);
     });
+});
+
+
+document.getElementById('role-type-grid')?.addEventListener('click', e => {
+    const chip = e.target.closest('.role-type-chip');
+    if (!chip) return;
+    document.querySelectorAll('.role-type-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    const sel = document.getElementById('role-select');
+    if (sel) sel.value = chip.dataset.role;
 });
 
 document.getElementById('btn-add-role').onclick = async () => {
@@ -1028,6 +1041,9 @@ async function loadProfile() {
     const pun = document.getElementById('profile-username');
     pun.innerHTML = premiumNickHtml(p.username, p.is_premium);
     meIsAdmin = !!p.is_admin;
+    meHasPremium = !!p.is_premium;
+    meUserId = p.id;
+    loadWallFor(meUserId, document.getElementById('premium-wall-list'), document.getElementById('premium-wall-lock'), document.getElementById('premium-wall-compose'));
     const fab = document.getElementById('admin-fab');
     if (fab) {
         if (meIsAdmin) fab.classList.remove('hidden');
@@ -1205,6 +1221,7 @@ document.getElementById('btn-back-subs').onclick = () => { showScreen('screen-pr
 
 async function openUserProfile(userId) {
     showScreen('screen-user');
+    // wall loaded after profile data below
     const res = await fetch('/api/user/' + userId);
     const u = await res.json();
     window._viewUserId = u.id;
@@ -1215,6 +1232,7 @@ async function openUserProfile(userId) {
     const av = document.getElementById('user-avatar');
     if (u.avatar) {
         setAvatarEl(av, u.avatar, u.username);
+        loadWallFor(u.id, document.getElementById('user-wall-list'), document.getElementById('user-wall-lock'), null);
     } else {
         setAvatarEl(av, null, u.username);
     }
@@ -2248,6 +2266,9 @@ if ('serviceWorker' in navigator) {
         const res = await fetch('/api/profile');
         const p = await res.json();
         meIsAdmin = !!p.is_admin;
+    meHasPremium = !!p.is_premium;
+    meUserId = p.id;
+    loadWallFor(meUserId, document.getElementById('premium-wall-list'), document.getElementById('premium-wall-lock'), document.getElementById('premium-wall-compose'));
         const fab = document.getElementById('admin-fab');
         if (fab && meIsAdmin) fab.classList.remove('hidden');
     } catch (e) {}
@@ -2420,3 +2441,97 @@ document.getElementById('font-size-row')?.addEventListener('click', e => {
     syncFontButtons();
 });
 loadSavedTheme();
+
+// ===== Premium wall =====
+let pendingWallPhoto = null;
+let meHasPremium = false;
+let meUserId = null;
+
+async function loadWallFor(userId, listEl, lockEl, composeEl) {
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (lockEl) lockEl.classList.add('hidden');
+    if (composeEl) composeEl.classList.add('hidden');
+    if (!meHasPremium) {
+        if (lockEl) lockEl.classList.remove('hidden');
+        listEl.innerHTML = '';
+        return;
+    }
+    if (composeEl && userId === meUserId) composeEl.classList.remove('hidden');
+    try {
+        const res = await fetch('/api/wall/' + userId);
+        const data = await res.json();
+        if (res.status === 403 || data.error === 'premium_required') {
+            if (lockEl) lockEl.classList.remove('hidden');
+            return;
+        }
+        const posts = data.posts || [];
+        if (!posts.length) {
+            listEl.innerHTML = '<div class="empty-state" style="padding:12px;font-size:13px">Пока нет постов</div>';
+            return;
+        }
+        posts.forEach(p => {
+            const div = document.createElement('div');
+            div.className = 'wall-post';
+            let media = '';
+            if (p.media_url && (p.media_type === 'photo' || !p.media_type)) {
+                media = '<img src="' + p.media_url + '" alt="" loading="lazy">';
+            }
+            div.innerHTML = '<div class="wall-post-meta">' + escapeHtml(p.created_at || '') +
+                (p.can_delete ? ' · <a href="#" class="wall-del" data-id="' + p.id + '" style="color:#f87171">Удалить</a>' : '') +
+                '</div><div class="wall-post-text">' + escapeHtml(p.content || '') + '</div>' + media;
+            div.querySelector('.wall-del')?.addEventListener('click', async e => {
+                e.preventDefault();
+                await fetch('/api/wall/post/' + p.id, { method: 'DELETE' });
+                loadWallFor(userId, listEl, lockEl, composeEl);
+            });
+            listEl.appendChild(div);
+        });
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+document.getElementById('btn-wall-photo')?.addEventListener('click', () => document.getElementById('wall-photo-input')?.click());
+document.getElementById('wall-photo-input')?.addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    pendingWallPhoto = f || null;
+    const prev = document.getElementById('wall-photo-preview');
+    if (prev) {
+        if (f) {
+            prev.classList.remove('hidden');
+            prev.innerHTML = '<img src="' + URL.createObjectURL(f) + '" style="max-width:100%;border-radius:10px">';
+        } else {
+            prev.classList.add('hidden');
+            prev.innerHTML = '';
+        }
+    }
+    e.target.value = '';
+});
+document.getElementById('btn-wall-post')?.addEventListener('click', async () => {
+    if (!meHasPremium) return showToast('Premium', 'Нужен Premium', '!');
+    const content = (document.getElementById('wall-input')?.value || '').trim();
+    let media_url = '', media_type = '';
+    if (pendingWallPhoto) {
+        const fd = new FormData();
+        fd.append('file', pendingWallPhoto);
+        const up = await fetch('/api/upload', { method: 'POST', body: fd });
+        const ud = await up.json();
+        if (ud.error) return showToast('Ошибка', ud.error, '!');
+        media_url = ud.url;
+        media_type = 'photo';
+    }
+    if (!content && !media_url) return showToast('Пост', 'Напишите текст или добавьте фото', '!');
+    const res = await fetch('/api/wall', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ content, media_url, media_type })
+    });
+    const d = await res.json();
+    if (d.error) return showToast('Ошибка', d.error, '!');
+    document.getElementById('wall-input').value = '';
+    pendingWallPhoto = null;
+    const prev = document.getElementById('wall-photo-preview');
+    if (prev) { prev.classList.add('hidden'); prev.innerHTML = ''; }
+    showToast('Premium', 'Пост опубликован', '✓');
+    loadWallFor(meUserId, document.getElementById('premium-wall-list'), document.getElementById('premium-wall-lock'), document.getElementById('premium-wall-compose'));
+});
