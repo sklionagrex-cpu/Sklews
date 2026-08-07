@@ -1,7 +1,7 @@
-const CACHE = 'sklews-v6';
+const CACHE = 'sklews-v8';
 const ASSETS = [
-  '/static/css/style.css?v=20260807f',
-  '/static/js/script.js?v=20260807f',
+  '/static/css/style.css?v=20260807i',
+  '/static/js/script.js?v=20260807i',
   '/static/manifest.json'
 ];
 
@@ -17,12 +17,10 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io')) {
-    return;
-  }
-  // network-first for JS/CSS so updates apply
-  if (url.pathname.endsWith('.js') || url.pathname.endsWith('.css') || url.search.includes('v=')) {
-    e.respondWith(fetch(e.request).then(r => r).catch(() => caches.match(e.request)));
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io')) return;
+  // always network-first for JS/CSS
+  if (url.pathname.includes('.js') || url.pathname.includes('.css') || url.search.includes('v=')) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }
   e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));

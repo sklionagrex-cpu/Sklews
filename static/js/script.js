@@ -22,6 +22,25 @@ function premiumNickHtml(username, isPremium) {
 let meIsAdmin = false;
 let meHasPremium = false;
 let meUserId = null;
+
+// Bootstrap premium/admin flags early so Premium tab appears without visiting profile
+(async function bootstrapMe() {
+    try {
+        const res = await fetch('/api/profile');
+        if (!res.ok) return;
+        const p = await res.json();
+        meHasPremium = !!p.is_premium;
+        meUserId = p.id;
+        meIsAdmin = !!p.is_admin;
+        updatePremiumNav();
+        const fab = document.getElementById('admin-fab');
+        if (fab) {
+            if (meIsAdmin) fab.classList.remove('hidden');
+            else fab.classList.add('hidden');
+        }
+    } catch (e) {}
+})();
+
 let adminSelectMode = false;
 let adminSelectedChannels = new Set();
 let _lastChannelsCache = [];
@@ -56,6 +75,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         const tab = btn.dataset.tab;
         showScreen('screen-' + tab);
         if (tab === 'home') loadHome();
+        if (tab === 'premium') loadPremiumFeed();
         if (tab === 'profile') loadProfile();
         if (tab === 'create') loadMyChannels();
         if (tab === 'analytics') loadAnalyticsTab();
@@ -2715,17 +2735,16 @@ document.getElementById('btn-mines-close')?.addEventListener('click', () => {
 });
 document.getElementById('btn-mines-new')?.addEventListener('click', () => startMinesGame());
 
-// Triple-tap logo on home
+// Triple-tap logo on home (delegation)
 (function() {
     let taps = 0, timer = null;
-    const logo = document.querySelector('#screen-home .header-logo, #screen-home .brand-logo');
-    if (!logo) return;
-    logo.style.cursor = 'pointer';
-    logo.addEventListener('click', e => {
-        e.preventDefault();
+    document.addEventListener('click', e => {
+        const logo = e.target.closest('#screen-home .header-logo, #screen-home .brand-logo, #screen-home .header-logo img, #screen-home .header-logo span');
+        if (!logo) return;
+        if (!document.getElementById('screen-home')?.classList.contains('active')) return;
         taps++;
         clearTimeout(timer);
-        timer = setTimeout(() => { taps = 0; }, 700);
+        timer = setTimeout(() => { taps = 0; }, 800);
         if (taps >= 3) {
             taps = 0;
             openMinesModal();
