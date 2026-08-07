@@ -1444,32 +1444,82 @@ if __name__ == '__main__':
     print("Init database...", flush=True)
     with app.app_context():
         db.create_all()
-        from sqlalchemy import text
-        for col, typ in [
-            ('banner', 'VARCHAR(256) DEFAULT ""'),
-            ('last_seen', 'DATETIME'),
-            ('is_admin', 'BOOLEAN DEFAULT 0'),
-            ('muted_until', 'DATETIME'),
-        ]:
+        from sqlalchemy import text, inspect
+        dialect = db.engine.dialect.name  # 'sqlite' or 'postgresql'
+        # Postgres needs quoted "user" (reserved word); SQLite is fine with either
+        user_table = '"user"' if dialect == 'postgresql' else 'user'
+        comment_table = 'comment'
+        if dialect == 'postgresql':
+            user_cols = [
+                ('banner', "VARCHAR(256) DEFAULT ''"),
+                ('last_seen', 'TIMESTAMP'),
+                ('is_admin', 'BOOLEAN DEFAULT FALSE'),
+                ('muted_until', 'TIMESTAMP'),
+            ]
+            comment_cols = [
+                ('media_url', "VARCHAR(500) DEFAULT ''"),
+                ('media_type', "VARCHAR(20) DEFAULT ''"),
+            ]
+        else:
+            user_cols = [
+                ('banner', "VARCHAR(256) DEFAULT ''"),
+                ('last_seen', 'DATETIME'),
+                ('is_admin', 'BOOLEAN DEFAULT 0'),
+                ('muted_until', 'DATETIME'),
+            ]
+            comment_cols = [
+                ('media_url', "VARCHAR(500) DEFAULT ''"),
+                ('media_type', "VARCHAR(20) DEFAULT ''"),
+            ]
+
+        def _existing_columns(table_name):
             try:
-                db.session.execute(text(f'ALTER TABLE user ADD COLUMN {col} {typ}'))
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-        for col, typ in [('media_url', 'VARCHAR(500) DEFAULT ""'), ('media_type', 'VARCHAR(20) DEFAULT ""')]:
+                insp = inspect(db.engine)
+                # inspect wants unquoted name
+                raw = table_name.strip('"')
+                return {c['name'] for c in insp.get_columns(raw)}
+            except Exception as e:
+                print('inspect error:', e, flush=True)
+                return set()
+
+        existing_user = _existing_columns('user')
+        for col, typ in user_cols:
+            if col in existing_user:
+                continue
             try:
-                db.session.execute(text(f'ALTER TABLE comment ADD COLUMN {col} {typ}'))
+                sql = f'ALTER TABLE {user_table} ADD COLUMN {col} {typ}'
+                print('Migrating:', sql, flush=True)
+                db.session.execute(text(sql))
                 db.session.commit()
-            except Exception:
+                print(f'Added column user.{col}', flush=True)
+            except Exception as e:
+                print(f'ALTER user.{col} failed:', e, flush=True)
                 db.session.rollback()
-        # Ensure admin flag for reserved username
+
+        existing_comment = _existing_columns('comment')
+        for col, typ in comment_cols:
+            if col in existing_comment:
+                continue
+            try:
+                sql = f'ALTER TABLE {comment_table} ADD COLUMN {col} {typ}'
+                print('Migrating:', sql, flush=True)
+                db.session.execute(text(sql))
+                db.session.commit()
+                print(f'Added column comment.{col}', flush=True)
+            except Exception as e:
+                print(f'ALTER comment.{col} failed:', e, flush=True)
+                db.session.rollback()
+
+        # Ensure admin flag for reserved username (safe if column exists)
         try:
             for u in User.query.filter(User.username.in_(list(ADMIN_USERNAMES))).all():
-                if not u.is_admin:
+                if not getattr(u, 'is_admin', False):
                     u.is_admin = True
             db.session.commit()
-        except Exception:
+        except Exception as e:
+            print('admin flag set failed:', e, flush=True)
             db.session.rollback()
+
         # One-time cleanup of channels (only if CLEANUP_CHANNELS=1 in env)
         if os.environ.get('CLEANUP_CHANNELS') == '1':
             try:
