@@ -4230,3 +4230,87 @@ body.xtheme-cashmere_haze .nav-btn.active {
 }
 #screen-posts .tg-ch-top-title { color: #fff !important; }
 #screen-posts .tg-ch-top-sub { color: #708499 !important; }
+
+/* Post spacing + TG action buttons (2026-08-07 fix) */
+#screen-posts .tg-posts-feed {
+    gap: 14px !important;
+    padding: 12px 10px 120px !important;
+}
+#screen-posts .tg-post {
+    margin: 0 !important;
+    border-radius: 16px !important;
+    overflow: hidden;
+}
+#screen-posts .tg-post-body {
+    padding: 12px 14px 12px !important;
+}
+#screen-posts .tg-post-media {
+    margin: -12px -14px 12px !important;
+}
+#screen-posts .tg-post-foot {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    margin-top: 10px !important;
+    flex-wrap: nowrap !important;
+}
+#screen-posts .tg-post-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+#screen-posts .tg-act {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: none;
+    background: rgba(255,255,255,0.06);
+    color: #8b9aab;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 20px;
+    cursor: pointer;
+    line-height: 1;
+}
+#screen-posts .tg-act i { font-size: 13px; }
+#screen-posts .tg-act.like-btn.on,
+#screen-posts .tg-act.like-btn[style*="accent"] {
+    color: #e8788a;
+    background: rgba(232,120,138,0.12);
+}
+#screen-posts .tg-post-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #6d7f8f;
+    font-size: 12px;
+    margin-left: auto;
+}
+#screen-posts .react-strip {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 48px;
+    z-index: 5;
+    display: none;
+    gap: 4px;
+    padding: 8px;
+    background: rgba(24, 37, 51, 0.96);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+    overflow-x: auto;
+}
+#screen-posts .react-strip.open {
+    display: flex !important;
+}
+#screen-posts .post-text-wrap {
+    position: relative;
+}
+#screen-posts .react-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 4px;
+}

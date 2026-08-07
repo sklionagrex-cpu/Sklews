@@ -998,18 +998,21 @@ async function loadPosts(channelId) {
             '</div>';
         const pinBadge = p.is_pinned ? '<div class="tg-post-pin"><i class="fa-solid fa-thumbtack"></i> Закреплено</div>' : '';
         card.innerHTML = pinBadge +
-            '<div class="tg-post-body">' +
+            '<div class="tg-post-body post-text-wrap" data-post-id="' + p.id + '">' +
+            stripHtml +
             (media ? '<div class="tg-post-media">' + media + '</div>' : '') +
-            '<div class="post-text-wrap" data-post-id="' + p.id + '">' + stripHtml +
-            '<div class="post-text tg-post-text">' + linkifyMentions(p.content) + '</div></div>' +
-            pillsHtml +
+            '<div class="post-text tg-post-text">' + linkifyMentions(p.content || '') + '</div>' +
+            (pillsHtml || '') +
             '<div class="tg-post-foot">' +
-            '<span class="tg-post-views"><i class="fa-solid fa-eye"></i> ' + (p.views || 0) + '</span>' +
-            '<span class="comment-btn tg-post-comments" data-id="' + p.id + '"><i class="fa-solid fa-comment"></i> ' + (p.comments || 0) + '</span>' +
-            '<span class="react-open-btn" data-id="' + p.id + '" title="Реакция">😊</span>' +
-            '<span class="like-btn" data-id="' + p.id + '"' + (p.liked ? ' style="color:var(--accent)"' : '') + '><i class="fa-solid fa-heart"></i> ' + p.likes + '</span>' +
-            '<span class="pin-btn" data-id="' + p.id + '"><i class="fa-solid fa-thumbtack"></i></span>' +
-            '<span class="tg-post-time">' + (p.created_at || '') + '</span>' +
+              '<div class="tg-post-actions">' +
+                '<button type="button" class="tg-act comment-btn" data-id="' + p.id + '"><i class="fa-solid fa-comment"></i><span>' + (p.comments || 0) + '</span></button>' +
+                '<button type="button" class="tg-act like-btn' + (p.liked ? ' on' : '') + '" data-id="' + p.id + '"><i class="fa-solid fa-heart"></i><span>' + (p.likes || 0) + '</span></button>' +
+                (p.can_delete || p.is_pinned !== undefined ? '<button type="button" class="tg-act pin-btn" data-id="' + p.id + '" title="Закрепить"><i class="fa-solid fa-thumbtack"></i></button>' : '') +
+              '</div>' +
+              '<div class="tg-post-meta">' +
+                '<span class="tg-post-views"><i class="fa-solid fa-eye"></i> ' + (p.views || 0) + '</span>' +
+                '<span class="tg-post-time">' + (p.created_at || '') + '</span>' +
+              '</div>' +
             '</div></div>';
         card.querySelector('.post-author-link')?.addEventListener('click', e => {
             e.stopPropagation();
@@ -1044,19 +1047,29 @@ async function loadPosts(channelId) {
     });
     document.querySelectorAll('.post-text-wrap').forEach(wrap => {
         const strip = wrap.querySelector('.react-strip');
-        const text = wrap.querySelector('.post-text');
-        if (!text || !strip) return;
-        const openStrip = e => {
-            e.stopPropagation();
-            document.querySelectorAll('.react-strip.open').forEach(s => { if (s !== strip) s.classList.remove('open'); });
-            strip.classList.toggle('open');
-        };
-        text.addEventListener('click', openStrip);
-        // long-press support
+        if (!strip) return;
+        // Long-press / right-click on post opens reactions (no separate 😊 button)
         let lt = null;
-        text.addEventListener('touchstart', () => { lt = setTimeout(() => { strip.classList.add('open'); }, 400); }, { passive: true });
-        text.addEventListener('touchend', () => clearTimeout(lt));
-        text.addEventListener('touchmove', () => clearTimeout(lt));
+        const openStrip = () => {
+            document.querySelectorAll('.react-strip.open').forEach(s => { if (s !== strip) s.classList.remove('open'); });
+            strip.classList.add('open');
+        };
+        const startLP = e => {
+            if (e.target.closest('a,button,video,img,.react-strip,.tg-act,.react-pill')) return;
+            lt = setTimeout(openStrip, 420);
+        };
+        const cancelLP = () => { if (lt) clearTimeout(lt); lt = null; };
+        wrap.addEventListener('touchstart', startLP, { passive: true });
+        wrap.addEventListener('mousedown', startLP);
+        wrap.addEventListener('touchend', cancelLP);
+        wrap.addEventListener('mouseup', cancelLP);
+        wrap.addEventListener('touchmove', cancelLP);
+        wrap.addEventListener('mouseleave', cancelLP);
+        wrap.addEventListener('contextmenu', e => {
+            if (e.target.closest('a,button,video,img,.react-strip')) return;
+            e.preventDefault();
+            openStrip();
+        });
         strip.querySelectorAll('.react-strip-item').forEach(btn => {
             btn.onclick = async e => {
                 e.stopPropagation();
@@ -1068,17 +1081,6 @@ async function loadPosts(channelId) {
                 if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
             };
         });
-    });
-    document.querySelectorAll('.react-open-btn').forEach(btn => {
-        btn.onclick = e => {
-            e.stopPropagation();
-            const wrap = document.querySelector('.post-text-wrap[data-post-id="' + btn.dataset.id + '"]');
-            const strip = wrap && wrap.querySelector('.react-strip');
-            if (!strip) return;
-            document.querySelectorAll('.react-strip.open').forEach(s => { if (s !== strip) s.classList.remove('open'); });
-            strip.classList.add('open');
-            try { strip.scrollLeft = 0; } catch (err) {}
-        };
     });
     // close strips on outside tap
     if (!window._reactStripDocBound) {
