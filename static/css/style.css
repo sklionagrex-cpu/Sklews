@@ -1372,8 +1372,8 @@ body:has(#screen-chat.active) .bottom-nav {
     flex-shrink: 0;
 }
 @keyframes premPulse {
-    0%, 100% { transform: scale(0.85); opacity: 0.55; }
-    50% { transform: scale(1.25); opacity: 1; }
+    0%, 100% { transform: scale(0.92); opacity: 0.5; }
+    50% { transform: scale(1.12); opacity: 1; }
 }
 .premium-nick .prem-gem { display: none !important; }
 
@@ -3657,62 +3657,72 @@ body.xtheme-cashmere_haze .nav-btn.active {
     animation: xtShine 2.8s ease-in-out infinite;
 }
 
-/* Under-banner FX — soft, GPU-friendly */
+/* Under-banner FX — soft ambient only */
 .plus-under-banner {
-    height: 32px;
+    height: 36px;
     width: 100%;
     position: relative;
     overflow: hidden;
     flex-shrink: 0;
-    background: transparent;
-    will-change: opacity, transform;
+    pointer-events: none;
 }
 .plus-under-banner[style*="display: none"] { height: 0; margin: 0; }
-.under-fx-rays {
-    background: linear-gradient(105deg,
-        transparent 0%, rgba(255,255,255,0.04) 40%,
-        rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.04) 60%, transparent 100%);
+.plus-under-banner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.7;
+    will-change: opacity;
+    animation: underBreathe 6s ease-in-out infinite;
+}
+.under-fx-rays::before {
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,255,255,0.06) 35%,
+        rgba(255,255,255,0.14) 50%,
+        rgba(255,255,255,0.06) 65%,
+        transparent 100%);
     background-size: 200% 100%;
-    animation: softSweep 9s ease-in-out infinite;
+    animation: underShimmer 12s ease-in-out infinite;
 }
-.under-fx-particles {
+.under-fx-particles::before {
     background-image:
-        radial-gradient(circle at 20% 50%, rgba(255,255,255,0.35) 0 1.5px, transparent 2px),
-        radial-gradient(circle at 55% 40%, rgba(251,191,36,0.3) 0 1.5px, transparent 2px),
-        radial-gradient(circle at 80% 60%, rgba(167,139,250,0.3) 0 1.2px, transparent 2px);
-    opacity: 0.85;
-    animation: softFloat 7s ease-in-out infinite;
+        radial-gradient(circle at 18% 55%, rgba(255,255,255,0.28) 0 1px, transparent 2px),
+        radial-gradient(circle at 48% 35%, rgba(251,191,36,0.22) 0 1px, transparent 2px),
+        radial-gradient(circle at 78% 60%, rgba(167,139,250,0.22) 0 1px, transparent 2px),
+        radial-gradient(circle at 62% 70%, rgba(255,255,255,0.12) 0 1px, transparent 2px);
+    animation: underBreathe 8s ease-in-out infinite;
 }
-.under-fx-silk {
-    background: linear-gradient(110deg, transparent 35%, rgba(255,255,255,0.1) 50%, transparent 65%);
+.under-fx-silk::before {
+    background: linear-gradient(100deg,
+        transparent 25%,
+        rgba(255,255,255,0.08) 45%,
+        rgba(255,255,255,0.14) 50%,
+        rgba(255,255,255,0.08) 55%,
+        transparent 75%);
     background-size: 220% 100%;
-    animation: softSweep 8s ease-in-out infinite;
+    animation: underShimmer 14s ease-in-out infinite;
 }
-.under-fx-aurora {
+.under-fx-aurora::before {
     background:
-        radial-gradient(ellipse at 25% 70%, rgba(34,211,238,0.28) 0%, transparent 55%),
-        radial-gradient(ellipse at 75% 30%, rgba(167,139,250,0.22) 0%, transparent 50%);
-    animation: softBreathe 6s ease-in-out infinite;
+        radial-gradient(ellipse 60% 90% at 20% 80%, rgba(34,211,238,0.22), transparent 70%),
+        radial-gradient(ellipse 50% 80% at 80% 20%, rgba(167,139,250,0.18), transparent 70%);
+    animation: underBreathe 10s ease-in-out infinite;
 }
-.under-fx-embers {
-    background-image:
-        radial-gradient(circle at 20% 70%, rgba(251,191,36,0.4) 0 1.5px, transparent 2.5px),
-        radial-gradient(circle at 50% 40%, rgba(249,115,22,0.3) 0 1.2px, transparent 2px),
-        radial-gradient(circle at 78% 55%, rgba(239,68,68,0.28) 0 1px, transparent 2px);
-    animation: softFloat 8s ease-in-out infinite;
+.under-fx-embers::before {
+    background:
+        radial-gradient(ellipse 50% 80% at 30% 70%, rgba(251,191,36,0.18), transparent 70%),
+        radial-gradient(ellipse 40% 70% at 70% 40%, rgba(249,115,22,0.12), transparent 70%);
+    animation: underBreathe 9s ease-in-out infinite;
 }
-@keyframes softSweep {
-    0% { background-position: 100% 0; opacity: 0.55; }
-    50% { background-position: 0% 0; opacity: 1; }
-    100% { background-position: -100% 0; opacity: 0.55; }
+@keyframes underBreathe {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 0.9; }
 }
-@keyframes softFloat {
-    0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.65; }
-    50% { transform: translate3d(0, -4px, 0); opacity: 1; }
-}
-@keyframes softBreathe {
-    0%, 100% { opacity: 0.55; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.03); }
+@keyframes underShimmer {
+    0% { background-position: 120% 0; opacity: 0.4; }
+    50% { background-position: 0% 0; opacity: 0.85; }
+    100% { background-position: -120% 0; opacity: 0.4; }
 }
 
 /* Avatar ring without changing layout/size */

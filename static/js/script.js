@@ -3464,9 +3464,13 @@ document.addEventListener('click', async e => {
             });
             const raw = await res.text();
             let d = {};
-            try { d = raw ? JSON.parse(raw) : {}; } catch (err) {
-                console.error('plus profile raw', res.status, raw?.slice(0, 200));
-                showToast('Premium+', 'Ответ сервера битый (' + res.status + ')', '!');
+            try {
+                const cleaned = (raw || '').replace(/^\uFEFF/, '').trim();
+                d = cleaned ? JSON.parse(cleaned) : {};
+            } catch (err) {
+                console.error('plus profile raw', res.status, (raw || '').slice(0, 300));
+                const looksHtml = /<html|<body|<!doctype/i.test(raw || '');
+                showToast('Premium+', looksHtml ? 'Сессия сброшена — перезайди' : ('Битый ответ ' + res.status), '!');
                 btn.disabled = false;
                 return;
             }
@@ -3524,8 +3528,12 @@ document.addEventListener('click', async e => {
             });
             const raw = await res.text();
             let d = {};
-            try { d = raw ? JSON.parse(raw) : {}; } catch (err) {
-                showToast('Premium+', 'Ответ сервера битый (' + res.status + ')', '!');
+            try {
+                const cleaned = (raw || '').replace(/^\uFEFF/, '').trim();
+                d = cleaned ? JSON.parse(cleaned) : {};
+            } catch (err) {
+                const looksHtml = /<html|<body|<!doctype/i.test(raw || '');
+                showToast('Premium+', looksHtml ? 'Сессия сброшена — перезайди' : ('Битый ответ ' + res.status), '!');
                 btn.disabled = false;
                 return;
             }

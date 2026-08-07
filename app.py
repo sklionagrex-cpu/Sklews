@@ -352,6 +352,9 @@ def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         if not current_user():
+            # API must never redirect to HTML — that breaks fetch JSON parsing (200 HTML)
+            if (request.path or '').startswith('/api/'):
+                return jsonify({'error': 'Нужно войти'}), 401
             return redirect(url_for('auth'))
         return f(*args, **kwargs)
     return decorated
@@ -1222,14 +1225,16 @@ def save_plus_profile():
         'is_premium_plus': True,
         'plus_name_fx': name_fx,
         'plus_avatar_frame': frame,
-        'plus_aura': aura,
-        'plus_badge': badge,
+        'plus_aura': aura or '',
+        'plus_badge': badge or '',
         'plus_banner_fx': '' if banner_fx in ('', 'none') else banner_fx,
-        'plus_msg_style': msg_style,
-        'plus_card_style': card_style,
-        'plus_accent': accent,
+        'plus_msg_style': msg_style or '',
+        'plus_card_style': card_style or '',
+        'plus_accent': accent or '',
     }
-    return jsonify(payload)
+    resp = jsonify(payload)
+    resp.headers['Content-Type'] = 'application/json; charset=utf-8'
+    return resp
 
 
 @app.route('/api/plus/channel/<int:channel_id>', methods=['POST'])
