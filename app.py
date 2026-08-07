@@ -28,6 +28,27 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
+# ---- simple in-memory TTL cache (per-process) ----
+_cache = {}
+def cache_get(key):
+    item = _cache.get(key)
+    if not item:
+        return None
+    exp, val = item
+    if datetime.utcnow().timestamp() > exp:
+        _cache.pop(key, None)
+        return None
+    return val
+
+def cache_set(key, val, ttl=30):
+    _cache[key] = (datetime.utcnow().timestamp() + ttl, val)
+
+def cache_clear_prefix(prefix):
+    for k in list(_cache.keys()):
+        if k.startswith(prefix):
+            _cache.pop(k, None)
+
+
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -147,8 +168,11 @@ def current_user():
         u = User.query.get(session['user_id'])
         if u:
             try:
-                u.last_seen = datetime.utcnow()
-                db.session.commit()
+                # throttle last_seen writes: at most once per 60s
+                now = datetime.utcnow()
+                if not u.last_seen or (now - u.last_seen).total_seconds() > 60:
+                    u.last_seen = now
+                    db.session.commit()
             except Exception:
                 db.session.rollback()
         return u
@@ -216,6 +240,21 @@ def premium_active(user):
         return True
     return bool(user.is_premium and user.premium_until is None)
 
+
+
+@app.after_request
+def _perf_headers(resp):
+    # long cache for static assets (avatars/js/css); HTML/API no-cache
+    try:
+        path = request.path or ''
+        if path.startswith('/static/'):
+            if any(path.endswith(ext) for ext in ('.js', '.css', '.png', '.jpg', '.jpeg', '.webp', '.svg', '.woff2', '.ico')):
+                resp.headers['Cache-Control'] = 'public, max-age=86400'
+        elif path.startswith('/api/'):
+            resp.headers['Cache-Control'] = 'no-store'
+    except Exception:
+        pass
+    return resp
 
 def login_required(f):
     from functools import wraps
@@ -287,15 +326,17 @@ def logout():
 @app.route('/api/channels')
 @login_required
 def api_channels():
+    from sqlalchemy import func
     sort = request.args.get('sort', 'today')
     now = datetime.utcnow()
-    # clean expired boosts
-    for ch in Channel.query.filter(Channel.is_boosted == True).all():
-        if ch.boost_until and ch.boost_until < now:
+    # clean expired boosts (single query + bulk update style)
+    expired = Channel.query.filter(Channel.is_boosted == True, Channel.boost_until != None, Channel.boost_until < now).all()
+    if expired:
+        for ch in expired:
             ch.is_boosted = False
             ch.boost_level = ''
             ch.boost_until = None
-    db.session.commit()
+        db.session.commit()
 
     me = current_user()
     q = (request.args.get('q') or '').strip()
@@ -312,24 +353,37 @@ def api_channels():
                 'accent': ch.accent_color or '#8b5cf6'
             })
         return jsonify(result)
+
+    # cache key per user+sort (subscriptions differ)
+    ckey = f'channels:{me.id}:{sort}'
+    cached = cache_get(ckey)
+    if cached is not None:
+        return jsonify(cached)
+
+    if sort == 'today':
+        cutoff = now - timedelta(hours=24)
+    elif sort == 'week':
+        cutoff = now - timedelta(days=7)
+    elif sort == 'month':
+        cutoff = now - timedelta(days=30)
+    else:
+        cutoff = datetime(2000, 1, 1)
+
+    # one aggregate query instead of loading all posts per channel
+    stats = db.session.query(
+        Post.channel_id,
+        func.count(Post.id).label('rp'),
+        func.coalesce(func.sum(Post.likes), 0).label('rl')
+    ).filter(Post.created_at >= cutoff).group_by(Post.channel_id).all()
+    stats_map = {row.channel_id: (row.rp, int(row.rl or 0)) for row in stats}
+
     channels = Channel.query.all()
     scored = []
     for ch in channels:
-        if ch.owner_id == me.id:
+        if ch.owner_id == me.id or ch.id in sub_ids:
             continue
-        if ch.id in sub_ids:
-            continue
-        posts = Post.query.filter_by(channel_id=ch.id).all()
-        recent_posts = recent_likes = 0
-        if sort == 'today': cutoff = now - timedelta(hours=24)
-        elif sort == 'week': cutoff = now - timedelta(days=7)
-        elif sort == 'month': cutoff = now - timedelta(days=30)
-        else: cutoff = datetime(2000, 1, 1)
-        for p in posts:
-            if p.created_at >= cutoff:
-                recent_posts += 1
-                recent_likes += p.likes
-        score = ch.subscribers_count * 3 + recent_posts * 15 + recent_likes * 5 + ch.views
+        recent_posts, recent_likes = stats_map.get(ch.id, (0, 0))
+        score = ch.subscribers_count * 3 + recent_posts * 15 + recent_likes * 5 + (ch.views or 0)
         if ch.is_boosted:
             score += {'gold': 100000, 'silver': 50000, 'bronze': 20000}.get(ch.boost_level, 10000)
         scored.append((score, ch, recent_posts))
@@ -344,21 +398,37 @@ def api_channels():
         result.append({
             'id': ch.id, 'name': ch.name, 'description': ch.description, 'avatar': ch.avatar,
             'subscribers': ch.subscribers_count, 'views': ch.views,
-            'created_at': ch.created_at.strftime('%d.%m.%Y'),
+            'created_at': ch.created_at.strftime('%d.%m.%Y') if ch.created_at else '',
             'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '', 'label': label,
             'accent': ch.accent_color or '#8b5cf6'
         })
+    cache_set(ckey, result, ttl=25)
     return jsonify(result)
 
 @app.route('/api/my_subscriptions')
 @login_required
 def api_my_subscriptions():
     user = current_user()
+    subs = Subscription.query.filter_by(user_id=user.id).all()
+    if not subs:
+        return jsonify([])
+    ch_ids = [s.channel_id for s in subs]
+    channels = {c.id: c for c in Channel.query.filter(Channel.id.in_(ch_ids)).all()}
+    from sqlalchemy import func
+    last_map = {}
+    if ch_ids:
+        subq = db.session.query(
+            Post.channel_id,
+            func.max(Post.id).label('max_id')  # latest id ~ latest post
+        ).filter(Post.channel_id.in_(ch_ids)).group_by(Post.channel_id).subquery()
+        latest = Post.query.join(subq, Post.id == subq.c.max_id).all()
+        last_map = {p.channel_id: p for p in latest}
     result = []
-    for s in Subscription.query.filter_by(user_id=user.id).all():
-        ch = Channel.query.get(s.channel_id)
-        if not ch: continue
-        last = Post.query.filter_by(channel_id=ch.id).order_by(Post.created_at.desc()).first()
+    for s in subs:
+        ch = channels.get(s.channel_id)
+        if not ch:
+            continue
+        last = last_map.get(ch.id)
         result.append({
             'id': ch.id, 'name': ch.name, 'avatar': ch.avatar, 'unread': s.unread,
             'last_message': (last.content[:55] + '...') if last else 'Нет постов',
@@ -464,6 +534,7 @@ def delete_channel(channel_id):
     ChannelRole.query.filter_by(channel_id=channel_id).delete(synchronize_session=False)
     db.session.delete(ch)
     db.session.commit()
+    cache_clear_prefix('channels:')
     return jsonify({'status': 'deleted'})
 
 
@@ -504,28 +575,62 @@ def create_channel():
     else:
         user.crystals += 3  # бонус только за бесплатные
     db.session.commit()
+    cache_clear_prefix('channels:')
     return jsonify({'id': ch.id, 'name': ch.name, 'crystals': user.crystals, 'cost': cost})
 
 @app.route('/api/channel/<int:channel_id>/posts')
 @login_required
 def channel_posts(channel_id):
     me = current_user()
-    posts = Post.query.filter_by(channel_id=channel_id).order_by(Post.is_pinned.desc(), Post.created_at.desc()).limit(50).all()
+    ch = Channel.query.get_or_404(channel_id)
+    posts = Post.query.filter_by(channel_id=channel_id).order_by(
+        Post.is_pinned.desc(), Post.created_at.desc()
+    ).limit(50).all()
+    if not posts:
+        return jsonify([])
+
+    post_ids = [p.id for p in posts]
+    author_ids = list({p.author_id for p in posts})
+
+    # batch authors
+    authors = {u.id: u for u in User.query.filter(User.id.in_(author_ids)).all()} if author_ids else {}
+
+    # batch my likes
+    liked_ids = {
+        row.post_id for row in PostLike.query.filter(
+            PostLike.post_id.in_(post_ids), PostLike.user_id == me.id
+        ).all()
+    }
+
+    # batch all reactions for these posts
+    react_rows = PostReaction.query.filter(PostReaction.post_id.in_(post_ids)).all()
+    reacts_map = {}  # post_id -> {emoji: count}
+    my_react_map = {}  # post_id -> emoji
+    for r in react_rows:
+        d = reacts_map.setdefault(r.post_id, {})
+        d[r.emoji] = d.get(r.emoji, 0) + 1
+        if r.user_id == me.id:
+            my_react_map[r.post_id] = r.emoji
+
+    # batch already-viewed
+    viewed_ids = {
+        row.post_id for row in PostView.query.filter(
+            PostView.post_id.in_(post_ids), PostView.user_id == me.id
+        ).all()
+    }
+
+    can_mod = can_moderate(me, ch)
+    is_adm = is_admin_user(me)
+    is_owner = ch.owner_id == me.id
+
+    new_views = []
     result = []
     for p in posts:
-        author = User.query.get(p.author_id)
-        liked = PostLike.query.filter_by(post_id=p.id, user_id=me.id).first() is not None
-        reacts = {}
-        for r in PostReaction.query.filter_by(post_id=p.id).all():
-            reacts[r.emoji] = reacts.get(r.emoji, 0) + 1
-        my_react = PostReaction.query.filter_by(post_id=p.id, user_id=me.id).first()
-        # unique view
-        viewed = PostView.query.filter_by(post_id=p.id, user_id=me.id).first()
-        if not viewed:
-            db.session.add(PostView(post_id=p.id, user_id=me.id))
-            p.views += 1
-        ch = Channel.query.get(channel_id)
-        can_del = (p.author_id == me.id) or (ch and ch.owner_id == me.id) or can_moderate(me, ch) or is_admin_user(me)
+        author = authors.get(p.author_id)
+        if p.id not in viewed_ids:
+            new_views.append(PostView(post_id=p.id, user_id=me.id))
+            p.views = (p.views or 0) + 1
+        can_del = (p.author_id == me.id) or is_owner or can_mod or is_adm
         result.append({
             'id': p.id, 'content': p.content,
             'author': author.username if author else '?',
@@ -533,10 +638,14 @@ def channel_posts(channel_id):
             'author_premium': premium_active(author) if author else False,
             'likes': p.likes, 'comments': p.comments_count, 'views': p.views, 'is_pinned': p.is_pinned,
             'media_type': p.media_type, 'media_url': p.media_url,
-            'liked': liked, 'reactions': reacts, 'my_reaction': my_react.emoji if my_react else None,
-            'created_at': p.created_at.strftime('%H:%M'),
+            'liked': p.id in liked_ids,
+            'reactions': reacts_map.get(p.id, {}),
+            'my_reaction': my_react_map.get(p.id),
+            'created_at': p.created_at.strftime('%H:%M') if p.created_at else '',
             'can_delete': can_del
         })
+    if new_views:
+        db.session.add_all(new_views)
     db.session.commit()
     return jsonify(result)
 
@@ -558,6 +667,7 @@ def create_post(channel_id):
         if s.user_id != user.id and s.notifications:
             s.unread += 1
     db.session.commit()
+    cache_clear_prefix('channels:')
     return jsonify({'id': post.id, 'status': 'ok'})
 
 @app.route('/api/post/<int:post_id>/like', methods=['POST'])
@@ -1437,6 +1547,7 @@ def _purge_channel(ch):
     ChannelRole.query.filter_by(channel_id=ch.id).delete()
     db.session.delete(ch)
     db.session.commit()
+    cache_clear_prefix('channels:')
 
 
 @app.route('/api/analytics/overview')
@@ -1555,6 +1666,34 @@ if __name__ == '__main__':
             except Exception as e:
                 print("Cleanup error:", e, flush=True)
                 db.session.rollback()
+
+        # Performance indexes (idempotent)
+        try:
+            from sqlalchemy import text as _t
+            index_sqls = [
+                'CREATE INDEX IF NOT EXISTS ix_post_channel_created ON post (channel_id, created_at)',
+                'CREATE INDEX IF NOT EXISTS ix_post_channel_id ON post (channel_id)',
+                'CREATE INDEX IF NOT EXISTS ix_postreaction_post ON post_reaction (post_id)',
+                'CREATE INDEX IF NOT EXISTS ix_postlike_post_user ON post_like (post_id, user_id)',
+                'CREATE INDEX IF NOT EXISTS ix_postview_post_user ON post_view (post_id, user_id)',
+                'CREATE INDEX IF NOT EXISTS ix_subscription_user ON subscription (user_id)',
+                'CREATE INDEX IF NOT EXISTS ix_subscription_channel ON subscription (channel_id)',
+                'CREATE INDEX IF NOT EXISTS ix_message_receiver_read ON message (receiver_id, is_read)',
+                'CREATE INDEX IF NOT EXISTS ix_comment_post ON comment (post_id)',
+                'CREATE INDEX IF NOT EXISTS ix_user_last_seen ON "user" (last_seen)' if dialect == 'postgresql' else 'CREATE INDEX IF NOT EXISTS ix_user_last_seen ON user (last_seen)',
+            ]
+            for sql in index_sqls:
+                try:
+                    db.session.execute(_t(sql))
+                    db.session.commit()
+                except Exception as e:
+                    db.session.rollback()
+                    # postgres may not like IF NOT EXISTS on older versions — ignore
+                    print('index skip:', e, flush=True)
+            print('Indexes ready', flush=True)
+        except Exception as e:
+            print('index setup error:', e, flush=True)
+
     print("Database ready", flush=True)
     port = int(os.environ.get('PORT', 5000))
     print(f"Starting server on 0.0.0.0:{port} ...", flush=True)
