@@ -11,6 +11,7 @@ from flask_socketio import SocketIO, emit, join_room
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
+import uuid
 import os
 import secrets
 import re
@@ -68,6 +69,8 @@ class User(db.Model):
     last_seen = db.Column(db.DateTime, nullable=True)
     is_admin = db.Column(db.Boolean, default=False)
     muted_until = db.Column(db.DateTime, nullable=True)
+    mines_day = db.Column(db.String(10), default='')
+    mines_left = db.Column(db.Integer, default=10)
 
 class ChatHide(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -164,7 +167,7 @@ class Comment(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class ProfilePost(db.Model):
-    """Premium-only wall posts on user profiles."""
+    """Premium feed posts (global tab, premium only)."""
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     content = db.Column(db.Text, nullable=False, default='')
@@ -1397,9 +1400,33 @@ def update_privacy():
 
 
 
-@app.route('/api/wall', methods=['POST'])
+@app.route('/api/premium/feed')
 @login_required
-def create_wall_post():
+def premium_feed():
+    me = current_user()
+    if not premium_active(me):
+        return jsonify({'error': 'premium_required', 'posts': []}), 403
+    posts = ProfilePost.query.order_by(ProfilePost.created_at.desc()).limit(80).all()
+    result = []
+    for p in posts:
+        u = User.query.get(p.user_id)
+        result.append({
+            'id': p.id,
+            'user_id': p.user_id,
+            'username': u.username if u else '?',
+            'avatar': u.avatar if u else '',
+            'author_premium': premium_active(u) if u else False,
+            'content': p.content,
+            'media_url': p.media_url or '',
+            'media_type': p.media_type or '',
+            'created_at': p.created_at.strftime('%d.%m %H:%M') if p.created_at else '',
+            'can_delete': p.user_id == me.id or is_admin_user(me),
+        })
+    return jsonify({'posts': result})
+
+@app.route('/api/premium/feed', methods=['POST'])
+@login_required
+def create_premium_feed_post():
     me = current_user()
     if not premium_active(me):
         return jsonify({'error': 'Только для Premium'}), 403
@@ -1416,28 +1443,9 @@ def create_wall_post():
     db.session.commit()
     return jsonify({'id': post.id, 'status': 'ok'})
 
-@app.route('/api/wall/<int:user_id>')
+@app.route('/api/premium/feed/<int:post_id>', methods=['DELETE'])
 @login_required
-def get_wall(user_id):
-    me = current_user()
-    if not premium_active(me):
-        return jsonify({'error': 'premium_required', 'posts': []}), 403
-    posts = ProfilePost.query.filter_by(user_id=user_id).order_by(ProfilePost.created_at.desc()).limit(50).all()
-    result = []
-    for p in posts:
-        result.append({
-            'id': p.id,
-            'content': p.content,
-            'media_url': p.media_url or '',
-            'media_type': p.media_type or '',
-            'created_at': p.created_at.strftime('%d.%m %H:%M') if p.created_at else '',
-            'can_delete': p.user_id == me.id or is_admin_user(me),
-        })
-    return jsonify({'posts': result})
-
-@app.route('/api/wall/post/<int:post_id>', methods=['DELETE'])
-@login_required
-def delete_wall_post(post_id):
+def delete_premium_feed_post(post_id):
     me = current_user()
     p = ProfilePost.query.get_or_404(post_id)
     if p.user_id != me.id and not is_admin_user(me):
@@ -1446,7 +1454,62 @@ def delete_wall_post(post_id):
     db.session.commit()
     return jsonify({'status': 'ok'})
 
-import uuid
+
+def _mines_reset_if_needed(user):
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    day = getattr(user, 'mines_day', None) or ''
+    left = getattr(user, 'mines_left', None)
+    if left is None:
+        left = 10
+    if day != today:
+        user.mines_day = today
+        user.mines_left = 10
+        left = 10
+    return left
+
+@app.route('/api/mines/status')
+@login_required
+def mines_status():
+    me = current_user()
+    left = _mines_reset_if_needed(me)
+    db.session.commit()
+    return jsonify({'left': left, 'max': 10, 'reward': 10})
+
+@app.route('/api/mines/start', methods=['POST'])
+@login_required
+def mines_start():
+    me = current_user()
+    left = _mines_reset_if_needed(me)
+    if left <= 0:
+        return jsonify({'error': 'На сегодня попытки закончились (10/10)'}), 400
+    me.mines_left = left - 1
+    token = uuid.uuid4().hex
+    session['mines_token'] = token
+    session['mines_active'] = True
+    db.session.commit()
+    return jsonify({'status': 'ok', 'left': me.mines_left, 'token': token})
+
+@app.route('/api/mines/win', methods=['POST'])
+@login_required
+def mines_win():
+    me = current_user()
+    data = request.json or {}
+    token = data.get('token') or ''
+    if not session.get('mines_active') or session.get('mines_token') != token:
+        return jsonify({'error': 'Нет активной игры'}), 400
+    session['mines_active'] = False
+    session.pop('mines_token', None)
+    me.crystals = (me.crystals or 0) + 10
+    db.session.commit()
+    return jsonify({'status': 'ok', 'crystals': me.crystals, 'reward': 10})
+
+@app.route('/api/mines/lose', methods=['POST'])
+@login_required
+def mines_lose():
+    session['mines_active'] = False
+    session.pop('mines_token', None)
+    return jsonify({'status': 'ok'})
+
 from flask import send_from_directory, Response
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
@@ -1803,6 +1866,19 @@ if __name__ == '__main__':
             except Exception as e:
                 print(f'ALTER comment.{col} failed:', e, flush=True)
                 db.session.rollback()
+
+        
+        for col, typ in [('mines_day', 'VARCHAR(10)'), ('mines_left', 'INTEGER')]:
+            if col in existing_user:
+                continue
+            try:
+                sql = f'ALTER TABLE {user_table} ADD COLUMN {col} {typ}'
+                print('Migrating:', sql, flush=True)
+                db.session.execute(text(sql))
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                print('ALTER mines failed:', e, flush=True)
 
         # Ensure admin flag for reserved username (safe if column exists)
         try:

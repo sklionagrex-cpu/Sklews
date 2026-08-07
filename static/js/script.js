@@ -20,6 +20,8 @@ function premiumNickHtml(username, isPremium) {
 }
 
 let meIsAdmin = false;
+let meHasPremium = false;
+let meUserId = null;
 let adminSelectMode = false;
 let adminSelectedChannels = new Set();
 let _lastChannelsCache = [];
@@ -1043,7 +1045,7 @@ async function loadProfile() {
     meIsAdmin = !!p.is_admin;
     meHasPremium = !!p.is_premium;
     meUserId = p.id;
-    loadWallFor(meUserId, document.getElementById('premium-wall-list'), document.getElementById('premium-wall-lock'), document.getElementById('premium-wall-compose'));
+    updatePremiumNav();
     const fab = document.getElementById('admin-fab');
     if (fab) {
         if (meIsAdmin) fab.classList.remove('hidden');
@@ -1232,7 +1234,7 @@ async function openUserProfile(userId) {
     const av = document.getElementById('user-avatar');
     if (u.avatar) {
         setAvatarEl(av, u.avatar, u.username);
-        loadWallFor(u.id, document.getElementById('user-wall-list'), document.getElementById('user-wall-lock'), null);
+ 
     } else {
         setAvatarEl(av, null, u.username);
     }
@@ -2268,7 +2270,7 @@ if ('serviceWorker' in navigator) {
         meIsAdmin = !!p.is_admin;
     meHasPremium = !!p.is_premium;
     meUserId = p.id;
-    loadWallFor(meUserId, document.getElementById('premium-wall-list'), document.getElementById('premium-wall-lock'), document.getElementById('premium-wall-compose'));
+    updatePremiumNav();
         const fab = document.getElementById('admin-fab');
         if (fab && meIsAdmin) fab.classList.remove('hidden');
     } catch (e) {}
@@ -2442,96 +2444,291 @@ document.getElementById('font-size-row')?.addEventListener('click', e => {
 });
 loadSavedTheme();
 
-// ===== Premium wall =====
-let pendingWallPhoto = null;
-let meHasPremium = false;
-let meUserId = null;
 
-async function loadWallFor(userId, listEl, lockEl, composeEl) {
-    if (!listEl) return;
-    listEl.innerHTML = '';
-    if (lockEl) lockEl.classList.add('hidden');
-    if (composeEl) composeEl.classList.add('hidden');
-    if (!meHasPremium) {
-        if (lockEl) lockEl.classList.remove('hidden');
-        listEl.innerHTML = '';
-        return;
-    }
-    if (composeEl && userId === meUserId) composeEl.classList.remove('hidden');
-    try {
-        const res = await fetch('/api/wall/' + userId);
-        const data = await res.json();
-        if (res.status === 403 || data.error === 'premium_required') {
-            if (lockEl) lockEl.classList.remove('hidden');
-            return;
+// ===== Premium nav + feed =====
+function updatePremiumNav() {
+    const btn = document.getElementById('nav-premium');
+    if (!btn) return;
+    if (meHasPremium) btn.classList.remove('hidden');
+    else {
+        btn.classList.add('hidden');
+        if (document.getElementById('screen-premium')?.classList.contains('active')) {
+            showScreen('screen-home');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.nav-btn[data-tab="home"]')?.classList.add('active');
         }
-        const posts = data.posts || [];
-        if (!posts.length) {
-            listEl.innerHTML = '<div class="empty-state" style="padding:12px;font-size:13px">Пока нет постов</div>';
-            return;
-        }
-        posts.forEach(p => {
-            const div = document.createElement('div');
-            div.className = 'wall-post';
-            let media = '';
-            if (p.media_url && (p.media_type === 'photo' || !p.media_type)) {
-                media = '<img src="' + p.media_url + '" alt="" loading="lazy">';
-            }
-            div.innerHTML = '<div class="wall-post-meta">' + escapeHtml(p.created_at || '') +
-                (p.can_delete ? ' · <a href="#" class="wall-del" data-id="' + p.id + '" style="color:#f87171">Удалить</a>' : '') +
-                '</div><div class="wall-post-text">' + escapeHtml(p.content || '') + '</div>' + media;
-            div.querySelector('.wall-del')?.addEventListener('click', async e => {
-                e.preventDefault();
-                await fetch('/api/wall/post/' + p.id, { method: 'DELETE' });
-                loadWallFor(userId, listEl, lockEl, composeEl);
-            });
-            listEl.appendChild(div);
-        });
-    } catch (e) {
-        console.error(e);
     }
 }
 
-document.getElementById('btn-wall-photo')?.addEventListener('click', () => document.getElementById('wall-photo-input')?.click());
-document.getElementById('wall-photo-input')?.addEventListener('change', e => {
+let pendingPfPhoto = null;
+
+async function loadPremiumFeed() {
+    if (!meHasPremium) {
+        updatePremiumNav();
+        showToast('Premium', 'Нужна подписка Premium', '!');
+        return;
+    }
+    const list = document.getElementById('premium-feed-list');
+    if (!list) return;
+    list.innerHTML = '<div class="empty-state">Загрузка…</div>';
+    try {
+        const res = await fetch('/api/premium/feed');
+        const data = await res.json();
+        if (res.status === 403) {
+            meHasPremium = false;
+            updatePremiumNav();
+            list.innerHTML = '<div class="empty-state">Только для Premium</div>';
+            return;
+        }
+        const posts = data.posts || [];
+        list.innerHTML = '';
+        if (!posts.length) {
+            list.innerHTML = '<div class="empty-state">Пока тихо — напишите первым</div>';
+            return;
+        }
+        posts.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'pf-card';
+            const author = premiumNickHtml(p.username, p.author_premium);
+            let media = '';
+            if (p.media_url) media = '<img class="pf-media" src="' + p.media_url + '" alt="" loading="lazy">';
+            const del = p.can_delete ? '<button type="button" class="pf-del" data-id="' + p.id + '"><i class="fa-solid fa-trash"></i></button>' : '';
+            card.innerHTML = '<div class="pf-card-top">' + avatarHtml(p.username, p.avatar) +
+                '<div class="pf-card-meta"><div class="pf-author">' + author + '</div>' +
+                '<div class="pf-time">' + escapeHtml(p.created_at || '') + '</div></div>' + del + '</div>' +
+                '<div class="pf-text">' + escapeHtml(p.content || '') + '</div>' + media;
+            card.querySelector('.pf-del')?.addEventListener('click', async () => {
+                await fetch('/api/premium/feed/' + p.id, { method: 'DELETE' });
+                loadPremiumFeed();
+            });
+            card.querySelector('.avatar')?.addEventListener('click', () => { if (p.user_id) openUserProfile(p.user_id); });
+            list.appendChild(card);
+        });
+    } catch (e) {
+        list.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+    }
+}
+
+document.getElementById('btn-pf-photo')?.addEventListener('click', () => document.getElementById('pf-photo-input')?.click());
+document.getElementById('pf-photo-input')?.addEventListener('change', e => {
     const f = e.target.files && e.target.files[0];
-    pendingWallPhoto = f || null;
-    const prev = document.getElementById('wall-photo-preview');
+    pendingPfPhoto = f || null;
+    const prev = document.getElementById('pf-photo-preview');
     if (prev) {
         if (f) {
             prev.classList.remove('hidden');
-            prev.innerHTML = '<img src="' + URL.createObjectURL(f) + '" style="max-width:100%;border-radius:10px">';
-        } else {
-            prev.classList.add('hidden');
-            prev.innerHTML = '';
-        }
+            prev.innerHTML = '<img src="' + URL.createObjectURL(f) + '" style="max-width:100%;border-radius:12px">';
+        } else { prev.classList.add('hidden'); prev.innerHTML = ''; }
     }
     e.target.value = '';
 });
-document.getElementById('btn-wall-post')?.addEventListener('click', async () => {
+document.getElementById('btn-pf-post')?.addEventListener('click', async () => {
     if (!meHasPremium) return showToast('Premium', 'Нужен Premium', '!');
-    const content = (document.getElementById('wall-input')?.value || '').trim();
+    const content = (document.getElementById('pf-input')?.value || '').trim();
     let media_url = '', media_type = '';
-    if (pendingWallPhoto) {
+    if (pendingPfPhoto) {
         const fd = new FormData();
-        fd.append('file', pendingWallPhoto);
+        fd.append('file', pendingPfPhoto);
         const up = await fetch('/api/upload', { method: 'POST', body: fd });
         const ud = await up.json();
         if (ud.error) return showToast('Ошибка', ud.error, '!');
-        media_url = ud.url;
-        media_type = 'photo';
+        media_url = ud.url; media_type = 'photo';
     }
-    if (!content && !media_url) return showToast('Пост', 'Напишите текст или добавьте фото', '!');
-    const res = await fetch('/api/wall', {
+    if (!content && !media_url) return showToast('Пост', 'Добавьте текст или фото', '!');
+    const res = await fetch('/api/premium/feed', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ content, media_url, media_type })
     });
     const d = await res.json();
     if (d.error) return showToast('Ошибка', d.error, '!');
-    document.getElementById('wall-input').value = '';
-    pendingWallPhoto = null;
-    const prev = document.getElementById('wall-photo-preview');
+    document.getElementById('pf-input').value = '';
+    pendingPfPhoto = null;
+    const prev = document.getElementById('pf-photo-preview');
     if (prev) { prev.classList.add('hidden'); prev.innerHTML = ''; }
-    showToast('Premium', 'Пост опубликован', '✓');
-    loadWallFor(meUserId, document.getElementById('premium-wall-list'), document.getElementById('premium-wall-lock'), document.getElementById('premium-wall-compose'));
+    showToast('Premium', 'Опубликовано', '✓');
+    loadPremiumFeed();
 });
+
+// ===== Minesweeper 16x16 =====
+const MINES_SIZE = 16;
+const MINES_COUNT = 40;
+let minesToken = null;
+let minesGrid = null; // {mine, open, flag, adj}[][]
+let minesAlive = false;
+let minesFlags = 0;
+
+function minesRandBoard() {
+    const g = Array.from({ length: MINES_SIZE }, () =>
+        Array.from({ length: MINES_SIZE }, () => ({ mine: false, open: false, flag: false, adj: 0 }))
+    );
+    let placed = 0;
+    while (placed < MINES_COUNT) {
+        const r = Math.floor(Math.random() * MINES_SIZE);
+        const c = Math.floor(Math.random() * MINES_SIZE);
+        if (!g[r][c].mine) { g[r][c].mine = true; placed++; }
+    }
+    const dirs = [-1,0,1];
+    for (let r = 0; r < MINES_SIZE; r++) {
+        for (let c = 0; c < MINES_SIZE; c++) {
+            if (g[r][c].mine) continue;
+            let n = 0;
+            for (const dr of dirs) for (const dc of dirs) {
+                if (!dr && !dc) continue;
+                const rr = r + dr, cc = c + dc;
+                if (rr >= 0 && rr < MINES_SIZE && cc >= 0 && cc < MINES_SIZE && g[rr][cc].mine) n++;
+            }
+            g[r][c].adj = n;
+        }
+    }
+    return g;
+}
+
+function renderMinesBoard() {
+    const board = document.getElementById('mines-board');
+    if (!board || !minesGrid) return;
+    board.innerHTML = '';
+    board.style.gridTemplateColumns = 'repeat(' + MINES_SIZE + ', 1fr)';
+    for (let r = 0; r < MINES_SIZE; r++) {
+        for (let c = 0; c < MINES_SIZE; c++) {
+            const cell = minesGrid[r][c];
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'mines-cell';
+            if (cell.open) {
+                btn.classList.add('open');
+                if (cell.mine) { btn.classList.add('boom'); btn.textContent = '💣'; }
+                else if (cell.adj) { btn.textContent = cell.adj; btn.dataset.n = cell.adj; }
+            } else if (cell.flag) {
+                btn.classList.add('flag');
+                btn.textContent = '🚩';
+            }
+            btn.addEventListener('click', () => minesClick(r, c));
+            btn.addEventListener('contextmenu', e => { e.preventDefault(); minesFlag(r, c); });
+            let hold = null;
+            btn.addEventListener('touchstart', e => {
+                hold = setTimeout(() => { minesFlag(r, c); hold = null; }, 450);
+            }, { passive: true });
+            btn.addEventListener('touchend', () => { if (hold) clearTimeout(hold); });
+            board.appendChild(btn);
+        }
+    }
+    document.getElementById('mines-flags-label').textContent = '🚩 ' + minesFlags;
+}
+
+function minesFlood(r, c) {
+    const stack = [[r, c]];
+    while (stack.length) {
+        const [cr, cc] = stack.pop();
+        const cell = minesGrid[cr][cc];
+        if (cell.open || cell.flag) continue;
+        cell.open = true;
+        if (cell.adj === 0 && !cell.mine) {
+            for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+                const rr = cr + dr, cc2 = cc + dc;
+                if (rr >= 0 && rr < MINES_SIZE && cc2 >= 0 && cc2 < MINES_SIZE)
+                    if (!minesGrid[rr][cc2].open) stack.push([rr, cc2]);
+            }
+        }
+    }
+}
+
+function minesCheckWin() {
+    let closedSafe = 0;
+    for (let r = 0; r < MINES_SIZE; r++)
+        for (let c = 0; c < MINES_SIZE; c++)
+            if (!minesGrid[r][c].mine && !minesGrid[r][c].open) closedSafe++;
+    return closedSafe === 0;
+}
+
+async function minesClick(r, c) {
+    if (!minesAlive) return;
+    const cell = minesGrid[r][c];
+    if (cell.open || cell.flag) return;
+    if (cell.mine) {
+        cell.open = true;
+        minesAlive = false;
+        // reveal all mines
+        for (let i = 0; i < MINES_SIZE; i++)
+            for (let j = 0; j < MINES_SIZE; j++)
+                if (minesGrid[i][j].mine) minesGrid[i][j].open = true;
+        renderMinesBoard();
+        await fetch('/api/mines/lose', { method: 'POST' });
+        showToast('Сапёр', 'Мина! Попробуйте ещё', '💣');
+        return;
+    }
+    minesFlood(r, c);
+    renderMinesBoard();
+    if (minesCheckWin()) {
+        minesAlive = false;
+        const res = await fetch('/api/mines/win', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ token: minesToken })
+        });
+        const d = await res.json();
+        if (d.error) showToast('Сапёр', d.error, '!');
+        else {
+            showToast('Победа!', '+' + (d.reward || 10) + ' кристаллов', '✦');
+            loadProfile();
+        }
+        minesToken = null;
+    }
+}
+
+function minesFlag(r, c) {
+    if (!minesAlive) return;
+    const cell = minesGrid[r][c];
+    if (cell.open) return;
+    cell.flag = !cell.flag;
+    minesFlags += cell.flag ? 1 : -1;
+    renderMinesBoard();
+}
+
+async function startMinesGame() {
+    const st = await fetch('/api/mines/status').then(r => r.json());
+    document.getElementById('mines-left-label').textContent = 'Попытки: ' + st.left + '/' + (st.max || 10);
+    const res = await fetch('/api/mines/start', { method: 'POST' });
+    const d = await res.json();
+    if (d.error) {
+        showToast('Сапёр', d.error, '!');
+        return false;
+    }
+    minesToken = d.token;
+    minesGrid = minesRandBoard();
+    minesAlive = true;
+    minesFlags = 0;
+    document.getElementById('mines-left-label').textContent = 'Попытки: ' + d.left + '/10';
+    renderMinesBoard();
+    return true;
+}
+
+async function openMinesModal() {
+    document.getElementById('modal-mines').classList.remove('hidden');
+    const st = await fetch('/api/mines/status').then(r => r.json());
+    document.getElementById('mines-left-label').textContent = 'Попытки: ' + st.left + '/' + (st.max || 10);
+    if (!minesAlive) {
+        document.getElementById('mines-board').innerHTML = '<div class="empty-state" style="padding:24px;grid-column:1/-1">Нажмите «Новая игра»</div>';
+    }
+}
+
+document.getElementById('btn-mines-close')?.addEventListener('click', () => {
+    document.getElementById('modal-mines').classList.add('hidden');
+});
+document.getElementById('btn-mines-new')?.addEventListener('click', () => startMinesGame());
+
+// Triple-tap logo on home
+(function() {
+    let taps = 0, timer = null;
+    const logo = document.querySelector('#screen-home .header-logo, #screen-home .brand-logo');
+    if (!logo) return;
+    logo.style.cursor = 'pointer';
+    logo.addEventListener('click', e => {
+        e.preventDefault();
+        taps++;
+        clearTimeout(timer);
+        timer = setTimeout(() => { taps = 0; }, 700);
+        if (taps >= 3) {
+            taps = 0;
+            openMinesModal();
+        }
+    });
+})();

@@ -13,7 +13,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/apple-touch-icon.png?v=6">
 
     <title>Sklews</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260807g">
+    <link rel="stylesheet" href="/static/css/style.css?v=20260807h">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -22,6 +22,7 @@
     <div id="app">
         <nav class="bottom-nav">
             <button class="nav-btn active" data-tab="home"><i class="fa-solid fa-house icon"></i><span>Лента</span></button>
+            <button class="nav-btn hidden" data-tab="premium" id="nav-premium"><i class="fa-solid fa-crown icon"></i><span>Premium</span></button>
             <button class="nav-btn" data-tab="create"><i class="fa-solid fa-plus icon"></i><span>Создать</span></button>
             <button class="nav-btn" data-tab="analytics"><i class="fa-solid fa-chart-line icon"></i><span>Аналитика</span></button>
             <button class="nav-btn" data-tab="shop"><i class="fa-solid fa-gem icon"></i><span>Магазин</span></button>
@@ -115,6 +116,26 @@
             </div>
         </div>
 
+        
+        <div id="screen-premium" class="screen">
+            <header class="header">
+                <div class="brand-logo header-logo" style="gap:8px">
+                    <i class="fa-solid fa-crown" style="color:#fbbf24"></i>
+                    <span>Premium</span>
+                </div>
+            </header>
+            <div class="premium-feed-compose">
+                <textarea id="pf-input" placeholder="Что нового? Только для Premium..." maxlength="2000" rows="2"></textarea>
+                <div class="premium-feed-compose-actions">
+                    <button type="button" id="btn-pf-photo" class="btn btn-secondary btn-sm"><i class="fa-solid fa-image"></i></button>
+                    <input type="file" id="pf-photo-input" accept="image/*" style="display:none">
+                    <button type="button" id="btn-pf-post" class="btn btn-primary btn-sm">Опубликовать</button>
+                </div>
+                <div id="pf-photo-preview" class="hidden" style="margin-top:8px"></div>
+            </div>
+            <div id="premium-feed-list" class="premium-feed-list"></div>
+        </div>
+
         <div id="screen-chats" class="screen">
             <header class="header"><h1>Чаты</h1></header>
             <div class="search-box"><input type="text" id="search-users" placeholder="Найти пользователя..."></div>
@@ -137,26 +158,6 @@
             <div class="profile-bottom-actions">
                 <button id="btn-open-friends" class="btn btn-secondary" style="position:relative"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span><span id="friends-req-badge" class="nav-badge hidden">0</span></button>
                 <button id="btn-open-subs" class="btn btn-secondary"><i class="fa-solid fa-bookmark"></i> Подписки</button>
-            </div>
-            <div id="premium-wall-section" class="premium-wall-section">
-                <div class="premium-wall-head">
-                    <h3><i class="fa-solid fa-crown" style="color:#fbbf24"></i> Premium-лента</h3>
-                    <span class="premium-wall-hint">Только для Premium</span>
-                </div>
-                <div id="premium-wall-compose" class="premium-wall-compose hidden">
-                    <textarea id="wall-input" placeholder="Пост в профиль (видят только Premium)..." maxlength="2000" rows="3"></textarea>
-                    <div class="premium-wall-actions">
-                        <button type="button" id="btn-wall-photo" class="btn btn-secondary btn-sm"><i class="fa-solid fa-image"></i></button>
-                        <input type="file" id="wall-photo-input" accept="image/*" style="display:none">
-                        <button type="button" id="btn-wall-post" class="btn btn-primary btn-sm">Опубликовать</button>
-                    </div>
-                    <div id="wall-photo-preview" class="hidden" style="margin-top:8px"></div>
-                </div>
-                <div id="premium-wall-lock" class="premium-wall-lock hidden">
-                    <i class="fa-solid fa-lock"></i>
-                    <p>Лента профиля доступна только с Premium</p>
-                </div>
-                <div id="premium-wall-list" class="premium-wall-list"></div>
             </div>
         </div>
 
@@ -211,16 +212,7 @@
                 <button id="btn-user-friend" class="btn btn-secondary full">Добавить в друзья</button>
                 <button id="btn-user-message" class="btn btn-primary full"><i class="fa-solid fa-paper-plane"></i> Написать</button>
             </div>
-            <div id="user-premium-wall" class="premium-wall-section">
-                <div class="premium-wall-head">
-                    <h3><i class="fa-solid fa-crown" style="color:#fbbf24"></i> Premium-лента</h3>
-                </div>
-                <div id="user-wall-lock" class="premium-wall-lock hidden"><i class="fa-solid fa-lock"></i><p>Нужен Premium</p></div>
-                <div id="user-wall-list" class="premium-wall-list"></div>
-            </div>
-        </div>
-
-        <!-- MEDIA LIGHTBOX -->
+            <!-- MEDIA LIGHTBOX -->
         <div id="media-lightbox" class="modal hidden" style="align-items:center;background:rgba(0,0,0,0.92)">
             <div style="width:100%;max-width:100%;text-align:center;padding:12px">
                 <button id="btn-close-lightbox" class="btn-icon" style="position:absolute;top:16px;right:16px;z-index:10"><i class="fa-solid fa-xmark"></i></button>
@@ -313,6 +305,26 @@
         </div>
 
         <!-- MODALS -->
+
+        <div id="modal-mines" class="modal hidden">
+            <div class="modal-content mines-modal">
+                <div class="mines-head">
+                    <h3>⛏ Сапёр</h3>
+                    <button type="button" id="btn-mines-close" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="mines-meta">
+                    <span id="mines-left-label">Попытки: —</span>
+                    <span id="mines-flags-label">🚩 0</span>
+                    <span>Награда: 10 ✦</span>
+                </div>
+                <div id="mines-board" class="mines-board"></div>
+                <div class="mines-actions">
+                    <button type="button" id="btn-mines-new" class="btn btn-primary full">Новая игра</button>
+                </div>
+                <p class="mines-hint">16×16 · 3 тапа по логотипу · 10 игр в день</p>
+            </div>
+        </div>
+
         
         <div id="modal-theme" class="modal hidden">
             <div class="modal-content" style="max-width:360px;max-height:85vh;overflow-y:auto">
@@ -630,6 +642,6 @@
             </div>
         </div>
     </div>
-    <script src="/static/js/script.js?v=20260807g"></script>
+    <script src="/static/js/script.js?v=20260807h"></script>
 </body>
 </html>
