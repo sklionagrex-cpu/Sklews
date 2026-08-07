@@ -1,7 +1,7 @@
-const CACHE = 'sklews-v5';
+const CACHE = 'sklews-v6';
 const ASSETS = [
-  '/static/css/style.css?v=20260807e',
-  '/static/js/script.js?v=20260807e',
+  '/static/css/style.css?v=20260807f',
+  '/static/js/script.js?v=20260807f',
   '/static/manifest.json'
 ];
 

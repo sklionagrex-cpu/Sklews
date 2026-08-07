@@ -1651,3 +1651,299 @@ body:has(#screen-chat.active) .bottom-nav {
     display: block;
     border-radius: inherit;
 }
+
+/* ========== Premium motion system ========== */
+:root {
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+    --dur-fast: 0.18s;
+    --dur: 0.28s;
+    --dur-slow: 0.45s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Screen transitions */
+.screen {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+    pointer-events: none;
+    transition:
+        opacity var(--dur) var(--ease-out),
+        transform var(--dur) var(--ease-out);
+}
+.screen.active {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+    animation: screenIn var(--dur-slow) var(--ease-out);
+}
+@keyframes screenIn {
+    from { opacity: 0; transform: translateY(14px) scale(0.98); filter: blur(4px); }
+    to { opacity: 1; transform: none; filter: none; }
+}
+
+/* Cards & lists */
+.channel-card, .sub-card, .role-card, .shop-item, .comment-row, .message {
+    transition:
+        transform var(--dur-fast) var(--ease-out),
+        box-shadow var(--dur) var(--ease-out),
+        background var(--dur) ease,
+        border-color var(--dur) ease,
+        opacity var(--dur) var(--ease-out);
+}
+.channel-card:active, .sub-card:active, .role-card:active {
+    transform: scale(0.975);
+}
+.channel-card, .sub-card {
+    animation: riseIn 0.4s var(--ease-out) both;
+}
+.channel-card:nth-child(1) { animation-delay: 0.02s; }
+.channel-card:nth-child(2) { animation-delay: 0.05s; }
+.channel-card:nth-child(3) { animation-delay: 0.08s; }
+.channel-card:nth-child(4) { animation-delay: 0.11s; }
+.channel-card:nth-child(5) { animation-delay: 0.14s; }
+.channel-card:nth-child(n+6) { animation-delay: 0.16s; }
+@keyframes riseIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* Buttons */
+.btn, .btn-primary, .btn-secondary, .btn-sm, .btn-send, .btn-super, .nav-btn, .filter-btn {
+    transition:
+        transform var(--dur-fast) var(--ease-spring),
+        box-shadow var(--dur) var(--ease-out),
+        background var(--dur) ease,
+        color var(--dur) ease,
+        border-color var(--dur) ease,
+        opacity var(--dur) ease;
+}
+.btn:active, .btn-primary:active, .btn-secondary:active, .btn-send:active {
+    transform: scale(0.96);
+}
+.btn-primary {
+    box-shadow: 0 4px 16px var(--purple-glow);
+}
+.btn-primary:hover {
+    box-shadow: 0 6px 22px var(--purple-glow);
+    filter: brightness(1.06);
+}
+
+/* Nav */
+.bottom-nav {
+    transition: transform var(--dur) var(--ease-out), background var(--dur) ease;
+}
+.nav-btn {
+    position: relative;
+}
+.nav-btn.active {
+    transform: translateY(-2px);
+}
+.nav-btn.active::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent2);
+    transform: translateX(-50%);
+    animation: dotPop 0.35s var(--ease-spring);
+}
+@keyframes dotPop {
+    from { transform: translateX(-50%) scale(0); opacity: 0; }
+    to { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+/* Modals */
+.modal {
+    transition: opacity var(--dur) var(--ease-out), backdrop-filter var(--dur) ease;
+}
+.modal:not(.hidden) {
+    animation: modalFade 0.28s var(--ease-out);
+}
+@keyframes modalFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+.modal-content {
+    animation: modalSheet 0.38s var(--ease-out);
+}
+@keyframes modalSheet {
+    from { transform: translateY(48px) scale(0.96); opacity: 0; }
+    to { transform: none; opacity: 1; }
+}
+
+/* Messages */
+.message {
+    animation: msgIn 0.32s var(--ease-out) both;
+}
+.message.mine { animation-name: msgInMine; }
+@keyframes msgIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.96); }
+    to { opacity: 1; transform: none; }
+}
+@keyframes msgInMine {
+    from { opacity: 0; transform: translateY(10px) translateX(12px) scale(0.96); }
+    to { opacity: 1; transform: none; }
+}
+.msg-bubble {
+    transition: transform var(--dur-fast) var(--ease-out);
+}
+
+/* Posts */
+.post-text-wrap, .react-pills, .react-strip {
+    transition: opacity var(--dur) ease, transform var(--dur) var(--ease-out);
+}
+.react-strip.open {
+    animation: stripIn 0.28s var(--ease-spring);
+}
+@keyframes stripIn {
+    from { opacity: 0; transform: translateY(6px) scale(0.96); }
+    to { opacity: 1; transform: none; }
+}
+.react-strip-item {
+    transition: transform 0.15s var(--ease-spring), background 0.15s ease;
+}
+.react-strip-item:hover { transform: scale(1.15); }
+
+/* Header / brand */
+.brand-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.brand-logo img {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    box-shadow: 0 4px 14px var(--purple-glow);
+    animation: logoFloat 4s ease-in-out infinite;
+}
+@keyframes logoFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+
+/* Auth logo */
+.logo-mark {
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 14px;
+    border-radius: 22px;
+    box-shadow: 0 12px 40px rgba(139, 92, 246, 0.45), 0 0 0 1px rgba(167, 139, 250, 0.35);
+    animation: logoReveal 0.7s var(--ease-out), logoFloat 4.5s ease-in-out 0.7s infinite;
+}
+@keyframes logoReveal {
+    from { opacity: 0; transform: scale(0.7) rotate(-8deg); filter: blur(8px); }
+    to { opacity: 1; transform: none; filter: none; }
+}
+.logo {
+    animation: fadeUp 0.55s var(--ease-out) 0.1s both;
+}
+.subtitle {
+    animation: fadeUp 0.55s var(--ease-out) 0.18s both;
+}
+.auth-tabs, .auth-form, .auth-container .btn {
+    animation: fadeUp 0.55s var(--ease-out) 0.25s both;
+}
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* Shimmer skeleton optional */
+.shimmer {
+    background: linear-gradient(90deg, var(--card) 25%, var(--card2) 50%, var(--card) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s linear infinite;
+    border-radius: 12px;
+}
+@keyframes shimmer {
+    to { background-position: -200% 0; }
+}
+
+/* Toast */
+#modal-toast .modal-content {
+    animation: toastPop 0.4s var(--ease-spring);
+}
+@keyframes toastPop {
+    from { transform: scale(0.88) translateY(20px); opacity: 0; }
+    to { transform: none; opacity: 1; }
+}
+
+/* Admin FAB */
+.admin-fab {
+    transition: transform 0.2s var(--ease-spring), box-shadow 0.25s ease;
+    animation: fabIn 0.5s var(--ease-spring);
+}
+@keyframes fabIn {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+.admin-fab:hover { box-shadow: 0 10px 28px rgba(79, 70, 229, 0.55); }
+
+/* Soft page background motion */
+body::before {
+    content: '';
+    position: fixed;
+    inset: -20%;
+    background:
+        radial-gradient(ellipse at 20% 10%, rgba(139, 92, 246, 0.12), transparent 50%),
+        radial-gradient(ellipse at 80% 90%, rgba(59, 130, 246, 0.08), transparent 45%);
+    pointer-events: none;
+    z-index: 0;
+    animation: bgDrift 18s ease-in-out infinite alternate;
+}
+@keyframes bgDrift {
+    from { transform: translate(0, 0) scale(1); }
+    to { transform: translate(-2%, 2%) scale(1.05); }
+}
+#app { position: relative; z-index: 1; }
+
+/* Input focus glow */
+input, textarea {
+    transition: border-color var(--dur) ease, box-shadow var(--dur) ease, background var(--dur) ease;
+}
+input:focus, textarea:focus {
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+/* Premium nick already pulses — ensure smooth */
+.premium-nick { transition: color var(--dur) ease; }
+
+.header-logo.brand-logo {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--accent3), var(--accent2), #fbbf24);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.header-logo.brand-logo span {
+    background: linear-gradient(135deg, #e9e0ff, #a78bfa, #fbbf24);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 800;
+    font-size: 20px;
+    letter-spacing: -0.4px;
+}
+.header-logo.brand-logo img {
+    -webkit-text-fill-color: initial;
+    background: none;
+}
+
+/* ensure screens still toggle display */
+.screen { display: none !important; }
+.screen.active {
+    display: block !important;
+}

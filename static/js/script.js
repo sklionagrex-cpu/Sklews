@@ -67,9 +67,18 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 });
 
 function showScreen(id) {
-    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.screen').forEach(s => {
+        if (s.classList.contains('active')) s.classList.add('screen-leave');
+        s.classList.remove('active');
+    });
     const el = document.getElementById(id);
-    if (el) el.classList.add('active');
+    if (el) {
+        el.classList.remove('screen-leave');
+        // reflow for animation restart
+        void el.offsetWidth;
+        el.classList.add('active');
+        try { el.scrollTop = 0; } catch (e) {}
+    }
 }
 
 function showToast(title, text, icon) {
