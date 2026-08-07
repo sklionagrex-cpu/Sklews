@@ -41,6 +41,11 @@ let meUserId = null;
     } catch (e) {}
 })();
 
+function safeOn(id, event, fn) {
+    const el = typeof id === 'string' ? document.getElementById(id) : id;
+    if (!el) { console.warn('safeOn missing', id); return; }
+    el.addEventListener(event, fn);
+}
 let adminSelectMode = false;
 let adminSelectedChannels = new Set();
 let _lastChannelsCache = [];
@@ -89,18 +94,14 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 });
 
 function showScreen(id) {
-    document.querySelectorAll('.screen').forEach(s => {
-        if (s.classList.contains('active')) s.classList.add('screen-leave');
-        s.classList.remove('active');
-    });
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const el = document.getElementById(id);
-    if (el) {
-        el.classList.remove('screen-leave');
-        // reflow for animation restart
-        void el.offsetWidth;
-        el.classList.add('active');
-        try { el.scrollTop = 0; } catch (e) {}
+    if (!el) {
+        console.warn('showScreen: missing', id);
+        return;
     }
+    el.classList.add('active');
+    try { el.scrollTop = 0; } catch (e) {}
 }
 
 function showToast(title, text, icon) {
@@ -109,7 +110,7 @@ function showToast(title, text, icon) {
     document.getElementById('toast-icon').textContent = icon || '✦';
     document.getElementById('modal-toast').classList.remove('hidden');
 }
-document.getElementById('btn-toast-ok').onclick = () => document.getElementById('modal-toast').classList.add('hidden');
+safeOn('btn-toast-ok', 'click', () => document.getElementById('modal-toast')?.classList.add('hidden'));
 
 
 function setAvatarEl(el, url, letter) {
@@ -405,24 +406,39 @@ async function openChannel(id) {
     showScreen('screen-channel');
     try {
         const res = await fetch('/api/channel/' + id);
+        if (!res.ok) {
+            showToast('Канал', 'Не удалось открыть', '!');
+            return;
+        }
         const ch = await res.json();
+        if (ch.error) {
+            showToast('Канал', ch.error, '!');
+            return;
+        }
         document.getElementById('channel-title').textContent = ch.name;
         document.getElementById('channel-name').textContent = ch.name;
         document.getElementById('channel-subs').textContent = ch.subscribers + ' участников';
         document.getElementById('channel-desc').textContent = ch.description || 'Нет описания';
         const av = document.getElementById('channel-avatar');
-        if (ch.avatar) {
-            av.style.backgroundImage = 'url(' + ch.avatar + ')';
-            av.style.backgroundSize = 'cover';
-            av.textContent = '';
-        } else {
-            av.style.backgroundImage = '';
-            av.textContent = ch.name[0].toUpperCase();
+        if (av) {
+            if (typeof setAvatarEl === 'function') setAvatarEl(av, ch.avatar, ch.name);
+            else {
+                if (ch.avatar) {
+                    av.style.backgroundImage = 'url(' + ch.avatar + ')';
+                    av.style.backgroundSize = 'cover';
+                    av.textContent = '';
+                } else {
+                    av.style.backgroundImage = '';
+                    av.textContent = (ch.name || '?')[0].toUpperCase();
+                }
+            }
         }
         const head = document.querySelector('.channel-header');
-        if (ch.avatar) {
-            head.style.background = 'linear-gradient(to bottom, rgba(12,10,20,0.4), var(--bg)), url(' + ch.avatar + ') center/cover';
-        } else head.style.background = '';
+        if (head) {
+            if (ch.avatar) {
+                head.style.background = 'linear-gradient(to bottom, rgba(12,10,20,0.4), var(--bg)), url(' + ch.avatar + ') center/cover';
+            } else head.style.background = '';
+        }
         const btnJoin = document.getElementById('btn-join');
         const btnWatch = document.getElementById('btn-watch');
         const btnPosts = document.getElementById('btn-open-posts');
@@ -449,30 +465,36 @@ async function openChannel(id) {
         // owner row
         const ownerAv = document.getElementById('channel-owner-avatar');
         const ownerName = document.getElementById('channel-owner-name');
-        if (ch.owner_username) {
+        if (ch.owner_username && ownerName) {
             ownerName.textContent = ch.owner_username;
-            if (ch.owner_avatar) {
-                ownerAv.style.backgroundImage = 'url(' + ch.owner_avatar + ')';
-                ownerAv.style.backgroundSize = 'cover';
-                ownerAv.textContent = '';
-            } else {
-                ownerAv.style.backgroundImage = '';
-                ownerAv.textContent = ch.owner_username[0].toUpperCase();
+            if (ownerAv) {
+                if (typeof setAvatarEl === 'function') setAvatarEl(ownerAv, ch.owner_avatar, ch.owner_username);
+                else {
+                    if (ch.owner_avatar) {
+                        ownerAv.style.backgroundImage = 'url(' + ch.owner_avatar + ')';
+                        ownerAv.style.backgroundSize = 'cover';
+                        ownerAv.textContent = '';
+                    } else {
+                        ownerAv.style.backgroundImage = '';
+                        ownerAv.textContent = ch.owner_username[0].toUpperCase();
+                    }
+                }
             }
-            document.getElementById('channel-owner-row').onclick = () => openUserProfile(ch.owner_id);
+            const orow = document.getElementById('channel-owner-row');
+            if (orow) orow.onclick = () => openUserProfile(ch.owner_id);
         }
     } catch (e) { console.error(e); }
 }
 document.getElementById('btn-open-posts').onclick = () => openPostsPage(currentChannelId);
 
 document.getElementById('btn-back-channel').onclick = () => { showScreen('screen-home'); loadHome(); };
-document.getElementById('btn-watch').onclick = () => openPostsPage(currentChannelId);
-document.getElementById('btn-join').onclick = async () => {
+safeOn('btn-watch', 'click', () => openPostsPage(currentChannelId));
+safeOn('btn-join', 'click', async () => {
     const isLeave = document.getElementById('btn-join').textContent === 'Покинуть';
     await fetch('/api/channel/' + currentChannelId + '/' + (isLeave ? 'leave' : 'join'), { method: 'POST' });
     openChannel(currentChannelId);
     loadMySubs();
-};
+});
 
 async function openPostsPage(id) {
     currentChannelId = id;
@@ -1101,8 +1123,16 @@ async function loadProfile() {
     }
 }
 
-document.getElementById('btn-settings').onclick = () => document.getElementById('modal-settings').classList.remove('hidden');
-document.getElementById('btn-close-settings').onclick = () => document.getElementById('modal-settings').classList.add('hidden');
+
+// Settings (delegation — never breaks other handlers)
+document.addEventListener('click', e => {
+    if (e.target.closest('#btn-settings')) {
+        document.getElementById('modal-settings')?.classList.remove('hidden');
+    }
+    if (e.target.closest('#btn-close-settings')) {
+        document.getElementById('modal-settings')?.classList.add('hidden');
+    }
+});
 document.getElementById('btn-set-avatar').onclick = () => document.getElementById('avatar-input').click();
 document.getElementById('avatar-input').onchange = async e => {
     const file = e.target.files[0];
@@ -2782,14 +2812,15 @@ async function openMinesModal() {
     // 3 taps on home logo
     let taps = 0, tmr = null;
     document.addEventListener('click', e => {
-        if (!e.target.closest('#home-logo-tap')) return;
+        const logo = e.target.closest('#home-logo-tap, #screen-home .header-logo, #screen-home .brand-logo');
+        if (!logo) return;
         if (!document.getElementById('screen-home')?.classList.contains('active')) return;
         taps++;
         clearTimeout(tmr);
-        tmr = setTimeout(() => { taps = 0; }, 850);
+        tmr = setTimeout(() => { taps = 0; }, 900);
         if (taps >= 3) {
             taps = 0;
-            openMinesModal();
+            try { openMinesModal(); } catch (err) { console.error(err); }
         }
     });
 })();

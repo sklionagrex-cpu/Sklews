@@ -1682,23 +1682,19 @@ body:has(#screen-chat.active) .bottom-nav {
     }
 }
 
-/* Screen transitions */
+/* Screen transitions - simple, no opacity traps */
 .screen {
-    opacity: 0;
-    transform: translateY(10px) scale(0.985);
-    pointer-events: none;
-    transition:
-        opacity var(--dur) var(--ease-out),
-        transform var(--dur) var(--ease-out);
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 80px;
+    height: 100%;
+    height: 100dvh;
 }
 .screen.active {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    pointer-events: auto;
-    animation: screenIn var(--dur-slow) var(--ease-out);
+    display: block;
 }
-@keyframes screenIn {
-    from { opacity: 0; transform: translateY(8px); }
+
     to { opacity: 1; transform: none; }
 }
 
@@ -1861,7 +1857,7 @@ body:has(#screen-chat.active) .bottom-nav {
     box-shadow: 0 12px 40px rgba(139, 92, 246, 0.45), 0 0 0 1px rgba(167, 139, 250, 0.35);
     position: fixed;
     z-index: 5;
-    pointer-events: none;
+    /* pointer-events restored */
     will-change: transform;
 }
 @keyframes logoReveal {
@@ -1950,11 +1946,10 @@ input:focus, textarea:focus {
     background: none;
 }
 
-/* ensure screens still toggle display */
+/* screens */
 .screen { display: none !important; }
-.screen.active {
-    display: block !important;
-}
+.screen.active { display: block !important; }
+#screen-chat.screen.active { display: flex !important; flex-direction: column; }
 
 
 /* ===== Full viewport ===== */
