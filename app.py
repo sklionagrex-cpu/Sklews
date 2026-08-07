@@ -907,8 +907,12 @@ def user_channels_list(user_id):
     me = current_user()
     if u.hide_channels and u.id != me.id:
         return jsonify({'error': 'Скрыто настройками приватности', 'channels': []})
-    channels = Channel.query.filter_by(owner_id=u.id).all()
-    return jsonify([{'id': c.id, 'name': c.name, 'avatar': c.avatar, 'subscribers': c.subscribers_count} for c in channels])
+    result = []
+    for s in Subscription.query.filter_by(user_id=u.id).all():
+        c = Channel.query.get(s.channel_id)
+        if c:
+            result.append({'id': c.id, 'name': c.name, 'avatar': c.avatar, 'subscribers': c.subscribers_count})
+    return jsonify(result)
 
 @app.route('/api/privacy', methods=['POST'])
 @login_required
