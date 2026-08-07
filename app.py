@@ -19,6 +19,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     avatar = db.Column(db.String(256), default='')
+    banner = db.Column(db.String(256), default='')
     status = db.Column(db.String(120), default='')
     crystals = db.Column(db.Integer, default=0)
     is_premium = db.Column(db.Boolean, default=False)
@@ -255,6 +256,7 @@ def api_channel(channel_id):
     user = current_user()
     sub = Subscription.query.filter_by(user_id=user.id, channel_id=channel_id).first()
     role = ChannelRole.query.filter_by(channel_id=channel_id, user_id=user.id).first()
+    owner = User.query.get(ch.owner_id)
     return jsonify({
         'id': ch.id, 'name': ch.name, 'description': ch.description, 'avatar': ch.avatar,
         'subscribers': ch.subscribers_count, 'is_subscribed': bool(sub),
@@ -262,7 +264,10 @@ def api_channel(channel_id):
         'role': 'owner' if ch.owner_id == user.id else (role.role if role else None),
         'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '',
         'accent': ch.accent_color or '#8b5cf6',
-        'notifications': sub.notifications if sub else True
+        'notifications': sub.notifications if sub else True,
+        'owner_id': ch.owner_id,
+        'owner_username': owner.username if owner else '?',
+        'owner_avatar': owner.avatar if owner else ''
     })
 
 @app.route('/api/channel/<int:channel_id>/join', methods=['POST'])
@@ -276,9 +281,11 @@ def join_channel(channel_id):
     ch.subscribers_count += 1
     owner = User.query.get(ch.owner_id)
     if owner:
-        if ch.subscribers_count % 10 == 0: owner.crystals += 5
-        if ch.subscribers_count == 50: owner.crystals += 15
-        if ch.subscribers_count == 100: owner.crystals += 30
+        if ch.subscribers_count == 25: owner.crystals += 3
+        if ch.subscribers_count == 50: owner.crystals += 7
+        if ch.subscribers_count == 100: owner.crystals += 15
+        if ch.subscribers_count == 250: owner.crystals += 30
+        if ch.subscribers_count == 500: owner.crystals += 50
     db.session.commit()
     return jsonify({'status': 'joined', 'subscribers': ch.subscribers_count})
 
@@ -319,7 +326,7 @@ def create_channel():
     db.session.add(ch)
     db.session.flush()
     db.session.add(Subscription(user_id=user.id, channel_id=ch.id))
-    user.crystals += 10
+    user.crystals += 3
     db.session.commit()
     return jsonify({'id': ch.id, 'name': ch.name, 'crystals': user.crystals})
 
@@ -385,10 +392,10 @@ def like_post(post_id):
         db.session.add(PostLike(post_id=post_id, user_id=user.id))
         post.likes += 1
         liked = True
-        if post.likes in (50, 200):
+        if post.likes in (100, 500, 1000):
             author = User.query.get(post.author_id)
             if author:
-                author.crystals += 5 if post.likes == 50 else 15
+                author.crystals += {100: 5, 500: 15, 1000: 40}.get(post.likes, 0)
     db.session.commit()
     return jsonify({'likes': post.likes, 'liked': liked})
 
@@ -461,12 +468,15 @@ def api_profile():
         ((Friendship.user_id == user.id) | (Friendship.friend_id == user.id)) &
         (Friendship.status == 'accepted')
     ).count()
+    unread_total = Message.query.filter_by(receiver_id=user.id, is_read=False).count()
     return jsonify({
         'username': user.username, 'status': user.status, 'avatar': user.avatar,
+        'banner': getattr(user, 'banner', '') or '',
         'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
         'is_premium': user.is_premium, 'referral_code': user.referral_code or '',
         'hide_friends': bool(getattr(user, 'hide_friends', False)),
-        'hide_channels': bool(getattr(user, 'hide_channels', False))
+        'hide_channels': bool(getattr(user, 'hide_channels', False)),
+        'unread_messages': unread_total
     })
 
 @app.route('/api/profile/update', methods=['POST'])
@@ -492,10 +502,10 @@ def daily_bonus():
     now = datetime.utcnow()
     if user.last_daily and (now - user.last_daily).days < 1:
         return jsonify({'error': 'Бонус уже получен сегодня', 'crystals': user.crystals}), 400
-    user.crystals += 5
+    user.crystals += 2
     user.last_daily = now
     db.session.commit()
-    return jsonify({'status': 'ok', 'crystals': user.crystals, 'bonus': 5})
+    return jsonify({'status': 'ok', 'crystals': user.crystals, 'bonus': 2})
 
 # ==================== FRIENDS ====================
 
@@ -572,7 +582,19 @@ def get_friends():
         fid = f.friend_id if f.user_id == me.id else f.user_id
         u = User.query.get(fid)
         if u:
-            result.append({'id': u.id, 'username': u.username, 'avatar': u.avatar, 'status': u.status})
+            unread = Message.query.filter_by(sender_id=u.id, receiver_id=me.id, is_read=False).count()
+            last = Message.query.filter(
+                ((Message.sender_id == me.id) & (Message.receiver_id == u.id)) |
+                ((Message.sender_id == u.id) & (Message.receiver_id == me.id))
+            ).order_by(Message.created_at.desc()).first()
+            result.append({
+                'id': u.id, 'username': u.username, 'avatar': u.avatar, 'status': u.status,
+                'unread': unread,
+                'last_message': (last.content[:40] + '...') if last and len(last.content) > 40 else (last.content if last else ''),
+                'last_time': last.created_at.strftime('%H:%M') if last else ''
+            })
+    # sort by last message time (those with messages first)
+    result.sort(key=lambda x: x['last_time'] or '', reverse=True)
     return jsonify(result)
 
 @app.route('/api/messages/<int:user_id>')
@@ -583,9 +605,15 @@ def get_messages(user_id):
         ((Message.sender_id == me.id) & (Message.receiver_id == user_id)) |
         ((Message.sender_id == user_id) & (Message.receiver_id == me.id))
     ).order_by(Message.created_at.asc()).limit(100).all()
+    # mark as read
+    for m in messages:
+        if m.receiver_id == me.id and not m.is_read:
+            m.is_read = True
+    db.session.commit()
     return jsonify([{
         'id': m.id, 'content': m.content, 'is_mine': m.sender_id == me.id,
-        'is_super': m.is_super, 'created_at': m.created_at.strftime('%H:%M')
+        'is_super': m.is_super, 'created_at': m.created_at.strftime('%H:%M'),
+        'is_read': m.is_read
     } for m in messages])
 
 # ==================== SHOP ====================
@@ -709,6 +737,12 @@ def handle_message(data):
 
 with app.app_context():
     db.create_all()
+    try:
+        from sqlalchemy import text
+        db.session.execute(text('ALTER TABLE user ADD COLUMN banner VARCHAR(256) DEFAULT ""'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 
@@ -743,7 +777,9 @@ def get_comments(post_id):
         u = User.query.get(c.user_id)
         result.append({
             'id': c.id, 'content': c.content,
+            'user_id': c.user_id,
             'username': u.username if u else '?',
+            'avatar': u.avatar if u else '',
             'created_at': c.created_at.strftime('%H:%M')
         })
     return jsonify(result)
@@ -759,10 +795,10 @@ def add_comment(post_id):
     c = Comment(post_id=post_id, user_id=user.id, content=content)
     post.comments_count += 1
     db.session.add(c)
-    if post.comments_count == 20:
+    if post.comments_count in (50, 200):
         author = User.query.get(post.author_id)
         if author:
-            author.crystals += 3
+            author.crystals += 5 if post.comments_count == 50 else 12
     db.session.commit()
     return jsonify({'id': c.id, 'status': 'ok', 'comments': post.comments_count})
 
@@ -872,7 +908,9 @@ def user_public(user_id):
         ((Friendship.user_id == u.id) & (Friendship.friend_id == me.id))
     ).first()
     return jsonify({
-        'id': u.id, 'username': u.username, 'avatar': u.avatar, 'status': u.status,
+        'id': u.id, 'username': u.username, 'avatar': u.avatar,
+        'banner': getattr(u, 'banner', '') or '',
+        'status': u.status,
         'is_premium': u.is_premium,
         'friends_count': friends_count if not u.hide_friends else None,
         'channels_count': channels_count if not u.hide_channels else None,
@@ -971,6 +1009,22 @@ def update_avatar():
     user.avatar = f"/uploads/{name}"
     db.session.commit()
     return jsonify({'status': 'ok', 'avatar': user.avatar})
+
+@app.route('/api/profile/banner', methods=['POST'])
+@login_required
+def update_banner():
+    user = current_user()
+    if 'file' not in request.files:
+        return jsonify({'error': 'Нет файла'}), 400
+    f = request.files['file']
+    if not f or not f.filename or not allowed_file(f.filename):
+        return jsonify({'error': 'Только изображения'}), 400
+    ext = f.filename.rsplit('.', 1)[1].lower()
+    name = f"banner_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
+    f.save(os.path.join(UPLOAD_FOLDER, name))
+    user.banner = f"/uploads/{name}"
+    db.session.commit()
+    return jsonify({'status': 'ok', 'banner': user.banner})
 
 @app.route('/api/analytics/overview')
 @login_required

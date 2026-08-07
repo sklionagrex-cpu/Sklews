@@ -26,6 +26,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (tab === 'chats') {
             document.getElementById('search-results').innerHTML = '';
             document.getElementById('search-users').value = '';
+            loadChatsList();
             loadFriendsAndRequests();
         }
     });
@@ -58,7 +59,7 @@ function escapeHtml(t) {
     return d.innerHTML;
 }
 
-function loadHome() { loadChannels(); loadMySubs(); loadActivity(); }
+function loadHome() { loadChannels(); loadActivity(); }
 
 async function loadActivity() {
     try {
@@ -192,6 +193,22 @@ async function openChannel(id) {
         }
         document.getElementById('btn-analytics').classList.toggle('hidden', !ch.is_owner);
         document.getElementById('btn-edit-channel').classList.toggle('hidden', !ch.is_owner);
+
+        // owner row
+        const ownerAv = document.getElementById('channel-owner-avatar');
+        const ownerName = document.getElementById('channel-owner-name');
+        if (ch.owner_username) {
+            ownerName.textContent = ch.owner_username;
+            if (ch.owner_avatar) {
+                ownerAv.style.backgroundImage = 'url(' + ch.owner_avatar + ')';
+                ownerAv.style.backgroundSize = 'cover';
+                ownerAv.textContent = '';
+            } else {
+                ownerAv.style.backgroundImage = '';
+                ownerAv.textContent = ch.owner_username[0].toUpperCase();
+            }
+            document.getElementById('channel-owner-row').onclick = () => openUserProfile(ch.owner_id);
+        }
     } catch (e) { console.error(e); }
 }
 document.getElementById('btn-open-posts').onclick = () => openPostsPage(currentChannelId);
@@ -516,8 +533,19 @@ async function loadProfile() {
         av.style.backgroundImage = '';
         av.textContent = p.username[0].toUpperCase();
     }
+    const banner = document.getElementById('profile-banner');
+    if (banner) {
+        if (p.banner) {
+            banner.style.backgroundImage = 'url(' + p.banner + ')';
+            banner.classList.add('has-banner');
+        } else {
+            banner.style.backgroundImage = '';
+            banner.classList.remove('has-banner');
+        }
+    }
     const sb = document.getElementById('shop-balance');
     if (sb) sb.textContent = p.crystals;
+    updateChatsBadge(p.unread_messages || 0);
 }
 
 document.getElementById('btn-settings').onclick = () => document.getElementById('modal-settings').classList.remove('hidden');
@@ -532,6 +560,18 @@ document.getElementById('avatar-input').onchange = async e => {
     const data = await res.json();
     if (data.error) showToast('Ошибка', data.error, '!');
     else { showToast('Аватар', 'Обновлён', '✓'); loadProfile(); }
+    document.getElementById('modal-settings').classList.add('hidden');
+};
+document.getElementById('btn-set-banner').onclick = () => document.getElementById('banner-input').click();
+document.getElementById('banner-input').onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/profile/banner', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) showToast('Ошибка', data.error, '!');
+    else { showToast('Шапка', 'Обновлена', '✓'); loadProfile(); }
     document.getElementById('modal-settings').classList.add('hidden');
 };
 document.getElementById('btn-set-status').onclick = () => {
@@ -596,7 +636,7 @@ document.getElementById('btn-open-friends').onclick = async () => {
         card.querySelector('.channel-info').onclick = () => openUserProfile(f.id);
         const av = card.querySelector('.avatar');
         if (av) av.onclick = () => openUserProfile(f.id);
-        card.querySelector('button').onclick = e => { e.stopPropagation(); openChat(f.id, f.username); };
+        card.querySelector('button').onclick = e => { e.stopPropagation(); openChat(f.id, f.username, f.avatar); };
         list.appendChild(card);
     });
 };
@@ -638,6 +678,16 @@ async function openUserProfile(userId) {
         av.style.backgroundImage = '';
         av.textContent = u.username[0].toUpperCase();
     }
+    const banner = document.getElementById('user-banner');
+    if (banner) {
+        if (u.banner) {
+            banner.style.backgroundImage = 'url(' + u.banner + ')';
+            banner.classList.add('has-banner');
+        } else {
+            banner.style.backgroundImage = '';
+            banner.classList.remove('has-banner');
+        }
+    }
     const fb = document.getElementById('btn-user-friend');
     const mb = document.getElementById('btn-user-message');
     if (u.is_me) {
@@ -654,7 +704,7 @@ async function openUserProfile(userId) {
             await sendFriendRequest(u.id);
             openUserProfile(userId);
         };
-        mb.onclick = () => openChat(u.id, u.username);
+        mb.onclick = () => openChat(u.id, u.username, u.avatar);
     }
 }
 
@@ -827,9 +877,19 @@ async function openComments(postId) {
     const list = document.getElementById('comments-list');
     list.innerHTML = comments.length ? '' : '<div class="empty-state">Нет комментариев</div>';
     comments.forEach(c => {
-        list.innerHTML += '<div class="channel-card" style="margin-bottom:8px"><div class="channel-info"><h3>' +
-            escapeHtml(c.username) + '</h3><p style="white-space:normal">' + escapeHtml(c.content) +
-            '</p><span style="font-size:11px;color:var(--muted)">' + c.created_at + '</span></div></div>';
+        const av = c.avatar
+            ? '<div class="avatar comment-av" style="background-image:url(' + c.avatar + ');background-size:cover;background-position:center"></div>'
+            : '<div class="avatar comment-av">' + (c.username ? c.username[0].toUpperCase() : '?') + '</div>';
+        const row = document.createElement('div');
+        row.className = 'comment-row';
+        row.innerHTML = av +
+            '<div class="comment-body">' +
+            '<div class="comment-nick" data-uid="' + c.user_id + '">' + escapeHtml(c.username) + '</div>' +
+            '<div class="comment-text">' + escapeHtml(c.content) + '</div>' +
+            '<div class="comment-time">' + c.created_at + '</div></div>';
+        row.querySelector('.comment-nick').onclick = () => openUserProfile(c.user_id);
+        row.querySelector('.comment-av')?.addEventListener('click', () => openUserProfile(c.user_id));
+        list.appendChild(row);
     });
 }
 document.getElementById('btn-close-comments').onclick = () => document.getElementById('modal-comments').classList.add('hidden');
@@ -870,7 +930,7 @@ async function searchUsers(q) {
         const b = card.querySelector('button');
         if (b) {
             if (u.friendship === 'none') b.onclick = e => { e.stopPropagation(); sendFriendRequest(u.id); };
-            else if (u.friendship === 'accepted') b.onclick = e => { e.stopPropagation(); openChat(u.id, u.username); };
+            else if (u.friendship === 'accepted') b.onclick = e => { e.stopPropagation(); openChat(u.id, u.username, u.avatar); };
         }
         feed.appendChild(card);
     });
@@ -918,7 +978,7 @@ async function loadFriendsAndRequests() {
                 '<div class="channel-info"><h3>' + escapeHtml(f.username) + '</h3></div>' +
                 '<button class="btn btn-primary btn-sm"><i class="fa-solid fa-paper-plane"></i></button>';
             card.querySelector('.channel-info').onclick = () => openUserProfile(f.id);
-            card.querySelector('button').onclick = e => { e.stopPropagation(); openChat(f.id, f.username); };
+            card.querySelector('button').onclick = e => { e.stopPropagation(); openChat(f.id, f.username, f.avatar); };
             feed.appendChild(card);
         });
     }
@@ -932,15 +992,68 @@ async function respondRequest(id, action) {
     loadFriendsAndRequests();
 }
 
-function openChat(userId, username) {
+function openChat(userId, username, avatar) {
     currentChatUserId = userId;
     isSuperMode = false;
     document.getElementById('btn-super').classList.remove('active');
     document.getElementById('chat-title').textContent = username;
+    const peerAv = document.getElementById('chat-peer-avatar');
+    if (avatar) {
+        peerAv.style.backgroundImage = 'url(' + avatar + ')';
+        peerAv.style.backgroundSize = 'cover';
+        peerAv.textContent = '';
+    } else {
+        peerAv.style.backgroundImage = '';
+        peerAv.textContent = username ? username[0].toUpperCase() : '?';
+    }
+    document.getElementById('chat-peer').onclick = () => openUserProfile(userId);
     showScreen('screen-chat');
     loadMessages(userId);
 }
-document.getElementById('btn-back-chat').onclick = () => { showScreen('screen-chats'); currentChatUserId = null; };
+document.getElementById('btn-back-chat').onclick = () => {
+    showScreen('screen-chats');
+    currentChatUserId = null;
+    loadChatsList();
+    loadProfile();
+};
+
+function updateChatsBadge(n) {
+    const badge = document.getElementById('nav-chats-badge');
+    if (!badge) return;
+    if (n > 0) {
+        badge.textContent = n > 99 ? '99+' : n;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+async function loadChatsList() {
+    const list = document.getElementById('chats-list');
+    if (!list) return;
+    const res = await fetch('/api/friends');
+    const friends = await res.json();
+    list.innerHTML = '';
+    let totalUnread = 0;
+    const withMsgs = friends.filter(f => f.last_message || f.unread > 0);
+    if (!withMsgs.length) {
+        list.innerHTML = '<div class="empty-state">Нет диалогов</div>';
+    }
+    withMsgs.forEach(f => {
+        totalUnread += (f.unread || 0);
+        const card = document.createElement('div');
+        card.className = 'channel-card chat-dialog-card';
+        const unreadBadge = f.unread > 0 ? '<div class="badge-unread">' + f.unread + '</div>' : '';
+        card.innerHTML = avatarHtml(f.username, f.avatar) +
+            '<div class="channel-info"><h3>' + escapeHtml(f.username) + '</h3>' +
+            '<p style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+            escapeHtml(f.last_message || 'Нет сообщений') + '</p></div>' +
+            '<div class="chat-meta"><span class="chat-time">' + (f.last_time || '') + '</span>' + unreadBadge + '</div>';
+        card.onclick = () => openChat(f.id, f.username, f.avatar);
+        list.appendChild(card);
+    });
+    updateChatsBadge(totalUnread);
+}
 
 function formatMessage(content, isSuper) {
     let body = content || '';
@@ -959,7 +1072,8 @@ async function loadMessages(userId) {
     messages.forEach(m => {
         const div = document.createElement('div');
         div.className = 'message ' + (m.is_mine ? 'mine' : 'theirs') + (m.is_super ? ' super' : '');
-        div.innerHTML = formatMessage(m.content, m.is_super);
+        div.innerHTML = '<div class="msg-bubble">' + formatMessage(m.content, m.is_super) +
+            '<div class="msg-time">' + (m.created_at || '') + (m.is_mine && m.is_read ? ' ✓✓' : (m.is_mine ? ' ✓' : '')) + '</div></div>';
         box.appendChild(div);
     });
     box.querySelectorAll('.media-clickable').forEach(el => {
@@ -1030,14 +1144,30 @@ document.getElementById('btn-voice').onclick = async () => {
 };
 
 socket.on('new_message', data => {
-    if (!document.getElementById('screen-chat').classList.contains('active')) return;
-    if (data.sender_id !== currentChatUserId && !data.is_mine) return;
-    const box = document.getElementById('messages');
-    const div = document.createElement('div');
-    div.className = 'message ' + (data.is_mine ? 'mine' : 'theirs') + (data.is_super ? ' super' : '');
-    div.innerHTML = formatMessage(data.content, data.is_super);
-    box.appendChild(div);
-    box.scrollTop = box.scrollHeight;
+    const inChat = document.getElementById('screen-chat').classList.contains('active');
+    if (inChat && (data.sender_id === currentChatUserId || data.is_mine)) {
+        const box = document.getElementById('messages');
+        const div = document.createElement('div');
+        div.className = 'message ' + (data.is_mine ? 'mine' : 'theirs') + (data.is_super ? ' super' : '');
+        div.innerHTML = '<div class="msg-bubble">' + formatMessage(data.content, data.is_super) +
+            '<div class="msg-time">' + (data.created_at || '') + '</div></div>';
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+        box.querySelectorAll('.media-clickable').forEach(el => {
+            el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
+        });
+    } else if (!data.is_mine) {
+        // update badge
+        const badge = document.getElementById('nav-chats-badge');
+        if (badge) {
+            let n = parseInt(badge.textContent) || 0;
+            if (badge.classList.contains('hidden')) n = 0;
+            updateChatsBadge(n + 1);
+        }
+        if (document.getElementById('screen-chats').classList.contains('active')) {
+            loadChatsList();
+        }
+    }
 });
 socket.on('error', d => showToast('Ошибка', d.msg || 'Ошибка', '!'));
 
