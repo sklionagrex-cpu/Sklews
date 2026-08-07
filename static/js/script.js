@@ -27,7 +27,6 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
             document.getElementById('search-results').innerHTML = '';
             document.getElementById('search-users').value = '';
             loadChatsList();
-            loadFriendsAndRequests();
         }
     });
 });
@@ -248,10 +247,18 @@ async function openRolesModal() {
     const roles = await res.json();
     const list = document.getElementById('roles-list');
     list.innerHTML = '';
+    const roleLabels = { owner: 'Владелец', admin: 'Админ', moderator: 'Модератор', coauthor: 'Соавтор' };
     (roles || []).forEach(r => {
-        list.innerHTML += '<div class="channel-card" style="margin-bottom:8px">' + avatarHtml(r.username) +
-            '<div class="channel-info"><h3>' + escapeHtml(r.username) + '</h3><p>' + r.role + '</p></div></div>';
+        const card = document.createElement('div');
+        card.className = 'role-card';
+        card.innerHTML = avatarHtml(r.username, r.avatar) +
+            '<div class="role-card-info"><h4>' + escapeHtml(r.username) + '</h4>' +
+            '<span class="role-badge ' + r.role + '">' + (roleLabels[r.role] || r.role) + '</span></div>';
+        card.querySelector('.avatar')?.addEventListener('click', () => openUserProfile(r.user_id));
+        card.querySelector('h4')?.addEventListener('click', () => openUserProfile(r.user_id));
+        list.appendChild(card);
     });
+    if (!(roles || []).length) list.innerHTML = '<div class="empty-state" style="padding:20px">Пока только владелец</div>';
 }
 document.getElementById('btn-close-roles').onclick = () => document.getElementById('modal-roles').classList.add('hidden');
 document.getElementById('btn-add-role').onclick = async () => {
@@ -622,11 +629,39 @@ document.getElementById('crystals-badge').onclick = () => document.getElementByI
 
 document.getElementById('btn-open-friends').onclick = async () => {
     showScreen('screen-friends');
-    const res = await fetch('/api/friends');
-    const friends = await res.json();
     const list = document.getElementById('friends-page-list');
     list.innerHTML = '';
-    if (!friends.length) list.innerHTML = '<div class="empty-state">Нет друзей</div>';
+    const [fr, rq] = await Promise.all([fetch('/api/friends'), fetch('/api/friends/requests')]);
+    const friends = await fr.json();
+    const reqs = await rq.json();
+    if (reqs.length) {
+        const t = document.createElement('div');
+        t.className = 'section-title';
+        t.textContent = 'Входящие заявки';
+        list.appendChild(t);
+        reqs.forEach(r => {
+            const card = document.createElement('div');
+            card.className = 'channel-card';
+            card.innerHTML = avatarHtml(r.username, r.avatar) +
+                '<div class="channel-info"><h3>' + escapeHtml(r.username) + '</h3><p style="font-size:12px;color:var(--muted)">Хочет добавить в друзья</p></div>' +
+                '<button class="btn btn-primary btn-sm" title="Принять"><i class="fa-solid fa-check"></i></button>' +
+                '<button class="btn btn-secondary btn-sm" title="Отклонить"><i class="fa-solid fa-xmark"></i></button>';
+            card.querySelectorAll('button')[0].onclick = async e => { e.stopPropagation(); await respondRequest(r.id, 'accept'); document.getElementById('btn-open-friends').click(); };
+            card.querySelectorAll('button')[1].onclick = async e => { e.stopPropagation(); await respondRequest(r.id, 'reject'); document.getElementById('btn-open-friends').click(); };
+            card.querySelector('.channel-info').onclick = () => openUserProfile(r.user_id);
+            list.appendChild(card);
+        });
+    }
+    const t2 = document.createElement('div');
+    t2.className = 'section-title';
+    t2.textContent = 'Друзья';
+    list.appendChild(t2);
+    if (!friends.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'Пока нет друзей';
+        list.appendChild(empty);
+    }
     friends.forEach(f => {
         const card = document.createElement('div');
         card.className = 'channel-card';

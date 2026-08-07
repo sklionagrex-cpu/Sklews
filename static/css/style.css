@@ -481,8 +481,10 @@ body {
 
 .message {
     max-width: 78%;
-    padding: 11px 15px;
-    border-radius: 18px;
+    padding: 0;
+    border: none;
+    background: transparent !important;
+    box-shadow: none !important;
     font-size: 15px;
     line-height: 1.4;
     word-break: break-word;
@@ -490,23 +492,19 @@ body {
 
 .message.mine {
     align-self: flex-end;
-    background: linear-gradient(135deg, #7c3aed, #8b5cf6);
-    color: #fff;
-    border-bottom-right-radius: 6px;
+    background: transparent !important;
 }
 
 .message.theirs {
     align-self: flex-start;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-bottom-left-radius: 6px;
+    background: transparent !important;
+    border: none !important;
 }
 
 .message.super {
-    background: linear-gradient(135deg, #5b21b6, #7c3aed) !important;
-    border: 1px solid #a78bfa;
-    box-shadow: 0 4px 24px rgba(139, 92, 246, 0.45);
-    position: relative;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 .chat-input-area {
@@ -948,10 +946,18 @@ body:has(#screen-chat.active) .bottom-nav {
     background: linear-gradient(to bottom, transparent, var(--bg));
 }
 .profile-hero .avatar-hero,
-.profile-hero .profile-hero-info,
-.profile-hero .profile-gear {
+.profile-hero .profile-hero-info {
     position: relative;
     z-index: 1;
+}
+.profile-gear {
+    position: absolute !important;
+    top: 16px !important;
+    right: 16px !important;
+    z-index: 10 !important;
+}
+.profile-back {
+    z-index: 10 !important;
 }
 .profile-hero {
     overflow: hidden;
@@ -1103,4 +1109,83 @@ body:has(#screen-chat.active) .bottom-nav {
 /* Channel owner row already inline */
 .channel-owner-row:active {
     opacity: 0.85;
+}
+
+
+/* ===== User profile actions (fit screen) ===== */
+#screen-user .profile-bottom-actions {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px;
+}
+#screen-user #btn-user-friend {
+    grid-column: 1 / -1;
+}
+#screen-user .profile-bottom-actions .btn {
+    font-size: 13px;
+    padding: 10px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ===== Roles modal premium ===== */
+.roles-modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.role-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+}
+.role-card .avatar {
+    width: 42px;
+    height: 42px;
+    font-size: 16px;
+    border-radius: 14px;
+    flex-shrink: 0;
+}
+.role-card-info {
+    flex: 1;
+    min-width: 0;
+}
+.role-card-info h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.role-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 8px;
+    background: rgba(139, 92, 246, 0.2);
+    color: var(--accent2);
+}
+.role-badge.owner { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.role-badge.admin { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.role-badge.moderator { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+.role-badge.coauthor { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+.roles-add-box {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    margin-top: 4px;
+}
+.roles-add-box label {
+    font-size: 11px;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 6px;
 }

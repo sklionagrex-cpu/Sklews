@@ -427,11 +427,11 @@ def get_roles(channel_id):
     for r in roles:
         u = User.query.get(r.user_id)
         if u:
-            result.append({'id': r.id, 'user_id': u.id, 'username': u.username, 'role': r.role})
+            result.append({'id': r.id, 'user_id': u.id, 'username': u.username, 'avatar': u.avatar or '', 'role': r.role})
     # owner
     owner = User.query.get(ch.owner_id)
     if owner:
-        result.insert(0, {'id': 0, 'user_id': owner.id, 'username': owner.username, 'role': 'owner'})
+        result.insert(0, {'id': 0, 'user_id': owner.id, 'username': owner.username, 'avatar': owner.avatar or '', 'role': 'owner'})
     return jsonify(result)
 
 @app.route('/api/channel/<int:channel_id>/roles', methods=['POST'])
@@ -555,7 +555,7 @@ def get_requests():
     for r in Friendship.query.filter_by(friend_id=me.id, status='pending').all():
         u = User.query.get(r.user_id)
         if u:
-            result.append({'id': r.id, 'user_id': u.id, 'username': u.username})
+            result.append({'id': r.id, 'user_id': u.id, 'username': u.username, 'avatar': u.avatar or ''})
     return jsonify(result)
 
 @app.route('/api/friends/respond', methods=['POST'])
@@ -625,7 +625,7 @@ def buy_boost():
     data = request.json or {}
     channel_id = data.get('channel_id')
     level = data.get('level')
-    prices = {'bronze': 50, 'silver': 150, 'gold': 350}
+    prices = {'bronze': 120, 'silver': 350, 'gold': 800}
     hours = {'bronze': 12, 'silver': 24, 'gold': 48}
     if level not in prices:
         return jsonify({'error': 'Неверный уровень'}), 400
