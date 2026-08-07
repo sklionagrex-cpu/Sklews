@@ -20,6 +20,9 @@ function premiumNickHtml(username, isPremium) {
 }
 
 let meIsAdmin = false;
+let adminSelectMode = false;
+let adminSelectedChannels = new Set();
+let _lastChannelsCache = [];
 
 
 // ===== Notifications: sound + vibration =====
@@ -175,8 +178,10 @@ async function loadChannels() {
     try {
         const res = await fetch('/api/channels?sort=' + currentSort);
         const channels = await res.json();
+        _lastChannelsCache = channels;
         const feed = document.getElementById('channels-feed');
         feed.innerHTML = '';
+        updateAdminSelectBar();
         if (!channels.length) {
             feed.innerHTML = '<div class="empty-state">Нет новых каналов</div>';
             return;
@@ -184,18 +189,26 @@ async function loadChannels() {
         channels.forEach(ch => {
             const card = document.createElement('div');
             card.className = 'channel-card' + (ch.is_boosted ? ' boosted boosted-' + (ch.boost_level || 'bronze') : '');
+            card.dataset.channelId = ch.id;
+            if (adminSelectMode && adminSelectedChannels.has(ch.id)) card.classList.add('admin-selected');
             const badge = ch.label ? '<span class="boost-label">' + ch.label + '</span>' : '';
-            card.innerHTML = avatarHtml(ch.name, ch.avatar) +
+            const check = adminSelectMode ? '<div class="admin-check"></div>' : '';
+            card.innerHTML = check + avatarHtml(ch.name, ch.avatar) +
                 '<div class="channel-info"><h3>' + escapeHtml(ch.name) + ' ' + badge + '</h3><p>' + ch.subscribers + ' участников</p></div>';
             let longPressed = false;
             card.onclick = () => {
                 if (longPressed) { longPressed = false; return; }
+                if (adminSelectMode && meIsAdmin) {
+                    toggleAdminChannelSelect(ch.id, card);
+                    return;
+                }
                 openChannel(ch.id);
             };
-            // Admin: long-press to delete any channel
+            // Admin: long-press single delete (when not in select mode)
             if (meIsAdmin) {
                 let t = null;
                 const start = () => {
+                    if (adminSelectMode) return;
                     longPressed = false;
                     t = setTimeout(() => {
                         longPressed = true;
@@ -220,6 +233,55 @@ async function loadChannels() {
         });
     } catch (e) { console.error(e); }
 }
+
+function updateAdminSelectBar() {
+    const bar = document.getElementById('admin-select-bar');
+    if (!bar) return;
+    if (!meIsAdmin) {
+        bar.classList.add('hidden');
+        return;
+    }
+    bar.classList.remove('hidden');
+    const btnToggle = document.getElementById('btn-admin-select-toggle');
+    const btnAll = document.getElementById('btn-admin-select-all');
+    const btnDel = document.getElementById('btn-admin-bulk-delete');
+    const btnCancel = document.getElementById('btn-admin-select-cancel');
+    const cnt = document.getElementById('admin-sel-count');
+    if (adminSelectMode) {
+        btnToggle.classList.add('hidden');
+        btnAll.classList.remove('hidden');
+        btnDel.classList.remove('hidden');
+        btnCancel.classList.remove('hidden');
+        if (cnt) cnt.textContent = adminSelectedChannels.size;
+        btnDel.disabled = adminSelectedChannels.size === 0;
+        btnDel.style.opacity = adminSelectedChannels.size ? '1' : '0.5';
+    } else {
+        btnToggle.classList.remove('hidden');
+        btnAll.classList.add('hidden');
+        btnDel.classList.add('hidden');
+        btnCancel.classList.add('hidden');
+        adminSelectedChannels.clear();
+    }
+}
+
+function toggleAdminChannelSelect(id, card) {
+    if (adminSelectedChannels.has(id)) {
+        adminSelectedChannels.delete(id);
+        card.classList.remove('admin-selected');
+    } else {
+        adminSelectedChannels.add(id);
+        card.classList.add('admin-selected');
+    }
+    updateAdminSelectBar();
+}
+
+function setAdminSelectMode(on) {
+    adminSelectMode = !!on;
+    if (!on) adminSelectedChannels.clear();
+    updateAdminSelectBar();
+    loadChannels();
+}
+
 
 async function loadMySubs() {
     try {
@@ -837,6 +899,7 @@ async function loadProfile() {
         if (meIsAdmin) fab.classList.remove('hidden');
         else fab.classList.add('hidden');
     }
+    updateAdminSelectBar();
     document.getElementById('profile-status').textContent = p.status || 'Статус не указан';
     document.getElementById('profile-crystals').textContent = p.crystals;
     document.getElementById('profile-friends').textContent = p.hide_friends ? '•' : p.friends;
@@ -1920,3 +1983,42 @@ if ('serviceWorker' in navigator) {
         if (fab && meIsAdmin) fab.classList.remove('hidden');
     } catch (e) {}
 })();
+
+
+// ===== Admin multi-select bulk delete =====
+document.getElementById('btn-admin-select-toggle')?.addEventListener('click', () => setAdminSelectMode(true));
+document.getElementById('btn-admin-select-cancel')?.addEventListener('click', () => setAdminSelectMode(false));
+document.getElementById('btn-admin-select-all')?.addEventListener('click', () => {
+    (_lastChannelsCache || []).forEach(ch => adminSelectedChannels.add(ch.id));
+    loadChannels();
+});
+document.getElementById('btn-admin-bulk-delete')?.addEventListener('click', () => {
+    const n = adminSelectedChannels.size;
+    if (!n) return;
+    const el = document.getElementById('bulk-delete-text');
+    if (el) el.textContent = 'Выбрано каналов: ' + n + '. Все посты и подписки будут удалены безвозвратно.';
+    document.getElementById('modal-bulk-delete-channels').classList.remove('hidden');
+});
+document.getElementById('btn-cancel-bulk-delete')?.addEventListener('click', () => {
+    document.getElementById('modal-bulk-delete-channels').classList.add('hidden');
+});
+document.getElementById('btn-confirm-bulk-delete')?.addEventListener('click', async () => {
+    const ids = Array.from(adminSelectedChannels);
+    document.getElementById('modal-bulk-delete-channels').classList.add('hidden');
+    if (!ids.length) return;
+    const res = await fetch('/api/admin/delete_channels', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ids })
+    });
+    const d = await res.json();
+    if (d.error) {
+        showToast('Ошибка', d.error, '!');
+        return;
+    }
+    showToast('Каналы', 'Удалено: ' + (d.deleted || ids.length), '✓');
+    setAdminSelectMode(false);
+    loadHome();
+    loadMyChannels();
+    loadProfile();
+});

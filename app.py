@@ -1367,6 +1367,26 @@ def admin_give_crystals():
     db.session.commit()
     return jsonify({'status': 'ok', 'username': target.username, 'crystals': target.crystals})
 
+@app.route('/api/admin/delete_channels', methods=['POST'])
+@login_required
+def admin_delete_channels():
+    me = current_user()
+    if not is_admin_user(me):
+        return jsonify({'error': 'Нет доступа'}), 403
+    data = request.json or {}
+    ids = data.get('ids') or []
+    if not isinstance(ids, list) or not ids:
+        return jsonify({'error': 'Нет каналов для удаления'}), 400
+    # limit safety
+    ids = [int(x) for x in ids[:200]]
+    deleted = 0
+    for cid in ids:
+        ch = Channel.query.get(cid)
+        if ch:
+            _purge_channel(ch)
+            deleted += 1
+    return jsonify({'status': 'ok', 'deleted': deleted})
+
 @app.route('/api/admin/delete_channel/<int:channel_id>', methods=['POST'])
 @login_required
 def admin_delete_channel(channel_id):
