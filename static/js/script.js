@@ -1373,6 +1373,21 @@ function formatMessage(content, isSuper) {
     return (isSuper ? '<span style="font-size:11px;opacity:.85"><i class="fa-solid fa-bolt"></i> SUPER</span><br>' : '') + body;
 }
 
+function bindMsgLongPress(div, msgId) {
+    let t = null;
+    const start = () => { t = setTimeout(() => {
+        window._deleteMsgId = msgId;
+        document.getElementById('modal-delete-message').classList.remove('hidden');
+    }, 550); };
+    const cancel = () => clearTimeout(t);
+    div.addEventListener('touchstart', start, { passive: true });
+    div.addEventListener('touchend', cancel);
+    div.addEventListener('touchmove', cancel);
+    div.addEventListener('mousedown', start);
+    div.addEventListener('mouseup', cancel);
+    div.addEventListener('mouseleave', cancel);
+}
+
 async function loadMessages(userId) {
     const res = await fetch('/api/messages/' + userId);
     const messages = await res.json();
@@ -1381,8 +1396,10 @@ async function loadMessages(userId) {
     messages.forEach(m => {
         const div = document.createElement('div');
         div.className = 'message ' + (m.is_mine ? 'mine' : 'theirs') + (m.is_super ? ' super' : '');
+        div.dataset.msgId = m.id;
         div.innerHTML = '<div class="msg-bubble">' + formatMessage(m.content, m.is_super) +
             '<div class="msg-time">' + (m.created_at || '') + (m.is_mine && m.is_read ? ' ✓✓' : (m.is_mine ? ' ✓' : '')) + '</div></div>';
+        bindMsgLongPress(div, m.id);
         box.appendChild(div);
     });
     box.querySelectorAll('.media-clickable').forEach(el => {
@@ -1391,6 +1408,24 @@ async function loadMessages(userId) {
     bindMentions(box);
     box.scrollTop = box.scrollHeight;
 }
+
+document.getElementById('btn-cancel-delete-msg')?.addEventListener('click', () => {
+    document.getElementById('modal-delete-message').classList.add('hidden');
+    window._deleteMsgId = null;
+});
+async function doDeleteMessage(mode) {
+    const id = window._deleteMsgId;
+    document.getElementById('modal-delete-message').classList.add('hidden');
+    if (!id) return;
+    await fetch('/api/message/' + id + '/delete', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ mode })
+    });
+    window._deleteMsgId = null;
+    if (currentChatUserId) loadMessages(currentChatUserId);
+}
+document.getElementById('btn-delete-msg-me')?.addEventListener('click', () => doDeleteMessage('me'));
+document.getElementById('btn-delete-msg-both')?.addEventListener('click', () => doDeleteMessage('both'));
 
 document.getElementById('btn-send').onclick = sendMessage;
 document.getElementById('message-input').addEventListener('keypress', e => {
@@ -1581,6 +1616,10 @@ socket.on('new_message', data => {
         div.className = 'message ' + (data.is_mine ? 'mine' : 'theirs') + (data.is_super ? ' super' : '');
         div.innerHTML = '<div class="msg-bubble">' + formatMessage(data.content, data.is_super) +
             '<div class="msg-time">' + (data.created_at || '') + '</div></div>';
+        if (data.id) {
+            div.dataset.msgId = data.id;
+            bindMsgLongPress(div, data.id);
+        }
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
         box.querySelectorAll('.media-clickable').forEach(el => {

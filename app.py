@@ -37,6 +37,11 @@ class ChatHide(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     peer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
+class MessageHide(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message_id = db.Column(db.Integer, db.ForeignKey('message.id'), nullable=False)
+
 class Channel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
@@ -705,11 +710,12 @@ def get_messages(user_id):
     if hid:
         db.session.delete(hid)
     db.session.commit()
+    hidden_ids = {h.message_id for h in MessageHide.query.filter_by(user_id=me.id).all()}
     return jsonify([{
         'id': m.id, 'content': m.content, 'is_mine': m.sender_id == me.id,
         'is_super': m.is_super, 'created_at': m.created_at.strftime('%H:%M'),
         'is_read': m.is_read
-    } for m in messages])
+    } for m in messages if m.id not in hidden_ids])
 
 
 @app.route('/api/messages/<int:user_id>/delete', methods=['POST'])
@@ -734,6 +740,27 @@ def delete_chat(user_id):
     if not existing:
         db.session.add(ChatHide(user_id=me.id, peer_id=user_id))
     db.session.commit()
+    return jsonify({'status': 'deleted_me'})
+
+@app.route('/api/message/<int:message_id>/delete', methods=['POST'])
+@login_required
+def delete_message(message_id):
+    me = current_user()
+    msg = Message.query.get_or_404(message_id)
+    if msg.sender_id != me.id and msg.receiver_id != me.id:
+        return jsonify({'error': 'Нет доступа'}), 403
+    data = request.json or {}
+    mode = data.get('mode', 'me')
+    if mode == 'both':
+        MessageHide.query.filter_by(message_id=message_id).delete(synchronize_session=False)
+        db.session.delete(msg)
+        db.session.commit()
+        return jsonify({'status': 'deleted_both'})
+    # for me only
+    existing = MessageHide.query.filter_by(user_id=me.id, message_id=message_id).first()
+    if not existing:
+        db.session.add(MessageHide(user_id=me.id, message_id=message_id))
+        db.session.commit()
     return jsonify({'status': 'deleted_me'})
 
 # ==================== SHOP ====================
