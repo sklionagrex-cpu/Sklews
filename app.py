@@ -44,8 +44,23 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 
 db = SQLAlchemy(app)
 
-# Cache-bust for static assets (changes only on process restart / deploy)
-BUILD_ID = os.environ.get('RENDER_GIT_COMMIT') or os.environ.get('BUILD_ID') or str(int(os.path.getmtime(__file__)))
+# Cache-bust: git commit, or max mtime of app+static (so CSS/JS deploys invalidate)
+def _compute_build_id():
+    bid = os.environ.get('RENDER_GIT_COMMIT') or os.environ.get('BUILD_ID')
+    if bid:
+        return str(bid)[:16]
+    paths = [__file__,
+             os.path.join(os.path.dirname(__file__), 'static', 'js', 'script.js'),
+             os.path.join(os.path.dirname(__file__), 'static', 'css', 'style.css'),
+             os.path.join(os.path.dirname(__file__), 'templates', 'index.html')]
+    mt = 0
+    for p in paths:
+        try:
+            mt = max(mt, int(os.path.getmtime(p)))
+        except OSError:
+            pass
+    return str(mt or int(os.path.getmtime(__file__)))
+BUILD_ID = _compute_build_id()
 
 
 # eventlet is flaky on Python 3.12+; keep threading (stable on Render 3.13)
@@ -2561,4 +2576,5 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print(f"Starting server on 0.0.0.0:{port} ...", flush=True)
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+
 

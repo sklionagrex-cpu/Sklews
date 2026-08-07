@@ -722,21 +722,32 @@ async function openChannel(id) {
             btnJoin.classList.add('hidden');
             btnWatch.classList.add('hidden');
             btnPosts.classList.remove('hidden');
+            btnPosts.innerHTML = '<i class="fa-solid fa-book-open"></i> Открыть ленту';
         } else if (ch.is_subscribed) {
             btnJoin.textContent = 'Покинуть';
             btnJoin.classList.remove('btn-primary', 'hidden'); btnJoin.classList.add('btn-secondary');
             btnWatch.classList.add('hidden');
             btnPosts.classList.remove('hidden');
+            btnPosts.innerHTML = '<i class="fa-solid fa-book-open"></i> Открыть ленту';
         } else {
             btnJoin.textContent = 'Вступить';
             btnJoin.classList.add('btn-primary'); btnJoin.classList.remove('btn-secondary', 'hidden');
             btnWatch.classList.remove('hidden');
+            btnWatch.classList.remove('btn-secondary');
+            btnWatch.classList.add('btn-primary');
+            btnWatch.innerHTML = '<i class="fa-solid fa-book-open"></i> Читать канал';
             btnPosts.classList.add('hidden');
         }
         document.getElementById('btn-analytics').classList.toggle('hidden', !ch.is_owner);
         document.getElementById('btn-edit-channel').classList.toggle('hidden', !ch.is_owner);
         const btnSup = document.getElementById('btn-support-channel');
         if (btnSup) btnSup.classList.toggle('hidden', !!ch.is_owner);
+
+        // Members/owners go straight into TG-style feed (skip stale card UI)
+        if (ch.is_owner || ch.is_subscribed) {
+            openPostsPage(id);
+            return;
+        }
 
         // owner row
         const ownerAv = document.getElementById('channel-owner-avatar');
@@ -3865,3 +3876,14 @@ async function openMinesModal() {
     });
 })();
 
+
+
+// Hard bind channel read → TG posts (survives DOM quirks)
+document.addEventListener('click', function (e) {
+    const w = e.target.closest('#btn-watch, #btn-open-posts');
+    if (!w) return;
+    if (!currentChannelId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openPostsPage(currentChannelId);
+}, true);
