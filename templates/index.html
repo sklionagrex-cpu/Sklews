@@ -13,6 +13,7 @@
         <nav class="bottom-nav">
             <button class="nav-btn active" data-tab="home"><i class="fa-solid fa-house icon"></i><span>Лента</span></button>
             <button class="nav-btn" data-tab="create"><i class="fa-solid fa-plus icon"></i><span>Создать</span></button>
+            <button class="nav-btn" data-tab="analytics"><i class="fa-solid fa-chart-line icon"></i><span>Аналитика</span></button>
             <button class="nav-btn" data-tab="chats"><i class="fa-solid fa-comments icon"></i><span>Чаты</span></button>
             <button class="nav-btn" data-tab="profile"><i class="fa-solid fa-user icon"></i><span>Профиль</span></button>
         </nav>
@@ -58,7 +59,9 @@
                 <button id="btn-logout" class="btn-icon"><i class="fa-solid fa-right-from-bracket"></i></button>
             </header>
             <div class="profile-card">
-                <div class="avatar-large" id="profile-avatar">?</div>
+                <div class="avatar-large" id="profile-avatar" style="cursor:pointer;position:relative;overflow:hidden">?
+                <input type="file" id="avatar-input" accept="image/*" style="display:none">
+                </div>
                 <h2 id="profile-username">—</h2>
                 <p id="profile-status" class="status-text">Нажми, чтобы изменить статус</p>
                 <div class="crystals-badge" id="crystals-badge">✦ <span id="profile-crystals">0</span></div>
@@ -72,6 +75,13 @@
                     <button id="btn-open-shop" class="btn btn-primary btn-wide">Магазин ✦</button>
                 </div>
             </div>
+        </div>
+
+
+        <!-- ANALYTICS TAB -->
+        <div id="screen-analytics" class="screen">
+            <header class="header"><h1>Аналитика</h1></header>
+            <div id="analytics-list" class="feed"></div>
         </div>
 
         <!-- CHANNEL VIEW -->
@@ -139,6 +149,11 @@
             <div class="modal-content">
                 <h3>Новый пост</h3>
                 <textarea id="new-post-content" placeholder="Что нового?" maxlength="2000" rows="4"></textarea>
+                <div id="post-photo-preview" style="display:none;margin-bottom:12px;border-radius:12px;overflow:hidden">
+                    <img id="post-photo-img" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px">
+                </div>
+                <input type="file" id="post-photo-input" accept="image/*" style="display:none">
+                <button type="button" id="btn-add-photo" class="btn btn-secondary full" style="margin-bottom:12px">📷 Добавить фото</button>
                 <div class="modal-actions">
                     <button id="btn-cancel-post" class="btn btn-secondary">Отмена</button>
                     <button id="btn-confirm-post" class="btn btn-primary">Опубликовать</button>
@@ -149,6 +164,7 @@
         <div id="modal-profile" class="modal hidden">
             <div class="modal-content">
                 <h3>Редактор профиля</h3>
+                <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Нажми на аватар в профиле, чтобы сменить фото</p>
                 <label style="font-size:13px;color:var(--muted)">Статус</label>
                 <input type="text" id="edit-status" placeholder="Ваш статус" maxlength="120">
                 <div class="modal-actions">

@@ -658,6 +658,70 @@ def handle_message(data):
 with app.app_context():
     db.create_all()
 
+
+import uuid
+from flask import send_from_directory
+
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXT
+
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+@app.route('/api/upload', methods=['POST'])
+@login_required
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({'error': 'Нет файла'}), 400
+    f = request.files['file']
+    if not f or not f.filename:
+        return jsonify({'error': 'Пустой файл'}), 400
+    if not allowed_file(f.filename):
+        return jsonify({'error': 'Только изображения'}), 400
+    ext = f.filename.rsplit('.', 1)[1].lower()
+    name = f"{uuid.uuid4().hex}.{ext}"
+    f.save(os.path.join(UPLOAD_FOLDER, name))
+    return jsonify({'url': f"/uploads/{name}"})
+
+@app.route('/api/profile/avatar', methods=['POST'])
+@login_required
+def update_avatar():
+    user = current_user()
+    if 'file' not in request.files:
+        return jsonify({'error': 'Нет файла'}), 400
+    f = request.files['file']
+    if not f or not f.filename or not allowed_file(f.filename):
+        return jsonify({'error': 'Только изображения'}), 400
+    ext = f.filename.rsplit('.', 1)[1].lower()
+    name = f"avatar_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
+    f.save(os.path.join(UPLOAD_FOLDER, name))
+    user.avatar = f"/uploads/{name}"
+    db.session.commit()
+    return jsonify({'status': 'ok', 'avatar': user.avatar})
+
+@app.route('/api/analytics/overview')
+@login_required
+def analytics_overview():
+    user = current_user()
+    channels = Channel.query.filter_by(owner_id=user.id).all()
+    result = []
+    for ch in channels:
+        posts = Post.query.filter_by(channel_id=ch.id).all()
+        result.append({
+            'id': ch.id, 'name': ch.name,
+            'subscribers': ch.subscribers_count,
+            'posts': len(posts),
+            'likes': sum(p.likes for p in posts),
+            'views': sum(p.views for p in posts),
+            'created_at': ch.created_at.strftime('%d.%m.%Y')
+        })
+    return jsonify(result)
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     socketio.run(app, host='0.0.0.0', port=port, debug=False)

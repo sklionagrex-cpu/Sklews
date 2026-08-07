@@ -12,3 +12,5 @@ instance/
 *.log
 .idea/
 .vscode/
+static/uploads/*
+!static/uploads/.gitkeep

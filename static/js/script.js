@@ -5,6 +5,7 @@ let currentSort = 'today';
 let isSuperMode = false;
 let selectedBoostChannelId = null;
 let longPressChannelId = null;
+let pendingPostPhoto = null;
 
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -15,6 +16,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         if (tab === 'home') loadHome();
         if (tab === 'profile') loadProfile();
         if (tab === 'create') loadMyChannels();
+        if (tab === 'analytics') loadAnalyticsTab();
         if (tab === 'chats') {
             document.getElementById('search-results').innerHTML = '';
             document.getElementById('search-users').value = '';
@@ -28,6 +30,14 @@ function showScreen(id) {
     const el = document.getElementById(id);
     if (el) el.classList.add('active');
 }
+
+function showToast(title, text, icon) {
+    document.getElementById('toast-title').textContent = title || 'Готово';
+    document.getElementById('toast-text').textContent = text || '';
+    document.getElementById('toast-icon').textContent = icon || '✦';
+    document.getElementById('modal-toast').classList.remove('hidden');
+}
+document.getElementById('btn-toast-ok').onclick = () => document.getElementById('modal-toast').classList.add('hidden');
 
 function loadHome() { loadChannels(); loadMySubs(); }
 
@@ -45,9 +55,9 @@ async function loadChannels() {
             const card = document.createElement('div');
             card.className = 'channel-card' + (ch.is_boosted ? ' boosted' : '');
             const badge = ch.label ? `<span class="boost-label">${ch.label}</span>` : '';
-            card.innerHTML = `<div class="avatar" style="${ch.accent ? 'border-color:'+ch.accent : ''}">${ch.name[0].toUpperCase()}</div>
+            card.innerHTML = `<div class="avatar">${ch.name[0].toUpperCase()}</div>
                 <div class="channel-info"><h3>${escapeHtml(ch.name)} ${badge}</h3>
-                <p>${ch.subscribers} участников${ch.views ? ' · ' + ch.views + ' просм.' : ''}</p></div>`;
+                <p>${ch.subscribers} участников</p></div>`;
             card.onclick = () => openChannel(ch.id);
             feed.appendChild(card);
         });
@@ -91,7 +101,6 @@ function openSubActions(s) {
     document.getElementById('btn-toggle-notif').textContent = s.notifications ? 'Отключить уведомления' : 'Включить уведомления';
     document.getElementById('modal-sub-actions').classList.remove('hidden');
 }
-
 document.getElementById('btn-close-sub-modal').onclick = () => document.getElementById('modal-sub-actions').classList.add('hidden');
 document.getElementById('btn-toggle-notif').onclick = async () => {
     await fetch(`/api/channel/${longPressChannelId}/notifications`, { method: 'POST' });
@@ -151,11 +160,8 @@ document.getElementById('btn-channel-menu').onclick = async () => {
     if (!currentChannelId) return;
     const res = await fetch(`/api/channel/${currentChannelId}`);
     const ch = await res.json();
-    if (ch.is_owner || ch.role === 'admin') {
-        openRolesModal();
-    } else {
-        alert('Меню доступно владельцу и админам');
-    }
+    if (ch.is_owner || ch.role === 'admin') openRolesModal();
+    else showToast('Меню', 'Доступно владельцу и админам', '!');
 };
 
 async function openRolesModal() {
@@ -175,11 +181,11 @@ document.getElementById('btn-close-roles').onclick = () => document.getElementBy
 document.getElementById('btn-add-role').onclick = async () => {
     const username = document.getElementById('role-username').value.trim();
     const role = document.getElementById('role-select').value;
-    if (!username) return alert('Введите логин');
+    if (!username) return showToast('Ошибка', 'Введите логин', '!');
     const search = await fetch(`/api/users/search?q=${encodeURIComponent(username)}`);
     const users = await search.json();
     const u = users.find(x => x.username.toLowerCase() === username.toLowerCase());
-    if (!u) return alert('Пользователь не найден');
+    if (!u) return showToast('Ошибка', 'Пользователь не найден', '!');
     await fetch(`/api/channel/${currentChannelId}/roles`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ user_id: u.id, role })
@@ -199,9 +205,11 @@ async function loadPosts(channelId) {
             card.className = 'channel-card';
             card.style.cssText = 'flex-direction:column;align-items:stretch';
             const pin = p.is_pinned ? '<span style="color:var(--accent);font-size:12px">📌 </span>' : '';
+            const photo = (p.media_type === 'photo' && p.media_url) ? `<img src="${p.media_url}" style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;object-fit:cover">` : '';
             card.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:8px">
                 <strong>${pin}${escapeHtml(p.author)}</strong>
                 <span style="font-size:12px;color:var(--muted)">${p.created_at}</span></div>
+                ${photo}
                 <div style="margin-bottom:10px;white-space:pre-wrap">${escapeHtml(p.content)}</div>
                 <div style="display:flex;gap:16px;font-size:13px;color:var(--muted)">
                 <span class="like-btn" data-id="${p.id}" style="cursor:pointer">❤️ ${p.likes}</span>
@@ -229,17 +237,39 @@ async function loadPosts(channelId) {
 
 document.getElementById('btn-add-post').onclick = () => {
     document.getElementById('new-post-content').value = '';
+    document.getElementById('post-photo-preview').style.display = 'none';
+    document.getElementById('post-photo-input').value = '';
+    pendingPostPhoto = null;
     document.getElementById('modal-post').classList.remove('hidden');
 };
 document.getElementById('btn-cancel-post').onclick = () => document.getElementById('modal-post').classList.add('hidden');
+document.getElementById('btn-add-photo').onclick = () => document.getElementById('post-photo-input').click();
+document.getElementById('post-photo-input').onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    pendingPostPhoto = file;
+    document.getElementById('post-photo-img').src = URL.createObjectURL(file);
+    document.getElementById('post-photo-preview').style.display = 'block';
+};
 document.getElementById('btn-confirm-post').onclick = async () => {
     const content = document.getElementById('new-post-content').value.trim();
-    if (!content) return;
+    if (!content && !pendingPostPhoto) return;
+    let media_url = '', media_type = 'text';
+    if (pendingPostPhoto) {
+        const fd = new FormData();
+        fd.append('file', pendingPostPhoto);
+        const up = await fetch('/api/upload', { method: 'POST', body: fd });
+        const upData = await up.json();
+        if (upData.error) { showToast('Ошибка', upData.error, '!'); return; }
+        media_url = upData.url;
+        media_type = 'photo';
+    }
     await fetch(`/api/channel/${currentChannelId}/post`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ content })
+        body: JSON.stringify({ content: content || '📷', media_type, media_url })
     });
     document.getElementById('modal-post').classList.add('hidden');
+    pendingPostPhoto = null;
     loadPosts(currentChannelId);
 };
 
@@ -252,7 +282,7 @@ document.getElementById('btn-cancel-create').onclick = () => document.getElement
 document.getElementById('btn-confirm-create').onclick = async () => {
     const name = document.getElementById('new-channel-name').value.trim();
     const description = document.getElementById('new-channel-desc').value.trim();
-    if (!name) return alert('Введите название');
+    if (!name) return showToast('Ошибка', 'Введите название', '!');
     const res = await fetch('/api/channel/create', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ name, description })
@@ -278,17 +308,49 @@ async function loadMyChannels() {
             const badge = ch.is_boosted ? `<span class="boost-label">${ch.boost_level}</span>` : '';
             card.innerHTML = `<div class="avatar">${ch.name[0].toUpperCase()}</div>
                 <div class="channel-info"><h3>${escapeHtml(ch.name)} ${badge}</h3>
-                <p>${ch.subscribers} участников</p></div>
-                <button class="btn btn-secondary btn-sm" data-id="${ch.id}">Буст</button>`;
-            card.querySelector('.channel-info').onclick = () => openChannel(ch.id);
-            card.querySelector('button').onclick = e => {
-                e.stopPropagation();
-                selectedBoostChannelId = ch.id;
-                alert('Канал выбран для буста. Откройте Магазин в профиле.');
-            };
+                <p>${ch.subscribers} участников</p></div>`;
+            card.onclick = () => openChannel(ch.id);
             list.appendChild(card);
         });
     } catch (e) { console.error(e); }
+}
+
+async function loadAnalyticsTab() {
+    const list = document.getElementById('analytics-list');
+    if (!list) return;
+    list.innerHTML = '<div class="empty-state">Загрузка...</div>';
+    try {
+        const res = await fetch('/api/analytics/overview');
+        const channels = await res.json();
+        if (!channels.length) {
+            list.innerHTML = '<div class="empty-state">Нет каналов<br>Создай канал, чтобы видеть статистику</div>';
+            return;
+        }
+        list.innerHTML = '';
+        channels.forEach(ch => {
+            const avg = ch.posts ? Math.round(ch.views / ch.posts) : 0;
+            const card = document.createElement('div');
+            card.className = 'channel-card';
+            card.style.cssText = 'flex-direction:column;align-items:stretch;cursor:pointer';
+            card.innerHTML = `
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+                    <div class="avatar">${ch.name[0].toUpperCase()}</div>
+                    <div class="channel-info"><h3>${escapeHtml(ch.name)}</h3><p>с ${ch.created_at}</p></div>
+                </div>
+                <div class="profile-stats" style="margin:0">
+                    <div><span>${ch.subscribers}</span>подп.</div>
+                    <div><span>${ch.posts}</span>посты</div>
+                    <div><span>${ch.likes}</span>лайки</div>
+                    <div><span>${ch.views}</span>просм.</div>
+                </div>
+                <p style="margin-top:12px;font-size:12px;color:var(--muted);text-align:center">Средний охват: ${avg}</p>`;
+            card.onclick = () => openChannel(ch.id);
+            list.appendChild(card);
+        });
+    } catch (e) {
+        console.error(e);
+        list.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+    }
 }
 
 async function loadProfile() {
@@ -300,8 +362,17 @@ async function loadProfile() {
         document.getElementById('profile-crystals').textContent = p.crystals;
         document.getElementById('profile-friends').textContent = p.friends;
         document.getElementById('profile-channels').textContent = p.channels;
-        document.getElementById('profile-avatar').textContent = p.username[0].toUpperCase();
         document.getElementById('shop-balance').textContent = p.crystals;
+        const av = document.getElementById('profile-avatar');
+        if (p.avatar) {
+            av.style.backgroundImage = `url(${p.avatar})`;
+            av.style.backgroundSize = 'cover';
+            av.style.backgroundPosition = 'center';
+            av.textContent = '';
+        } else {
+            av.style.backgroundImage = '';
+            av.textContent = p.username[0].toUpperCase();
+        }
     } catch (e) { console.error(e); }
 }
 
@@ -321,45 +392,50 @@ document.getElementById('btn-save-profile').onclick = async () => {
     loadProfile();
 };
 document.getElementById('profile-status').onclick = () => document.getElementById('btn-edit-profile').click();
+document.getElementById('profile-avatar').onclick = () => document.getElementById('avatar-input').click();
+document.getElementById('avatar-input').onchange = async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/profile/avatar', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) showToast('Ошибка', data.error, '!');
+    else { showToast('Аватар', 'Фото обновлено', '✓'); loadProfile(); }
+};
 
 document.getElementById('btn-daily').onclick = async () => {
     const res = await fetch('/api/daily_bonus', { method: 'POST' });
     const data = await res.json();
     if (data.error) showToast('Бонус', data.error, '⏳');
-    else showToast('Бонус дня', `+${data.bonus} ✦ зачислено на баланс`, '✦');
+    else showToast('Бонус дня', `+${data.bonus} ✦ зачислено`, '✦');
     loadProfile();
 };
 document.getElementById('crystals-badge').onclick = () => document.getElementById('btn-daily').click();
 
 document.getElementById('btn-open-shop').onclick = async () => {
     await loadProfile();
-    // load my channels into select
     try {
         const res = await fetch('/api/my_channels');
         const channels = await res.json();
         const sel = document.getElementById('shop-channel-select');
         sel.innerHTML = '';
-        if (!channels.length) {
-            sel.innerHTML = '<option value="">Нет каналов — создайте канал</option>';
-        } else {
-            channels.forEach(ch => {
-                const o = document.createElement('option');
-                o.value = ch.id;
-                o.textContent = ch.name + (ch.is_boosted ? ' (буст)' : '');
-                sel.appendChild(o);
-            });
-            if (selectedBoostChannelId) sel.value = selectedBoostChannelId;
-        }
-    } catch(e) { console.error(e); }
+        if (!channels.length) sel.innerHTML = '<option value="">Нет каналов</option>';
+        else channels.forEach(ch => {
+            const o = document.createElement('option');
+            o.value = ch.id;
+            o.textContent = ch.name + (ch.is_boosted ? ' (буст)' : '');
+            sel.appendChild(o);
+        });
+    } catch (e) { console.error(e); }
     document.getElementById('modal-shop').classList.remove('hidden');
 };
 document.getElementById('btn-close-shop').onclick = () => document.getElementById('modal-shop').classList.add('hidden');
 
 document.querySelectorAll('.btn-boost').forEach(btn => {
     btn.onclick = async () => {
-        const sel = document.getElementById('shop-channel-select');
-        const channelId = parseInt(sel.value);
-        if (!channelId) return showToast('Ошибка', 'Сначала создайте канал и выберите его', '!');
+        const channelId = parseInt(document.getElementById('shop-channel-select').value);
+        if (!channelId) return showToast('Ошибка', 'Создайте и выберите канал', '!');
         const res = await fetch('/api/shop/boost', {
             method: 'POST', headers: {'Content-Type':'application/json'},
             body: JSON.stringify({ channel_id: channelId, level: btn.dataset.level })
@@ -369,9 +445,7 @@ document.querySelectorAll('.btn-boost').forEach(btn => {
         else {
             document.getElementById('modal-shop').classList.add('hidden');
             showToast('Буст активен', `До ${data.boost_until}. Осталось ${data.crystals} ✦`, '🚀');
-            loadProfile();
-            loadMyChannels();
-            loadChannels();
+            loadProfile(); loadChannels();
         }
     };
 });
@@ -386,37 +460,17 @@ document.getElementById('btn-buy-premium').onclick = async () => {
     }
 };
 
-// Analytics
-document.getElementById('btn-analytics').onclick = async () => {
+document.getElementById('btn-analytics').onclick = () => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.nav-btn[data-tab="analytics"]')?.classList.add('active');
     showScreen('screen-analytics');
-    const res = await fetch(`/api/channel/${currentChannelId}/analytics`);
-    const d = await res.json();
-    if (d.error) {
-        document.getElementById('analytics-content').innerHTML = `<div class="empty-state">${d.error}</div>`;
-        return;
-    }
-    const avg = d.posts ? Math.round(d.views / d.posts) : 0;
-    document.getElementById('analytics-content').innerHTML = `
-        <div class="profile-card" style="margin:0 0 16px">
-            <h3 style="margin-bottom:16px;font-size:16px">Общая статистика</h3>
-            <div class="profile-stats" style="margin-top:0">
-                <div><span>${d.subscribers}</span>Подписчики</div>
-                <div><span>${d.posts}</span>Посты</div>
-            </div>
-            <div class="profile-stats">
-                <div><span>${d.likes}</span>Лайки</div>
-                <div><span>${d.views}</span>Просмотры</div>
-            </div>
-        </div>
-        <div class="channel-card" style="flex-direction:column;align-items:stretch">
-            <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="color:var(--muted)">Средний охват поста</span><strong>${avg}</strong></div>
-            <div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="color:var(--muted)">Дата создания</span><strong>${d.created_at}</strong></div>
-            <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Лайков на пост</span><strong>${d.posts ? (d.likes/d.posts).toFixed(1) : 0}</strong></div>
-        </div>`;
+    loadAnalyticsTab();
 };
-document.getElementById('btn-back-analytics').onclick = () => openChannel(currentChannelId);
+document.getElementById('btn-back-analytics')?.addEventListener('click', () => {
+    if (currentChannelId) openChannel(currentChannelId);
+    else showScreen('screen-home');
+});
 
-// Search & Friends
 document.getElementById('search-users').addEventListener('input', e => {
     const q = e.target.value.trim();
     if (q.length >= 2) searchUsers(q);
@@ -474,13 +528,12 @@ async function loadFriendsAndRequests() {
         friends.forEach(f => {
             html += `<div class="channel-card">
                 <div class="avatar">${f.username[0].toUpperCase()}</div>
-                <div class="channel-info"><h3>${escapeHtml(f.username)}</h3>
-                <p style="font-size:12px;color:var(--muted)">${escapeHtml(f.status||'')}</p></div>
+                <div class="channel-info"><h3>${escapeHtml(f.username)}</h3></div>
                 <button class="btn btn-primary btn-sm" onclick="openChat(${f.id},'${escapeHtml(f.username)}')">Написать</button>
             </div>`;
         });
     }
-    feed.innerHTML = html || '<div class="empty-state">Нет друзей и заявок<br>Ищите людей через поиск</div>';
+    feed.innerHTML = html || '<div class="empty-state">Нет друзей и заявок<br>Ищите через поиск</div>';
 }
 
 async function respondRequest(id, action) {
@@ -544,16 +597,7 @@ socket.on('new_message', data => {
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 });
-socket.on('error', d => alert(d.msg || 'Ошибка'));
-
-
-function showToast(title, text, icon) {
-    document.getElementById('toast-title').textContent = title || 'Готово';
-    document.getElementById('toast-text').textContent = text || '';
-    document.getElementById('toast-icon').textContent = icon || '✦';
-    document.getElementById('modal-toast').classList.remove('hidden');
-}
-document.getElementById('btn-toast-ok').onclick = () => document.getElementById('modal-toast').classList.add('hidden');
+socket.on('error', d => showToast('Ошибка', d.msg || 'Ошибка', '!'));
 
 function escapeHtml(t) {
     if (!t) return '';
