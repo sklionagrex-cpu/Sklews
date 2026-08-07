@@ -43,23 +43,45 @@ function applyPlusToProfileHero(p, opts) {
     const bannerId = opts.bannerId || 'profile-banner';
     const nameId = opts.nameId || 'profile-username';
     const badgeId = opts.badgeId || 'profile-plus-badge';
+    const underId = opts.underId || 'profile-plus-under';
     const hero = document.getElementById(heroId);
     const av = document.getElementById(avId);
     const banner = document.getElementById(bannerId);
+    const under = document.getElementById(underId);
     const pun = document.getElementById(nameId);
     if (!p) return;
-    if (av && av.parentElement) {
-        let wrap = av.parentElement.classList.contains('avatar-hero-wrap') ? av.parentElement : null;
-        if (!wrap) {
-            wrap = document.createElement('div');
-            wrap.className = 'avatar-hero-wrap';
-            av.parentNode.insertBefore(wrap, av);
-            wrap.appendChild(av);
-        }
-        wrap.className = 'avatar-hero-wrap' + (p.plus_avatar_frame ? ' frame-' + p.plus_avatar_frame : '');
+
+    // Restore original avatar DOM if we previously wrapped it
+    if (av && av.parentElement && av.parentElement.classList.contains('avatar-hero-wrap')) {
+        const wrap = av.parentElement;
+        wrap.parentNode.insertBefore(av, wrap);
+        wrap.remove();
     }
+
+    // Avatar itself unchanged layout — only ring classes
+    if (av) {
+        av.classList.remove('av-ring-gold','av-ring-diamond','av-ring-aurora','av-ring-rose','av-ring-obsidian','av-ring-prism','av-ring-royal');
+        if (p.plus_avatar_frame) av.classList.add('av-ring-' + p.plus_avatar_frame);
+    }
+
+    // Banner stays as photo/cover — no FX classes on it
+    if (banner) {
+        banner.classList.remove('banner-fx-rays','banner-fx-particles','banner-fx-silk','banner-fx-aurora','banner-fx-embers');
+    }
+
+    // Effects strip UNDER the banner
+    if (under) {
+        under.className = 'plus-under-banner';
+        if (p.plus_banner_fx) {
+            under.classList.add('under-fx-' + p.plus_banner_fx);
+            under.style.display = '';
+        } else {
+            under.style.display = 'none';
+        }
+    }
+
     if (hero) {
-        hero.classList.remove('plus-card-glass', 'plus-card-velvet', 'plus-card-metal', 'plus-card-royal', 'has-aura');
+        hero.classList.remove('plus-card-glass','plus-card-velvet','plus-card-metal','plus-card-royal','has-aura');
         if (p.plus_card_style) hero.classList.add('plus-card-' + p.plus_card_style);
         if (p.plus_aura) {
             hero.classList.add('has-aura');
@@ -70,10 +92,7 @@ function applyPlusToProfileHero(p, opts) {
         if (p.plus_accent) hero.style.setProperty('--plus-accent', p.plus_accent);
         else hero.style.removeProperty('--plus-accent');
     }
-    if (banner) {
-        banner.classList.remove('banner-fx-rays', 'banner-fx-particles', 'banner-fx-silk', 'banner-fx-aurora', 'banner-fx-embers');
-        if (p.plus_banner_fx) banner.classList.add('banner-fx-' + p.plus_banner_fx);
-    }
+
     if (pun) {
         pun.innerHTML = premiumNickHtml(p.username, p.is_premium || p.is_premium_plus, p.plus_name_fx);
         let badge = document.getElementById(badgeId);
@@ -86,7 +105,9 @@ function applyPlusToProfileHero(p, opts) {
             }
             badge.textContent = p.plus_badge;
             badge.style.display = '';
-        } else if (badge) badge.style.display = 'none';
+        } else if (badge) {
+            badge.style.display = 'none';
+        }
     }
 }
 
@@ -1516,7 +1537,7 @@ async function openUserProfile(userId) {
     const res = await fetch('/api/user/' + userId);
     const u = await res.json();
     window._viewUserId = u.id;
-    applyPlusToProfileHero(u, { heroId: 'user-hero', avId: 'user-avatar', bannerId: 'user-banner', nameId: 'user-username', badgeId: 'user-plus-badge' });
+    applyPlusToProfileHero(u, { heroId: 'user-hero', avId: 'user-avatar', bannerId: 'user-banner', nameId: 'user-username', badgeId: 'user-plus-badge', underId: 'user-plus-under' });
     // legacy nick line kept via apply
     if (!document.getElementById('user-username').innerHTML) document.getElementById('user-username').innerHTML = premiumNickHtml(u.username, u.is_premium || u.is_premium_plus, u.plus_name_fx);
     // plus badge on user profile
@@ -3387,7 +3408,9 @@ document.addEventListener('click', async e => {
     }
     if (e.target.closest('#btn-plus-save-profile')) {
         e.preventDefault();
+        e.stopPropagation();
         const btn = e.target.closest('#btn-plus-save-profile');
+        if (btn.disabled) return;
         btn.disabled = true;
         const auraEl = document.getElementById('plus-aura');
         const accentEl = document.getElementById('plus-accent');
@@ -3407,26 +3430,42 @@ document.addEventListener('click', async e => {
         };
         try {
             const res = await fetch('/api/plus/profile', {
-                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                body: JSON.stringify(body)
             });
+            const raw = await res.text();
             let d = {};
-            try { d = await res.json(); } catch (err) { d = { error: 'Не JSON (' + res.status + ')' }; }
+            try { d = raw ? JSON.parse(raw) : {}; } catch (err) {
+                console.error('plus profile raw', res.status, raw?.slice(0, 200));
+                showToast('Premium+', 'Ответ сервера битый (' + res.status + ')', '!');
+                btn.disabled = false;
+                return;
+            }
             if (!res.ok || d.error) {
                 showToast('Premium+', d.error || ('Ошибка ' + res.status), '!');
                 btn.disabled = false;
                 return;
             }
-            setMePlusFromProfile({ ...d, is_premium: true, is_premium_plus: true, username: window.__meUsername });
-            if (auraEl) auraEl.dataset.cleared = body.plus_aura ? '' : '1';
-            if (accentEl) accentEl.dataset.cleared = body.plus_accent ? '' : '1';
-            applyPlusToProfileHero({
+            const applied = {
                 username: window.__meUsername || 'you',
                 is_premium: true,
                 is_premium_plus: true,
-                ...body,
-            });
+                plus_name_fx: d.plus_name_fx || body.plus_name_fx,
+                plus_avatar_frame: d.plus_avatar_frame || body.plus_avatar_frame,
+                plus_banner_fx: d.plus_banner_fx || body.plus_banner_fx,
+                plus_msg_style: d.plus_msg_style || body.plus_msg_style,
+                plus_card_style: d.plus_card_style || body.plus_card_style,
+                plus_badge: d.plus_badge || body.plus_badge,
+                plus_aura: d.plus_aura != null ? d.plus_aura : body.plus_aura,
+                plus_accent: d.plus_accent != null ? d.plus_accent : body.plus_accent,
+            };
+            setMePlusFromProfile(applied);
+            if (auraEl) auraEl.dataset.cleared = applied.plus_aura ? '' : '1';
+            if (accentEl) accentEl.dataset.cleared = applied.plus_accent ? '' : '1';
+            applyPlusToProfileHero(applied);
             showToast('Premium+', 'Профиль сохранён', '✓');
-            if (typeof loadProfile === 'function') loadProfile();
+            try { if (typeof loadProfile === 'function') loadProfile(); } catch (e) {}
         } catch (err) {
             showToast('Ошибка', err.message || 'Сеть', '!');
         }
@@ -3451,10 +3490,17 @@ document.addEventListener('click', async e => {
         };
         try {
             const res = await fetch('/api/plus/channel/' + id, {
-                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+                method: 'POST',
+                headers: {'Content-Type':'application/json', 'Accept':'application/json'},
+                body: JSON.stringify(body)
             });
+            const raw = await res.text();
             let d = {};
-            try { d = await res.json(); } catch (err) { d = { error: 'Не JSON (' + res.status + ')' }; }
+            try { d = raw ? JSON.parse(raw) : {}; } catch (err) {
+                showToast('Premium+', 'Ответ сервера битый (' + res.status + ')', '!');
+                btn.disabled = false;
+                return;
+            }
             if (!res.ok || d.error) {
                 showToast('Premium+', d.error || ('Ошибка ' + res.status), '!');
                 btn.disabled = false;

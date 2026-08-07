@@ -1170,42 +1170,38 @@ def buy_premium_plus():
 @app.route('/api/plus/profile', methods=['POST'])
 @login_required
 def save_plus_profile():
+    user = current_user()
+    if not user or not premium_plus_active(user):
+        return jsonify({'error': 'Нужен Premium+. Купи в магазине.'}), 403
+    data = request.get_json(silent=True) or {}
+    name_fx = str(data.get('plus_name_fx') or '')[:32]
+    frame = str(data.get('plus_avatar_frame') or '')[:32]
+    aura = str(data.get('plus_aura') or '')[:20]
+    badge = str(data.get('plus_badge') or '')[:24]
+    banner_fx = str(data.get('plus_banner_fx') or '')[:32]
+    msg_style = str(data.get('plus_msg_style') or '')[:32]
+    card_style = str(data.get('plus_card_style') or '')[:32]
+    accent = str(data.get('plus_accent') or '')[:20]
+    allowed_fx = {'', 'gold', 'aurora', 'crystal', 'soft', 'liquid', 'fire', 'matrix'}
+    allowed_frame = {'', 'gold', 'diamond', 'aurora', 'rose', 'obsidian', 'prism', 'royal'}
+    allowed_banner = {'', 'none', 'rays', 'particles', 'silk', 'aurora', 'embers'}
+    allowed_msg = {'', 'glow', 'gradient', 'neon', 'glass'}
+    allowed_card = {'', 'glass', 'velvet', 'metal', 'royal'}
+    if name_fx not in allowed_fx:
+        return jsonify({'error': 'Неверный эффект ника'}), 400
+    if frame not in allowed_frame:
+        return jsonify({'error': 'Неверная рамка'}), 400
+    if banner_fx not in allowed_banner:
+        return jsonify({'error': 'Неверный эффект шапки'}), 400
+    if msg_style not in allowed_msg:
+        return jsonify({'error': 'Неверный стиль сообщений'}), 400
+    if card_style not in allowed_card:
+        return jsonify({'error': 'Неверный стиль карточки'}), 400
+    if aura and not re.match(r'^#[0-9A-Fa-f]{6}$', aura):
+        return jsonify({'error': 'Цвет ауры: #RRGGBB'}), 400
+    if accent and not re.match(r'^#[0-9A-Fa-f]{6}$', accent):
+        return jsonify({'error': 'Акцент: #RRGGBB'}), 400
     try:
-        try:
-            ensure_db_schema()
-        except Exception:
-            pass
-        user = current_user()
-        if not premium_plus_active(user):
-            return jsonify({'error': 'Нужен Premium+. Купи в магазине.'}), 403
-        data = request.json or {}
-        name_fx = str(data.get('plus_name_fx') or '')[:32]
-        frame = str(data.get('plus_avatar_frame') or '')[:32]
-        aura = str(data.get('plus_aura') or '')[:20]
-        badge = str(data.get('plus_badge') or '')[:24]
-        banner_fx = str(data.get('plus_banner_fx') or '')[:32]
-        msg_style = str(data.get('plus_msg_style') or '')[:32]
-        card_style = str(data.get('plus_card_style') or '')[:32]
-        accent = str(data.get('plus_accent') or '')[:20]
-        allowed_fx = {'', 'gold', 'aurora', 'crystal', 'soft', 'liquid', 'fire', 'matrix'}
-        allowed_frame = {'', 'gold', 'diamond', 'aurora', 'rose', 'obsidian', 'prism', 'royal'}
-        allowed_banner = {'', 'none', 'rays', 'particles', 'silk', 'aurora', 'embers'}
-        allowed_msg = {'', 'glow', 'gradient', 'neon', 'glass'}
-        allowed_card = {'', 'glass', 'velvet', 'metal', 'royal'}
-        if name_fx not in allowed_fx:
-            return jsonify({'error': 'Неверный эффект ника'}), 400
-        if frame not in allowed_frame:
-            return jsonify({'error': 'Неверная рамка'}), 400
-        if banner_fx not in allowed_banner:
-            return jsonify({'error': 'Неверный эффект шапки'}), 400
-        if msg_style not in allowed_msg:
-            return jsonify({'error': 'Неверный стиль сообщений'}), 400
-        if card_style not in allowed_card:
-            return jsonify({'error': 'Неверный стиль карточки'}), 400
-        if aura and not re.match(r'^#[0-9A-Fa-f]{6}$', aura):
-            return jsonify({'error': 'Цвет ауры: #RRGGBB'}), 400
-        if accent and not re.match(r'^#[0-9A-Fa-f]{6}$', accent):
-            return jsonify({'error': 'Акцент: #RRGGBB'}), 400
         user.plus_name_fx = name_fx
         user.plus_avatar_frame = frame
         user.plus_aura = aura
@@ -1215,57 +1211,70 @@ def save_plus_profile():
         user.plus_card_style = card_style
         user.plus_accent = accent
         db.session.commit()
-        db.session.refresh(user)
-        return jsonify({'status': 'ok', **user_plus_payload(user)})
     except Exception as e:
         db.session.rollback()
-        print('save_plus_profile error:', e, flush=True)
-        return jsonify({'error': 'Ошибка сохранения: ' + str(e)[:140]}), 500
+        print('save_plus_profile commit error:', e, flush=True)
+        return jsonify({'error': 'Не сохранилось: ' + str(e)[:120]}), 500
+    payload = {
+        'status': 'ok',
+        'is_premium_plus': True,
+        'plus_name_fx': name_fx,
+        'plus_avatar_frame': frame,
+        'plus_aura': aura,
+        'plus_badge': badge,
+        'plus_banner_fx': '' if banner_fx in ('', 'none') else banner_fx,
+        'plus_msg_style': msg_style,
+        'plus_card_style': card_style,
+        'plus_accent': accent,
+    }
+    return jsonify(payload)
 
 
 @app.route('/api/plus/channel/<int:channel_id>', methods=['POST'])
 @login_required
 def save_plus_channel(channel_id):
+    user = current_user()
+    if not user or not premium_plus_active(user):
+        return jsonify({'error': 'Нужен Premium+'}), 403
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    data = request.get_json(silent=True) or {}
+    frame = str(data.get('plus_frame') or '')[:32]
+    header_fx = str(data.get('plus_header_fx') or '')[:32]
+    badge = str(data.get('plus_badge') or '')[:24]
+    glow = str(data.get('plus_glow') or '')[:20]
+    anim = str(data.get('plus_anim') or '')[:32]
+    allowed_frame = {'', 'gold', 'crystal', 'neon', 'silk', 'royal', 'prism'}
+    allowed_fx = {'', 'none', 'shimmer', 'aurora', 'ember', 'wave'}
+    allowed_anim = {'', 'pulse', 'float', 'border'}
+    if frame not in allowed_frame:
+        return jsonify({'error': 'Неверная рамка канала'}), 400
+    if header_fx not in allowed_fx:
+        return jsonify({'error': 'Неверный эффект шапки'}), 400
+    if anim not in allowed_anim:
+        return jsonify({'error': 'Неверная анимация'}), 400
+    if glow and not re.match(r'^#[0-9A-Fa-f]{6}$', glow):
+        return jsonify({'error': 'Цвет свечения: #RRGGBB'}), 400
     try:
-        try:
-            ensure_db_schema()
-        except Exception:
-            pass
-        user = current_user()
-        if not premium_plus_active(user):
-            return jsonify({'error': 'Нужен Premium+'}), 403
-        ch = Channel.query.get_or_404(channel_id)
-        if ch.owner_id != user.id:
-            return jsonify({'error': 'Только владелец'}), 403
-        data = request.json or {}
-        frame = str(data.get('plus_frame') or '')[:32]
-        header_fx = str(data.get('plus_header_fx') or '')[:32]
-        badge = str(data.get('plus_badge') or '')[:24]
-        glow = str(data.get('plus_glow') or '')[:20]
-        anim = str(data.get('plus_anim') or '')[:32]
-        allowed_frame = {'', 'gold', 'crystal', 'neon', 'silk', 'royal', 'prism'}
-        allowed_fx = {'', 'none', 'shimmer', 'aurora', 'ember', 'wave'}
-        allowed_anim = {'', 'pulse', 'float', 'border'}
-        if frame not in allowed_frame:
-            return jsonify({'error': 'Неверная рамка канала'}), 400
-        if header_fx not in allowed_fx:
-            return jsonify({'error': 'Неверный эффект шапки'}), 400
-        if anim not in allowed_anim:
-            return jsonify({'error': 'Неверная анимация'}), 400
-        if glow and not re.match(r'^#[0-9A-Fa-f]{6}$', glow):
-            return jsonify({'error': 'Цвет свечения: #RRGGBB'}), 400
         ch.plus_frame = frame
         ch.plus_header_fx = '' if header_fx in ('', 'none') else header_fx
         ch.plus_badge = badge
         ch.plus_glow = glow
         ch.plus_anim = anim
         db.session.commit()
-        return jsonify({'status': 'ok', **channel_plus_payload(ch)})
     except Exception as e:
         db.session.rollback()
         print('save_plus_channel error:', e, flush=True)
-        return jsonify({'error': 'Ошибка сохранения: ' + str(e)[:140]}), 500
-
+        return jsonify({'error': 'Не сохранилось: ' + str(e)[:120]}), 500
+    return jsonify({
+        'status': 'ok',
+        'plus_frame': frame,
+        'plus_header_fx': '' if header_fx in ('', 'none') else header_fx,
+        'plus_badge': badge,
+        'plus_glow': glow,
+        'plus_anim': anim,
+    })
 
 
 EXCLUSIVE_THEMES = {
