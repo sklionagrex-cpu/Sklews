@@ -929,27 +929,8 @@ def handle_message(data):
     emit('new_message', payload, room=f'user_{receiver_id}')
     emit('new_message', {**payload, 'is_mine': True}, room=f'user_{user.id}')
 
-with app.app_context():
-    db.create_all()
-    try:
-        from sqlalchemy import text
-        db.session.execute(text('ALTER TABLE user ADD COLUMN banner VARCHAR(256) DEFAULT ""'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
-    for col, typ in [('media_url', 'VARCHAR(500) DEFAULT ""'), ('media_type', 'VARCHAR(20) DEFAULT ""')]:
-        try:
-            from sqlalchemy import text
-            db.session.execute(text(f'ALTER TABLE comment ADD COLUMN {col} {typ}'))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-    try:
-        from sqlalchemy import text
-        db.session.execute(text('ALTER TABLE user ADD COLUMN last_seen DATETIME'))
-        db.session.commit()
-    except Exception:
-        db.session.rollback()
+
+# DB init moved to if __name__ == '__main__'
 
 
 
@@ -1280,5 +1261,33 @@ def analytics_overview():
     return jsonify(result)
 
 if __name__ == '__main__':
+    import sys
+    print("=== Sklews starting ===", flush=True)
+    print("Python:", sys.version, flush=True)
+    print("Init database...", flush=True)
+    with app.app_context():
+        db.create_all()
+        try:
+            from sqlalchemy import text
+            db.session.execute(text('ALTER TABLE user ADD COLUMN banner VARCHAR(256) DEFAULT ""'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        for col, typ in [('media_url', 'VARCHAR(500) DEFAULT ""'), ('media_type', 'VARCHAR(20) DEFAULT ""')]:
+            try:
+                from sqlalchemy import text
+                db.session.execute(text(f'ALTER TABLE comment ADD COLUMN {col} {typ}'))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        try:
+            from sqlalchemy import text
+            db.session.execute(text('ALTER TABLE user ADD COLUMN last_seen DATETIME'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    print("Database ready", flush=True)
     port = int(os.environ.get('PORT', 5000))
+    print(f"Starting server on 0.0.0.0:{port} ...", flush=True)
     socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+
