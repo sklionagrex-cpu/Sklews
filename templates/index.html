@@ -89,7 +89,7 @@
                 <h1>Профиль</h1>
                 <button id="btn-settings" class="btn-icon"><i class="fa-solid fa-gear"></i></button>
             </header>
-            <div class="profile-card">
+            <div class="profile-card profile-full">
                 <div class="avatar-large" id="profile-avatar">?</div>
                 <h2 id="profile-username">—</h2>
                 <p id="profile-status" class="status-text">Статус не указан</p>
@@ -119,6 +119,71 @@
             <div id="subs-page-list" class="feed"></div>
         </div>
 
+
+        <!-- POSTS PAGE (отдельный экран) -->
+        <div id="screen-posts" class="screen">
+            <header class="header">
+                <button class="btn-back" id="btn-back-posts"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1 id="posts-page-title">Посты</h1>
+                <div style="width:40px"></div>
+            </header>
+            <div id="posts-feed" class="feed"></div>
+            <div style="padding:0 16px 80px">
+                <button id="btn-add-post" class="btn btn-primary full hidden"><i class="fa-solid fa-plus"></i> Добавить пост</button>
+            </div>
+        </div>
+
+        <!-- USER PROFILE -->
+        <div id="screen-user" class="screen">
+            <header class="header">
+                <button class="btn-back" id="btn-back-user"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1>Профиль</h1>
+                <div style="width:40px"></div>
+            </header>
+            <div class="profile-card profile-full">
+                <div class="avatar-large" id="user-avatar">?</div>
+                <h2 id="user-username">—</h2>
+                <p id="user-status" class="status-text"></p>
+                <div class="profile-stats" id="user-stats">
+                    <div><span id="user-friends">0</span>Друзья</div>
+                    <div><span id="user-channels">0</span>Каналы</div>
+                </div>
+                <div class="profile-actions" style="grid-template-columns:1fr 1fr;margin-top:20px">
+                    <button id="btn-user-friend" class="btn btn-secondary">Добавить</button>
+                    <button id="btn-user-message" class="btn btn-primary">Написать</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MEDIA LIGHTBOX -->
+        <div id="media-lightbox" class="modal hidden" style="align-items:center;background:rgba(0,0,0,0.92)">
+            <div style="width:100%;max-width:100%;text-align:center;padding:12px">
+                <button id="btn-close-lightbox" class="btn-icon" style="position:absolute;top:16px;right:16px;z-index:10"><i class="fa-solid fa-xmark"></i></button>
+                <img id="lightbox-img" style="max-width:100%;max-height:85vh;border-radius:8px;display:none">
+                <video id="lightbox-video" controls playsinline style="max-width:100%;max-height:85vh;border-radius:8px;display:none"></video>
+            </div>
+        </div>
+
+        <!-- REACTIONS POPOVER -->
+        <div id="modal-react" class="modal hidden">
+            <div class="modal-content" style="text-align:center">
+                <h3>Реакция</h3>
+                <div id="react-options" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:16px 0">
+                    <button class="react-pick" data-emoji="🔥" style="font-size:28px;background:none;border:none;cursor:pointer">🔥</button>
+                    <button class="react-pick" data-emoji="❤️" style="font-size:28px;background:none;border:none;cursor:pointer">❤️</button>
+                    <button class="react-pick" data-emoji="😂" style="font-size:28px;background:none;border:none;cursor:pointer">😂</button>
+                    <button class="react-pick" data-emoji="😮" style="font-size:28px;background:none;border:none;cursor:pointer">😮</button>
+                    <button class="react-pick" data-emoji="😢" style="font-size:28px;background:none;border:none;cursor:pointer">😢</button>
+                    <button class="react-pick" data-emoji="👏" style="font-size:28px;background:none;border:none;cursor:pointer">👏</button>
+                    <button class="react-pick" data-emoji="✨" style="font-size:28px;background:none;border:none;cursor:pointer">✨</button>
+                    <button class="react-pick" data-emoji="💯" style="font-size:28px;background:none;border:none;cursor:pointer">💯</button>
+                    <button class="react-pick" data-emoji="🚀" style="font-size:28px;background:none;border:none;cursor:pointer">🚀</button>
+                    <button class="react-pick" data-emoji="❤️‍🔥" style="font-size:28px;background:none;border:none;cursor:pointer">❤️‍🔥</button>
+                </div>
+                <button id="btn-close-react" class="btn btn-secondary full">Закрыть</button>
+            </div>
+        </div>
+
         <!-- CHANNEL CARD (визитка) -->
         <div id="screen-channel" class="screen">
             <header class="header">
@@ -136,12 +201,6 @@
                     <button id="btn-watch" class="btn btn-secondary">Читать</button>
                     <button id="btn-edit-channel" class="btn btn-secondary hidden">Редактор</button>
                     <button id="btn-analytics" class="btn btn-secondary hidden">Аналитика</button>
-                </div>
-            </div>
-            <div id="posts-section" class="hidden">
-                <div id="posts-feed" class="feed"></div>
-                <div style="padding:0 16px 20px">
-                    <button id="btn-add-post" class="btn btn-primary full hidden"><i class="fa-solid fa-plus"></i> Добавить пост</button>
                 </div>
             </div>
         </div>

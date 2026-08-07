@@ -88,7 +88,13 @@ class ChannelRole(db.Model):
     role = db.Column(db.String(20), default='moderator')  # admin / moderator / coauthor
 
 
+class PostView(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
 class PostLike(db.Model):
+
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -187,9 +193,12 @@ def api_channels():
     db.session.commit()
 
     me = current_user()
+    sub_ids = {s.channel_id for s in Subscription.query.filter_by(user_id=me.id).all()}
     channels = Channel.query.filter(Channel.owner_id != me.id).all()
     scored = []
     for ch in channels:
+        if ch.id in sub_ids:
+            continue
         posts = Post.query.filter_by(channel_id=ch.id).all()
         recent_posts = recent_likes = 0
         if sort == 'today': cutoff = now - timedelta(hours=24)
@@ -315,23 +324,28 @@ def create_channel():
 @app.route('/api/channel/<int:channel_id>/posts')
 @login_required
 def channel_posts(channel_id):
+    me = current_user()
     posts = Post.query.filter_by(channel_id=channel_id).order_by(Post.is_pinned.desc(), Post.created_at.desc()).limit(50).all()
     result = []
     for p in posts:
         author = User.query.get(p.author_id)
-        me = current_user()
         liked = PostLike.query.filter_by(post_id=p.id, user_id=me.id).first() is not None
         reacts = {}
         for r in PostReaction.query.filter_by(post_id=p.id).all():
             reacts[r.emoji] = reacts.get(r.emoji, 0) + 1
+        my_react = PostReaction.query.filter_by(post_id=p.id, user_id=me.id).first()
+        # unique view
+        viewed = PostView.query.filter_by(post_id=p.id, user_id=me.id).first()
+        if not viewed:
+            db.session.add(PostView(post_id=p.id, user_id=me.id))
+            p.views += 1
         result.append({
             'id': p.id, 'content': p.content, 'author': author.username if author else '?',
             'likes': p.likes, 'comments': p.comments_count, 'views': p.views, 'is_pinned': p.is_pinned,
             'media_type': p.media_type, 'media_url': p.media_url,
-            'liked': liked, 'reactions': reacts,
+            'liked': liked, 'reactions': reacts, 'my_reaction': my_react.emoji if my_react else None,
             'created_at': p.created_at.strftime('%d.%m %H:%M')
         })
-        p.views += 1
     db.session.commit()
     return jsonify(result)
 
@@ -822,12 +836,15 @@ def react_post(post_id):
     user = current_user()
     post = Post.query.get_or_404(post_id)
     emoji = (request.json or {}).get('emoji', '🔥')
-    existing = PostReaction.query.filter_by(post_id=post_id, user_id=user.id, emoji=emoji).first()
-    if existing:
-        db.session.delete(existing)
+    # only one reaction total per user
+    existing_any = PostReaction.query.filter_by(post_id=post_id, user_id=user.id).all()
+    same = next((r for r in existing_any if r.emoji == emoji), None)
+    if same:
+        db.session.delete(same)
         active = False
     else:
-        # one reaction type at a time optional - allow multiple types
+        for r in existing_any:
+            db.session.delete(r)
         db.session.add(PostReaction(post_id=post_id, user_id=user.id, emoji=emoji))
         active = True
     db.session.commit()
@@ -958,7 +975,7 @@ def analytics_overview():
     for ch in channels:
         posts = Post.query.filter_by(channel_id=ch.id).all()
         result.append({
-            'id': ch.id, 'name': ch.name,
+            'id': ch.id, 'name': ch.name, 'avatar': ch.avatar or '',
             'subscribers': ch.subscribers_count,
             'posts': len(posts),
             'likes': sum(p.likes for p in posts),
