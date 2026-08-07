@@ -244,13 +244,17 @@ def premium_active(user):
 
 @app.after_request
 def _perf_headers(resp):
-    # long cache for static assets (avatars/js/css); HTML/API no-cache
     try:
         path = request.path or ''
         if path.startswith('/static/'):
-            if any(path.endswith(ext) for ext in ('.js', '.css', '.png', '.jpg', '.jpeg', '.webp', '.svg', '.woff2', '.ico')):
+            if path.endswith('.js') or path.endswith('.css'):
+                # short cache so UI updates deploy quickly
+                resp.headers['Cache-Control'] = 'public, max-age=60, must-revalidate'
+            elif any(path.endswith(ext) for ext in ('.png', '.jpg', '.jpeg', '.webp', '.svg', '.woff2', '.ico')):
                 resp.headers['Cache-Control'] = 'public, max-age=86400'
         elif path.startswith('/api/'):
+            resp.headers['Cache-Control'] = 'no-store'
+        elif path in ('/', '/auth') or path.endswith('.html'):
             resp.headers['Cache-Control'] = 'no-store'
     except Exception:
         pass

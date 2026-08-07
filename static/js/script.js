@@ -571,6 +571,7 @@ async function loadPosts(channelId) {
             '<div style="display:flex;gap:16px;font-size:13px;color:var(--muted);align-items:center;flex-wrap:wrap">' +
             '<span class="like-btn" data-id="' + p.id + '" style="cursor:pointer;' + (p.liked ? 'color:var(--accent)' : '') + '"><i class="fa-solid fa-heart"></i> ' + p.likes + '</span>' +
             '<span class="comment-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-comment"></i> ' + (p.comments || 0) + '</span>' +
+            '<span class="react-open-btn" data-id="' + p.id + '" style="cursor:pointer;padding:2px 6px;border-radius:10px;background:rgba(139,92,246,0.12)" title="Реакция">😊</span>' +
             '<span><i class="fa-solid fa-eye"></i> ' + p.views + '</span>' +
             '<span class="pin-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-thumbtack"></i></span></div>' +
             pillsHtml;
@@ -631,11 +632,22 @@ async function loadPosts(channelId) {
             };
         });
     });
+    document.querySelectorAll('.react-open-btn').forEach(btn => {
+        btn.onclick = e => {
+            e.stopPropagation();
+            const wrap = document.querySelector('.post-text-wrap[data-post-id="' + btn.dataset.id + '"]');
+            const strip = wrap && wrap.querySelector('.react-strip');
+            if (!strip) return;
+            document.querySelectorAll('.react-strip.open').forEach(s => { if (s !== strip) s.classList.remove('open'); });
+            strip.classList.add('open');
+            try { strip.scrollLeft = 0; } catch (err) {}
+        };
+    });
     // close strips on outside tap
     if (!window._reactStripDocBound) {
         window._reactStripDocBound = true;
         document.addEventListener('click', e => {
-            if (!e.target.closest('.post-text-wrap')) {
+            if (!e.target.closest('.post-text-wrap') && !e.target.closest('.react-open-btn')) {
                 document.querySelectorAll('.react-strip.open').forEach(s => s.classList.remove('open'));
             }
         });
@@ -1633,12 +1645,15 @@ function formatMessage(content, isSuper) {
     else if (body.startsWith('[video]')) body = '<video src="' + body.slice(7) + '" controls playsinline style="max-width:220px;border-radius:12px"></video>';
     else if (body.startsWith('[voice]')) {
         const src = body.slice(7);
-        body = '<div class="voice-msg" data-src="' + src + '">' +
-            '<button type="button" class="voice-msg-play"><i class="fa-solid fa-play"></i></button>' +
-            '<div class="voice-msg-wave">' + Array.from({length:16}, (_,i) => '<span style="height:' + (8 + (i*7)%18) + 'px"></span>').join('') + '</div>' +
-            '<span class="voice-msg-dur">0:00</span>' +
-            '<audio preload="metadata" src="' + src + '" style="display:none"></audio>' +
-            '</div>';
+        const bars = Array.from({length:18}, (_,i) => {
+            const h = 6 + ((i * 11) % 20);
+            return '<i style="display:inline-block;width:3px;height:' + h + 'px;margin:0 1px;border-radius:2px;background:rgba(255,255,255,0.85);vertical-align:middle"></i>';
+        }).join('');
+        body = '<div class="voice-msg" data-src="' + src + '" style="display:flex;align-items:center;gap:10px;min-width:200px;padding:4px 0">' +
+            '<button type="button" class="voice-msg-play" style="width:40px;height:40px;border-radius:50%;border:none;background:rgba(0,0,0,0.25);color:#fff;flex-shrink:0;cursor:pointer;font-size:14px"><i class="fa-solid fa-play"></i></button>' +
+            '<div class="voice-msg-wave" style="flex:1;display:flex;align-items:center;height:32px">' + bars + '</div>' +
+            '<span class="voice-msg-dur" style="font-size:12px;opacity:0.9;min-width:36px">🎙</span>' +
+            '<audio preload="metadata" src="' + src + '" style="display:none"></audio></div>';
     }
     else body = linkifyMentions(body);
     return (isSuper ? '<span style="font-size:11px;opacity:.85"><i class="fa-solid fa-bolt"></i> SUPER</span><br>' : '') + body;
@@ -2245,35 +2260,47 @@ function syncFontButtons() {
         btn.classList.toggle('active', parseInt(btn.dataset.size, 10) === _fontDraft);
     });
 }
-document.getElementById('btn-open-theme')?.addEventListener('click', () => {
-    document.getElementById('modal-settings')?.classList.add('hidden');
-    _themeDraft = localStorage.getItem('sklews_theme') || 'violet';
-    _fontDraft = parseInt(localStorage.getItem('sklews_font') || '16', 10);
-    renderThemeGrid();
-    syncFontButtons();
-    document.getElementById('modal-theme').classList.remove('hidden');
+document.addEventListener('click', e => {
+    const openBtn = e.target.closest('#btn-open-theme');
+    if (openBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        document.getElementById('modal-settings')?.classList.add('hidden');
+        _themeDraft = localStorage.getItem('sklews_theme') || 'violet';
+        _fontDraft = parseInt(localStorage.getItem('sklews_font') || '16', 10);
+        renderThemeGrid();
+        syncFontButtons();
+        const m = document.getElementById('modal-theme');
+        if (m) {
+            m.classList.remove('hidden');
+            m.style.display = 'flex';
+        }
+        return;
+    }
+    if (e.target.closest('#btn-theme-close')) {
+        loadSavedTheme();
+        const m = document.getElementById('modal-theme');
+        if (m) { m.classList.add('hidden'); m.style.display = ''; }
+    }
+    if (e.target.closest('#btn-theme-save')) {
+        localStorage.setItem('sklews_theme', _themeDraft || 'violet');
+        localStorage.setItem('sklews_font', String(_fontDraft || 16));
+        applyThemeVars(THEME_PALETTES[_themeDraft] || THEME_PALETTES.violet);
+        applyFontSize(_fontDraft);
+        const m = document.getElementById('modal-theme');
+        if (m) { m.classList.add('hidden'); m.style.display = ''; }
+        showToast('Оформление', 'Сохранено', '✓');
+    }
+    if (e.target.closest('#btn-theme-reset')) {
+        _themeDraft = 'violet';
+        _fontDraft = 16;
+        applyThemeVars(THEME_PALETTES.violet);
+        applyFontSize(16);
+        renderThemeGrid();
+        syncFontButtons();
+    }
 });
-document.getElementById('btn-theme-close')?.addEventListener('click', () => {
-    // restore saved if not saved draft
-    loadSavedTheme();
-    document.getElementById('modal-theme').classList.add('hidden');
-});
-document.getElementById('btn-theme-save')?.addEventListener('click', () => {
-    localStorage.setItem('sklews_theme', _themeDraft || 'violet');
-    localStorage.setItem('sklews_font', String(_fontDraft || 16));
-    applyThemeVars(THEME_PALETTES[_themeDraft] || THEME_PALETTES.violet);
-    applyFontSize(_fontDraft);
-    document.getElementById('modal-theme').classList.add('hidden');
-    showToast('Оформление', 'Сохранено', '✓');
-});
-document.getElementById('btn-theme-reset')?.addEventListener('click', () => {
-    _themeDraft = 'violet';
-    _fontDraft = 16;
-    applyThemeVars(THEME_PALETTES.violet);
-    applyFontSize(16);
-    renderThemeGrid();
-    syncFontButtons();
-});
+
 document.getElementById('font-size-row')?.addEventListener('click', e => {
     const btn = e.target.closest('.font-size-btn');
     if (!btn) return;

@@ -1531,7 +1531,16 @@ body:has(#screen-chat.active) .bottom-nav {
     touch-action: pan-x;
 }
 .react-strip::-webkit-scrollbar { display: none; }
-.react-strip.open { display: flex; gap: 4px; }
+.react-strip.open {
+    display: flex !important;
+    gap: 6px;
+    position: relative;
+    bottom: auto;
+    margin: 0 0 10px 0;
+    background: var(--card2);
+    border: 1px solid var(--accent);
+    z-index: 20;
+}
 .react-strip-item {
     font-size: 26px;
     width: 42px; height: 42px;
@@ -1618,3 +1627,15 @@ body:has(#screen-chat.active) .bottom-nav {
     background: rgba(139, 92, 246, 0.2);
     color: var(--accent2);
 }
+
+
+/* modal force */
+.modal:not(.hidden) {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+#modal-theme .modal-content { z-index: 10001; }
+.message.theirs .voice-msg-wave i { background: var(--accent2) !important; }
+.message.mine .voice-msg-play { background: rgba(0,0,0,0.3) !important; color: #fff !important; }
