@@ -2,8 +2,11 @@ services:
   - type: web
     name: sklews
     env: python
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
     envVars:
       - key: SECRET_KEY
         generateValue: true
+      - key: DATABASE_URL
+        sync: false
