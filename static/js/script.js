@@ -2193,8 +2193,13 @@ loadHome();
 
 
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+    navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())).catch(() => {});
 }
+if (window.caches) {
+    caches.keys().then(keys => keys.forEach(k => caches.delete(k))).catch(() => {});
+}
+console.log('Sklews build', window.SKLEWS_BUILD || 'unknown');
+
 
 // ===== Admin panel (draggable FAB) =====
 (function initAdminFab() {
@@ -2469,27 +2474,29 @@ loadSavedTheme();
 function updatePremiumNav() {
     const btn = document.getElementById('nav-premium');
     if (!btn) return;
-    if (meHasPremium) btn.classList.remove('hidden');
-    else {
-        btn.classList.add('hidden');
-        if (document.getElementById('screen-premium')?.classList.contains('active')) {
-            showScreen('screen-home');
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.querySelector('.nav-btn[data-tab="home"]')?.classList.add('active');
-        }
+    // always show tab so deploy is visible; content still premium-only
+    btn.classList.remove('hidden');
+    if (!meHasPremium) {
+        btn.classList.add('nav-premium-locked');
+    } else {
+        btn.classList.remove('nav-premium-locked');
     }
 }
 
 let pendingPfPhoto = null;
 
 async function loadPremiumFeed() {
-    if (!meHasPremium) {
-        updatePremiumNav();
-        showToast('Premium', 'Нужна подписка Premium', '!');
-        return;
-    }
     const list = document.getElementById('premium-feed-list');
     if (!list) return;
+    if (!meHasPremium) {
+        updatePremiumNav();
+        list.innerHTML = '<div class="empty-state" style="padding:40px 20px"><i class="fa-solid fa-crown" style="font-size:36px;color:#fbbf24;display:block;margin-bottom:12px"></i>Вкладка Premium<br><span style="font-size:13px;color:var(--muted)">Доступна с активной подпиской</span></div>';
+        const compose = document.querySelector('.premium-feed-compose');
+        if (compose) compose.style.display = 'none';
+        return;
+    }
+    const compose = document.querySelector('.premium-feed-compose');
+    if (compose) compose.style.display = '';
     list.innerHTML = '<div class="empty-state">Загрузка…</div>';
     try {
         const res = await fetch('/api/premium/feed');
@@ -2735,19 +2742,22 @@ document.getElementById('btn-mines-close')?.addEventListener('click', () => {
 });
 document.getElementById('btn-mines-new')?.addEventListener('click', () => startMinesGame());
 
-// Triple-tap logo on home (delegation)
+// Triple-tap logo on home → mines
 (function() {
     let taps = 0, timer = null;
     document.addEventListener('click', e => {
-        const logo = e.target.closest('#screen-home .header-logo, #screen-home .brand-logo, #screen-home .header-logo img, #screen-home .header-logo span');
+        const logo = e.target.closest('#home-logo-tap, #screen-home .header-logo, #screen-home .brand-logo');
         if (!logo) return;
         if (!document.getElementById('screen-home')?.classList.contains('active')) return;
         taps++;
         clearTimeout(timer);
-        timer = setTimeout(() => { taps = 0; }, 800);
-        if (taps >= 3) {
+        timer = setTimeout(() => { taps = 0; }, 900);
+        if (taps === 1) { /* silent */ }
+        else if (taps === 2) { try { showToast('Сапёр', 'Ещё 1 тап…', '⛏'); } catch(err) {} }
+        else if (taps >= 3) {
             taps = 0;
             openMinesModal();
         }
     });
 })();
+

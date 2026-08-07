@@ -2301,3 +2301,15 @@ body:has(#screen-chat.active) .bottom-nav {
 
 .bottom-nav .nav-btn span { font-size: 9px; }
 .bottom-nav .nav-btn .icon { font-size: 18px; }
+
+.build-badge {
+    font-size: 9px;
+    color: var(--muted);
+    opacity: 0.55;
+    margin-left: auto;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+#nav-premium.nav-premium-locked { opacity: 0.55; }
+#nav-premium.nav-premium-locked .icon { color: #a89bc4; }

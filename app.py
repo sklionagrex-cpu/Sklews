@@ -17,6 +17,8 @@ import secrets
 import re
 
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 # Neon / Postgres if DATABASE_URL is set, otherwise local SQLite
@@ -268,19 +270,23 @@ def premium_active(user):
 def _perf_headers(resp):
     try:
         path = request.path or ''
-        if path.startswith('/static/'):
-            if path.endswith('.js') or path.endswith('.css'):
-                # short cache so UI updates deploy quickly
-                resp.headers['Cache-Control'] = 'public, max-age=60, must-revalidate'
-            elif any(path.endswith(ext) for ext in ('.png', '.jpg', '.jpeg', '.webp', '.svg', '.woff2', '.ico')):
-                resp.headers['Cache-Control'] = 'public, max-age=86400'
-        elif path.startswith('/api/'):
+        if path.startswith('/api/'):
             resp.headers['Cache-Control'] = 'no-store'
-        elif path in ('/', '/auth') or path.endswith('.html'):
-            resp.headers['Cache-Control'] = 'no-store'
+        elif path.startswith('/static/') and (path.endswith('.js') or path.endswith('.css') or 'script' in path or 'style' in path):
+            resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            resp.headers['Pragma'] = 'no-cache'
+        elif path in ('/', '/auth') or path.endswith('.html') or not path.startswith('/static/'):
+            if not path.startswith('/media') and not path.startswith('/uploads'):
+                resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+                resp.headers['Pragma'] = 'no-cache'
     except Exception:
         pass
     return resp
+
+@app.route('/api/version')
+def api_version():
+    return jsonify({'build': '20260807-buildJ', 'features': ['premium-tab', 'mines', 'media-db']})
+
 
 def login_required(f):
     from functools import wraps
