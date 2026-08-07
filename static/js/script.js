@@ -30,6 +30,8 @@ let meIsAdmin = false;
 let meHasPremium = false;
 let meId = null;
 let meUserId = null;
+let meOwnedThemes = [];
+const EXCLUSIVE_THEME_KEYS = ['obsidian_gold', 'aurora_void', 'crimson_neon'];
 
 // Bootstrap premium/admin flags early so Premium tab appears without visiting profile
 (async function bootstrapMe() {
@@ -40,6 +42,7 @@ let meUserId = null;
         meHasPremium = !!p.is_premium;
     if (p.id) meId = p.id;
     if (p.username) window.__meUsername = p.username;
+    if (Array.isArray(p.owned_themes)) { meOwnedThemes = p.owned_themes; loadSavedTheme(); }
         meUserId = p.id;
         meIsAdmin = !!p.is_admin;
         updatePremiumNav();
@@ -1239,6 +1242,7 @@ async function loadProfile() {
     meHasPremium = !!p.is_premium;
     if (p.id) meId = p.id;
     if (p.username) window.__meUsername = p.username;
+    if (Array.isArray(p.owned_themes)) { meOwnedThemes = p.owned_themes; loadSavedTheme(); }
     meUserId = p.id;
     updatePremiumNav();
     const fab = document.getElementById('admin-fab');
@@ -1518,7 +1522,66 @@ document.getElementById('btn-user-channels-list')?.addEventListener('click', asy
 
 document.getElementById('btn-back-user').onclick = () => { if (NAV_STACK.length) navGoBack(); else showScreen('screen-chats', { push: false }); };
 
+
+async function refreshExclusiveShopUI() {
+    try {
+        const res = await fetch('/api/shop/exclusive-themes');
+        const data = await res.json();
+        if (Array.isArray(data.owned_themes)) meOwnedThemes = data.owned_themes;
+        const bal = document.getElementById('shop-balance');
+        if (bal && data.crystals != null) bal.textContent = data.crystals;
+        document.querySelectorAll('.btn-buy-xtheme').forEach(btn => {
+            const key = btn.dataset.theme;
+            if (meOwnedThemes.includes(key)) {
+                btn.textContent = 'Куплено';
+                btn.classList.add('owned');
+                btn.disabled = true;
+            } else {
+                btn.textContent = '500 ✦';
+                btn.classList.remove('owned');
+                btn.disabled = false;
+            }
+        });
+    } catch (e) {}
+}
+
+document.addEventListener('click', async e => {
+    const btn = e.target.closest('.btn-buy-xtheme');
+    if (!btn || btn.disabled) return;
+    const theme = btn.dataset.theme;
+    if (!theme) return;
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/shop/exclusive-theme', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme })
+        });
+        const d = await res.json();
+        if (d.error) {
+            showToast('Магазин', d.error, '!');
+            btn.disabled = false;
+            return;
+        }
+        meOwnedThemes = d.owned_themes || meOwnedThemes;
+        const bal = document.getElementById('shop-balance');
+        if (bal && d.crystals != null) bal.textContent = d.crystals;
+        showToast('Супер-тема', 'Куплено навсегда!', '✦');
+        refreshExclusiveShopUI();
+        // auto-apply
+        if (THEME_PALETTES[theme]) {
+            localStorage.setItem('sklews_theme', theme);
+            applyThemeVars(THEME_PALETTES[theme], theme);
+            _themeDraft = theme;
+        }
+    } catch (err) {
+        showToast('Ошибка', 'Не удалось купить', '!');
+        btn.disabled = false;
+    }
+});
+
 async function loadShop() {
+    refreshExclusiveShopUI();
     await loadProfile();
     const res = await fetch('/api/my_channels');
     const channels = await res.json();
@@ -2487,6 +2550,7 @@ console.log('Sklews build', window.SKLEWS_BUILD || 'unknown');
     meHasPremium = !!p.is_premium;
     if (p.id) meId = p.id;
     if (p.username) window.__meUsername = p.username;
+    if (Array.isArray(p.owned_themes)) { meOwnedThemes = p.owned_themes; loadSavedTheme(); }
     meUserId = p.id;
     updatePremiumNav();
         const fab = document.getElementById('admin-fab');
@@ -2551,12 +2615,31 @@ const THEME_PALETTES = {
     sunset:  { name: 'Закат', bg:'#140c0a', bg2:'#1f140f', card:'#281c15', card2:'#35251c', border:'#4a3426', text:'#fff5ed', muted:'#c4a890', accent:'#f97316', accent2:'#fb923c', accent3:'#fdba74' },
     midnight:{ name: 'Полночь', bg:'#050508', bg2:'#0a0a10', card:'#12121a', card2:'#1a1a24', border:'#282834', text:'#e8e8f0', muted:'#8888a0', accent:'#7c3aed', accent2:'#8b5cf6', accent3:'#a78bfa' },
     sakura:  { name: 'Сакура', bg:'#140e12', bg2:'#1c1418', card:'#261c22', card2:'#32242c', border:'#453038', text:'#fff0f5', muted:'#c4a0b0', accent:'#db2777', accent2:'#ec4899', accent3:'#f9a8d4' },
+    // Super exclusive (paid, permanent)
+    obsidian_gold: {
+        name: 'Obsidian Gold', exclusive: true, price: 500,
+        bg:'#0a0908', bg2:'#12100c', card:'#1c1914', card2:'#262218',
+        border:'#3d3420', text:'#faf6eb', muted:'#a89b78',
+        accent:'#fbbf24', accent2:'#f59e0b', accent3:'#fde68a'
+    },
+    aurora_void: {
+        name: 'Aurora Void', exclusive: true, price: 500,
+        bg:'#05060f', bg2:'#0a0e1c', card:'#101628', card2:'#162036',
+        border:'#1e2a4a', text:'#e8f7ff', muted:'#7a9bb8',
+        accent:'#22d3ee', accent2:'#818cf8', accent3:'#67e8f9'
+    },
+    crimson_neon: {
+        name: 'Crimson Neon', exclusive: true, price: 500,
+        bg:'#0a0408', bg2:'#12060c', card:'#1e0a12', card2:'#2a1018',
+        border:'#4a1528', text:'#fff0f5', muted:'#c48a9c',
+        accent:'#f43f5e', accent2:'#fb7185', accent3:'#fda4af'
+    },
 };
 
 let _themeDraft = null;
 let _fontDraft = 16;
 
-function applyThemeVars(p) {
+function applyThemeVars(p, key) {
     if (!p) return;
     const r = document.documentElement;
     r.style.setProperty('--bg', p.bg);
@@ -2572,6 +2655,14 @@ function applyThemeVars(p) {
     r.style.setProperty('--purple-glow', p.accent + '59');
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute('content', p.accent);
+    // exclusive body effects
+    document.body.classList.forEach(c => {
+        if (c.startsWith('xtheme-')) document.body.classList.remove(c);
+    });
+    const k = key || _themeDraft || localStorage.getItem('sklews_theme');
+    if (k && EXCLUSIVE_THEME_KEYS.includes(k)) {
+        document.body.classList.add('xtheme-' + k);
+    }
 }
 function applyFontSize(px) {
     const n = parseInt(px, 10) || 16;
@@ -2581,9 +2672,12 @@ function applyFontSize(px) {
 }
 function loadSavedTheme() {
     try {
-        const key = localStorage.getItem('sklews_theme') || 'violet';
+        let key = localStorage.getItem('sklews_theme') || 'violet';
         const font = parseInt(localStorage.getItem('sklews_font') || '16', 10);
-        applyThemeVars(THEME_PALETTES[key] || THEME_PALETTES.violet);
+        if (THEME_PALETTES[key] && THEME_PALETTES[key].exclusive && !meOwnedThemes.includes(key)) {
+            key = 'violet';
+        }
+        applyThemeVars(THEME_PALETTES[key] || THEME_PALETTES.violet, key);
         applyFontSize(font);
         _themeDraft = key;
         _fontDraft = font;
@@ -2594,6 +2688,7 @@ function renderThemeGrid() {
     if (!grid) return;
     grid.innerHTML = '';
     Object.entries(THEME_PALETTES).forEach(([key, p]) => {
+        if (p.exclusive) return;
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'theme-swatch' + (key === _themeDraft ? ' active' : '');
@@ -2601,7 +2696,36 @@ function renderThemeGrid() {
         b.innerHTML = '<span>' + p.name + '</span><span class="dots"><i style="background:' + p.accent + '"></i><i style="background:' + p.accent2 + '"></i><i style="background:' + p.card + ';border:1px solid rgba(255,255,255,.3)"></i></span>';
         b.onclick = () => {
             _themeDraft = key;
-            applyThemeVars(p);
+            applyThemeVars(p, key);
+            renderThemeGrid();
+        };
+        grid.appendChild(b);
+    });
+    renderExclusiveThemeGrid();
+}
+function renderExclusiveThemeGrid() {
+    const grid = document.getElementById('theme-exclusive-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    EXCLUSIVE_THEME_KEYS.forEach(key => {
+        const p = THEME_PALETTES[key];
+        if (!p) return;
+        const owned = meOwnedThemes.includes(key);
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'theme-swatch exclusive' + (key === _themeDraft ? ' active' : '') + (owned ? '' : ' locked');
+        b.style.background = 'linear-gradient(135deg, ' + p.bg + ' 0%, ' + p.accent + ' 100%)';
+        b.innerHTML = '<span>' + p.name + '</span>' +
+            (owned ? '' : '<span class="lock-badge"><i class="fa-solid fa-lock"></i></span>') +
+            '<span class="dots"><i style="background:' + p.accent + '"></i><i style="background:' + p.accent2 + '"></i></span>' +
+            (owned ? '' : '<span class="price-badge">500 ✦</span>');
+        b.onclick = () => {
+            if (!owned) {
+                showToast('Супер-тема', 'Купи в Магазине за 500 ✦', '✦');
+                return;
+            }
+            _themeDraft = key;
+            applyThemeVars(p, key);
             renderThemeGrid();
         };
         grid.appendChild(b);
@@ -2637,7 +2761,7 @@ document.addEventListener('click', e => {
     if (e.target.closest('#btn-theme-save')) {
         localStorage.setItem('sklews_theme', _themeDraft || 'violet');
         localStorage.setItem('sklews_font', String(_fontDraft || 16));
-        applyThemeVars(THEME_PALETTES[_themeDraft] || THEME_PALETTES.violet);
+        applyThemeVars(THEME_PALETTES[_themeDraft] || THEME_PALETTES.violet, _themeDraft);
         applyFontSize(_fontDraft);
         const m = document.getElementById('modal-theme');
         if (m) { m.classList.add('hidden'); m.style.display = ''; }
@@ -2646,7 +2770,7 @@ document.addEventListener('click', e => {
     if (e.target.closest('#btn-theme-reset')) {
         _themeDraft = 'violet';
         _fontDraft = 16;
-        applyThemeVars(THEME_PALETTES.violet);
+        applyThemeVars(THEME_PALETTES.violet, 'violet');
         applyFontSize(16);
         renderThemeGrid();
         syncFontButtons();

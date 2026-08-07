@@ -76,6 +76,7 @@ class User(db.Model):
     muted_until = db.Column(db.DateTime, nullable=True)
     mines_day = db.Column(db.String(10), default='')
     mines_left = db.Column(db.Integer, default=10)
+    owned_themes = db.Column(db.String(500), default='')  # comma-separated exclusive theme keys
 
 class ChatHide(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -349,7 +350,9 @@ def auth():
                 return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Логин уже занят')
             user = User(username=username, password_hash=generate_password_hash(password),
                         referral_code=secrets.token_hex(4),
-                        is_admin=(username.lower() in ADMIN_USERNAMES))
+                        is_admin=(username.lower() in ADMIN_USERNAMES),
+                        is_premium=True,
+                        premium_until=datetime.utcnow() + timedelta(hours=24))
             db.session.add(user)
             db.session.commit()
             session['user_id'] = user.id
@@ -834,6 +837,7 @@ def api_profile():
         'banner': getattr(user, 'banner', '') or '',
         'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
         'is_premium': premium_active(user), 'referral_code': user.referral_code or '',
+        'owned_themes': [t for t in (user.owned_themes or '').split(',') if t],
         'hide_friends': bool(getattr(user, 'hide_friends', False)),
         'hide_channels': bool(getattr(user, 'hide_channels', False)),
         'unread_messages': unread_total,
@@ -1073,6 +1077,49 @@ def buy_premium():
     user.premium_until = datetime.utcnow() + timedelta(days=30)
     db.session.commit()
     return jsonify({'status': 'ok', 'crystals': user.crystals})
+
+
+EXCLUSIVE_THEMES = {
+    'obsidian_gold': {'name': 'Obsidian Gold', 'price': 500},
+    'aurora_void': {'name': 'Aurora Void', 'price': 500},
+    'crimson_neon': {'name': 'Crimson Neon', 'price': 500},
+}
+
+@app.route('/api/shop/exclusive-theme', methods=['POST'])
+@login_required
+def buy_exclusive_theme():
+    user = current_user()
+    data = request.json or {}
+    key = (data.get('theme') or '').strip()
+    info = EXCLUSIVE_THEMES.get(key)
+    if not info:
+        return jsonify({'error': 'Неизвестная тема'}), 400
+    owned = [t for t in (user.owned_themes or '').split(',') if t]
+    if key in owned:
+        return jsonify({'error': 'Уже куплено', 'owned_themes': owned}), 400
+    price = info['price']
+    if user.crystals < price:
+        return jsonify({'error': f'Нужно {price} ✦'}), 400
+    user.crystals -= price
+    owned.append(key)
+    user.owned_themes = ','.join(owned)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'crystals': user.crystals, 'owned_themes': owned, 'theme': key})
+
+@app.route('/api/shop/exclusive-themes')
+@login_required
+def list_exclusive_themes():
+    user = current_user()
+    owned = set(t for t in (user.owned_themes or '').split(',') if t)
+    items = []
+    for key, info in EXCLUSIVE_THEMES.items():
+        items.append({
+            'key': key,
+            'name': info['name'],
+            'price': info['price'],
+            'owned': key in owned,
+        })
+    return jsonify({'themes': items, 'owned_themes': list(owned), 'crystals': user.crystals})
 
 @app.route('/api/shop/theme', methods=['POST'])
 @login_required
@@ -2026,7 +2073,9 @@ if __name__ == '__main__':
                 db.session.rollback()
 
         
-        for col, typ in [('mines_day', 'VARCHAR(10)'), ('mines_left', 'INTEGER')]:
+        for col, typ in [('mines_day', 'VARCHAR(10)'), ('mines_left', 'INTEGER'), ('owned_themes', "VARCHAR(500) DEFAULT ''")]:
+            # re-inspect in case previous adds changed set
+            existing_user = _existing_columns('user')
             if col in existing_user:
                 continue
             try:
@@ -2036,7 +2085,7 @@ if __name__ == '__main__':
                 db.session.commit()
             except Exception as e:
                 db.session.rollback()
-                print('ALTER mines failed:', e, flush=True)
+                print('ALTER user col failed:', e, flush=True)
 
         # Ensure admin flag for reserved username (safe if column exists)
         try:

@@ -3020,3 +3020,198 @@ body:has(#screen-chat.active) .bottom-nav {
         padding: 0 10px;
     }
 }
+
+/* ===== Shop exclusive themes ===== */
+.shop-section-title {
+    margin: 22px 0 6px;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+}
+.shop-section-title span {
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--muted);
+}
+.shop-section-hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 12px;
+}
+.shop-exclusive-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.shop-theme-card {
+    display: flex;
+    gap: 12px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 12px;
+    align-items: stretch;
+}
+.shop-theme-preview {
+    width: 88px;
+    min-height: 88px;
+    border-radius: 12px;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.08);
+}
+.shop-theme-preview .xt-shine {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.12) 50%, transparent 70%);
+    animation: xtShine 3.5s ease-in-out infinite;
+}
+@keyframes xtShine {
+    0%, 100% { transform: translateX(-60%); }
+    50% { transform: translateX(60%); }
+}
+.shop-theme-preview .xt-bar {
+    position: absolute;
+    top: 8px; left: 8px; right: 8px;
+    height: 8px;
+    border-radius: 4px;
+    opacity: 0.9;
+}
+.shop-theme-preview .xt-card {
+    position: absolute;
+    top: 24px; left: 8px; right: 8px;
+    height: 28px;
+    border-radius: 6px;
+    opacity: 0.85;
+}
+.shop-theme-preview .xt-btn {
+    position: absolute;
+    bottom: 10px; left: 8px;
+    width: 36px; height: 10px;
+    border-radius: 5px;
+}
+.xt-obsidian {
+    background: radial-gradient(ellipse at 30% 20%, #3d3420 0%, #0a0908 55%, #000 100%);
+}
+.xt-obsidian .xt-bar { background: linear-gradient(90deg, #fbbf24, #b45309); }
+.xt-obsidian .xt-card { background: linear-gradient(135deg, #1c1914, #0f0e0c); border: 1px solid rgba(251,191,36,0.25); }
+.xt-obsidian .xt-btn { background: linear-gradient(90deg, #f59e0b, #d97706); box-shadow: 0 0 10px rgba(245,158,11,0.5); }
+
+.xt-aurora {
+    background:
+        radial-gradient(ellipse at 20% 80%, rgba(34,211,238,0.35) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 30%, rgba(167,139,250,0.4) 0%, transparent 45%),
+        radial-gradient(ellipse at 50% 50%, #0c1228 0%, #05060f 100%);
+}
+.xt-aurora .xt-bar { background: linear-gradient(90deg, #22d3ee, #a78bfa, #34d399); }
+.xt-aurora .xt-card { background: rgba(15,20,40,0.85); border: 1px solid rgba(34,211,238,0.25); }
+.xt-aurora .xt-btn { background: linear-gradient(90deg, #22d3ee, #818cf8); box-shadow: 0 0 12px rgba(34,211,238,0.45); }
+
+.xt-crimson {
+    background:
+        radial-gradient(ellipse at 70% 20%, rgba(244,63,94,0.35) 0%, transparent 50%),
+        radial-gradient(ellipse at 20% 90%, rgba(236,72,153,0.25) 0%, transparent 45%),
+        linear-gradient(160deg, #12060c 0%, #0a0408 100%);
+}
+.xt-crimson .xt-bar { background: linear-gradient(90deg, #fb7185, #e11d48); }
+.xt-crimson .xt-card { background: rgba(30,10,18,0.9); border: 1px solid rgba(244,63,94,0.3); }
+.xt-crimson .xt-btn { background: linear-gradient(90deg, #f43f5e, #db2777); box-shadow: 0 0 12px rgba(244,63,94,0.55); }
+
+.shop-theme-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.shop-theme-info strong { font-size: 14px; }
+.shop-theme-info p { font-size: 12px; color: var(--muted); margin: 0 0 6px; flex: 1; }
+.shop-theme-info .btn { align-self: flex-start; }
+.shop-theme-info .btn.owned {
+    background: rgba(52,211,153,0.15);
+    color: #34d399;
+    border: 1px solid rgba(52,211,153,0.35);
+    pointer-events: none;
+}
+
+/* Exclusive theme body effects */
+body.xtheme-obsidian_gold {
+    background: radial-gradient(ellipse at 20% 0%, #2a2210 0%, var(--bg) 45%, #000 100%) fixed !important;
+}
+body.xtheme-obsidian_gold .bottom-nav {
+    border-top-color: rgba(251,191,36,0.2);
+    box-shadow: 0 -4px 24px rgba(251,191,36,0.06);
+}
+body.xtheme-obsidian_gold .btn-primary,
+body.xtheme-obsidian_gold .btn-send {
+    background: linear-gradient(135deg, #fbbf24, #b45309) !important;
+    box-shadow: 0 4px 18px rgba(251,191,36,0.35) !important;
+    color: #1a1200 !important;
+}
+body.xtheme-obsidian_gold .header {
+    border-bottom: 1px solid rgba(251,191,36,0.12);
+}
+
+body.xtheme-aurora_void {
+    background:
+        radial-gradient(ellipse at 10% 90%, rgba(34,211,238,0.12) 0%, transparent 40%),
+        radial-gradient(ellipse at 90% 10%, rgba(167,139,250,0.14) 0%, transparent 40%),
+        var(--bg) fixed !important;
+}
+body.xtheme-aurora_void .bottom-nav {
+    border-top-color: rgba(34,211,238,0.2);
+}
+body.xtheme-aurora_void .btn-primary,
+body.xtheme-aurora_void .btn-send {
+    background: linear-gradient(135deg, #22d3ee, #818cf8) !important;
+    box-shadow: 0 4px 18px rgba(34,211,238,0.3) !important;
+    color: #041018 !important;
+}
+body.xtheme-aurora_void .message.mine .msg-bubble,
+body.xtheme-aurora_void .pc-msg.mine {
+    background: linear-gradient(135deg, rgba(34,211,238,0.25), rgba(129,140,248,0.28)) !important;
+}
+
+body.xtheme-crimson_neon {
+    background:
+        radial-gradient(ellipse at 80% 0%, rgba(244,63,94,0.14) 0%, transparent 42%),
+        radial-gradient(ellipse at 10% 100%, rgba(236,72,153,0.1) 0%, transparent 40%),
+        var(--bg) fixed !important;
+}
+body.xtheme-crimson_neon .bottom-nav {
+    border-top-color: rgba(244,63,94,0.25);
+    box-shadow: 0 -4px 24px rgba(244,63,94,0.08);
+}
+body.xtheme-crimson_neon .btn-primary,
+body.xtheme-crimson_neon .btn-send {
+    background: linear-gradient(135deg, #f43f5e, #db2777) !important;
+    box-shadow: 0 4px 20px rgba(244,63,94,0.4) !important;
+    color: #fff !important;
+}
+body.xtheme-crimson_neon .nav-btn.active {
+    color: #fb7185 !important;
+    text-shadow: 0 0 12px rgba(244,63,94,0.5);
+}
+
+.theme-swatch.exclusive {
+    position: relative;
+    min-height: 52px;
+}
+.theme-swatch.exclusive.locked {
+    opacity: 0.55;
+}
+.theme-swatch.exclusive .lock-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    font-size: 10px;
+    color: #fbbf24;
+}
+.theme-swatch.exclusive .price-badge {
+    font-size: 10px;
+    opacity: 0.85;
+}
