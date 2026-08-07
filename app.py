@@ -450,8 +450,8 @@ def support_channel(channel_id):
 def delete_channel(channel_id):
     user = current_user()
     ch = Channel.query.get_or_404(channel_id)
-    if ch.owner_id != user.id:
-        return jsonify({'error': 'Только владелец'}), 403
+    if ch.owner_id != user.id and not is_admin_user(user):
+        return jsonify({'error': 'Только владелец или админ'}), 403
     posts = Post.query.filter_by(channel_id=channel_id).all()
     post_ids = [p.id for p in posts]
     if post_ids:

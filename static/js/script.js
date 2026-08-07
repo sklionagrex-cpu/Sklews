@@ -187,7 +187,35 @@ async function loadChannels() {
             const badge = ch.label ? '<span class="boost-label">' + ch.label + '</span>' : '';
             card.innerHTML = avatarHtml(ch.name, ch.avatar) +
                 '<div class="channel-info"><h3>' + escapeHtml(ch.name) + ' ' + badge + '</h3><p>' + ch.subscribers + ' участников</p></div>';
-            card.onclick = () => openChannel(ch.id);
+            let longPressed = false;
+            card.onclick = () => {
+                if (longPressed) { longPressed = false; return; }
+                openChannel(ch.id);
+            };
+            // Admin: long-press to delete any channel
+            if (meIsAdmin) {
+                let t = null;
+                const start = () => {
+                    longPressed = false;
+                    t = setTimeout(() => {
+                        longPressed = true;
+                        window._deleteChannelId = ch.id;
+                        window._deleteChannelName = ch.name;
+                        const title = document.querySelector('#modal-delete-channel h3');
+                        if (title) title.textContent = 'Удалить канал?';
+                        const p = document.querySelector('#modal-delete-channel p');
+                        if (p) p.textContent = '«' + ch.name + '» — все посты и подписки будут удалены безвозвратно';
+                        document.getElementById('modal-delete-channel').classList.remove('hidden');
+                    }, 550);
+                };
+                const cancel = () => clearTimeout(t);
+                card.addEventListener('touchstart', start, { passive: true });
+                card.addEventListener('touchend', cancel);
+                card.addEventListener('touchmove', cancel);
+                card.addEventListener('mousedown', start);
+                card.addEventListener('mouseup', cancel);
+                card.addEventListener('mouseleave', cancel);
+            }
             feed.appendChild(card);
         });
     } catch (e) { console.error(e); }
@@ -787,8 +815,15 @@ document.getElementById('btn-confirm-delete-channel')?.addEventListener('click',
     const res = await fetch('/api/channel/' + id + '/delete', { method: 'POST' });
     const d = await res.json();
     if (d.error) showToast('Ошибка', d.error, '!');
-    else { showToast('Канал', 'Удалён', '✓'); loadMyChannels(); loadProfile(); }
+    else {
+        showToast('Канал', 'Удалён', '✓');
+        loadMyChannels();
+        loadProfile();
+        loadHome();
+        loadMySubs();
+    }
     window._deleteChannelId = null;
+    window._deleteChannelName = null;
 });
 
 async function loadProfile() {
