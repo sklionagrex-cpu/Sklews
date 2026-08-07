@@ -1083,6 +1083,9 @@ EXCLUSIVE_THEMES = {
     'obsidian_gold': {'name': 'Obsidian Gold', 'price': 500},
     'aurora_void': {'name': 'Aurora Void', 'price': 500},
     'crimson_neon': {'name': 'Crimson Neon', 'price': 500},
+    'honey_ember': {'name': 'Honey Ember', 'price': 750},
+    'terracotta_dusk': {'name': 'Terracotta Dusk', 'price': 750},
+    'cashmere_haze': {'name': 'Cashmere Haze', 'price': 750},
 }
 
 @app.route('/api/shop/exclusive-theme', methods=['POST'])

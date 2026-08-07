@@ -31,7 +31,7 @@ let meHasPremium = false;
 let meId = null;
 let meUserId = null;
 let meOwnedThemes = [];
-const EXCLUSIVE_THEME_KEYS = ['obsidian_gold', 'aurora_void', 'crimson_neon'];
+const EXCLUSIVE_THEME_KEYS = ['obsidian_gold', 'aurora_void', 'crimson_neon', 'honey_ember', 'terracotta_dusk', 'cashmere_haze'];
 
 // Bootstrap premium/admin flags early so Premium tab appears without visiting profile
 (async function bootstrapMe() {
@@ -1537,7 +1537,8 @@ async function refreshExclusiveShopUI() {
                 btn.classList.add('owned');
                 btn.disabled = true;
             } else {
-                btn.textContent = '500 ✦';
+                const price = btn.dataset.price || (THEME_PALETTES[key] && THEME_PALETTES[key].price) || 500;
+                btn.textContent = price + ' ✦';
                 btn.classList.remove('owned');
                 btn.disabled = false;
             }
@@ -2634,6 +2635,24 @@ const THEME_PALETTES = {
         border:'#4a1528', text:'#fff0f5', muted:'#c48a9c',
         accent:'#f43f5e', accent2:'#fb7185', accent3:'#fda4af'
     },
+    honey_ember: {
+        name: 'Honey Ember', exclusive: true, price: 750,
+        bg:'#14100a', bg2:'#1c160e', card:'#261e14', card2:'#322818',
+        border:'#4a3a22', text:'#faf3e4', muted:'#b8a88a',
+        accent:'#e8a54b', accent2:'#d4893a', accent3:'#f0c57a'
+    },
+    terracotta_dusk: {
+        name: 'Terracotta Dusk', exclusive: true, price: 750,
+        bg:'#16100e', bg2:'#1e1512', card:'#2a1c18', card2:'#362420',
+        border:'#4a322c', text:'#faf0ea', muted:'#b89888',
+        accent:'#c4785a', accent2:'#d4926e', accent3:'#e8b498'
+    },
+    cashmere_haze: {
+        name: 'Cashmere Haze', exclusive: true, price: 750,
+        bg:'#141214', bg2:'#1c181c', card:'#282024', card2:'#342a2e',
+        border:'#4a3c42', text:'#faf4f6', muted:'#b8a0a8',
+        accent:'#c9a0a8', accent2:'#d4b0b6', accent3:'#e8cdd2'
+    },
 };
 
 let _themeDraft = null;
@@ -2718,10 +2737,10 @@ function renderExclusiveThemeGrid() {
         b.innerHTML = '<span>' + p.name + '</span>' +
             (owned ? '' : '<span class="lock-badge"><i class="fa-solid fa-lock"></i></span>') +
             '<span class="dots"><i style="background:' + p.accent + '"></i><i style="background:' + p.accent2 + '"></i></span>' +
-            (owned ? '' : '<span class="price-badge">500 ✦</span>');
+            (owned ? '' : '<span class="price-badge">' + (p.price || 500) + ' ✦</span>');
         b.onclick = () => {
             if (!owned) {
-                showToast('Супер-тема', 'Купи в Магазине за 500 ✦', '✦');
+                showToast('Супер-тема', 'Купи в Магазине за ' + (p.price || 500) + ' ✦', '✦');
                 return;
             }
             _themeDraft = key;
