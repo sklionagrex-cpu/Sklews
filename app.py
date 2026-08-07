@@ -20,8 +20,10 @@ from urllib.request import Request, urlopen
 import html as html_lib
 
 app = Flask(__name__)
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-app.config['TEMPLATES_AUTO_RELOAD'] = True
+_IS_PROD = bool(os.environ.get('DATABASE_URL') or os.environ.get('RENDER') or os.environ.get('PORT'))
+# Static: long cache in prod (URL has cache_bust query on HTML)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 604800 if _IS_PROD else 0
+app.config['TEMPLATES_AUTO_RELOAD'] = not _IS_PROD
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 # Neon / Postgres if DATABASE_URL is set, otherwise local SQLite
@@ -30,9 +32,42 @@ if _db_url.startswith('postgres://'):
     _db_url = _db_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = _db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Connection pool — fewer round-trips / reconnect storms on Neon
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_pre_ping': True,
+    'pool_recycle': 280,
+    'pool_size': 5,
+    'max_overflow': 10,
+} if _db_url.startswith('postgresql') else {
+    'pool_pre_ping': True,
+}
 
 db = SQLAlchemy(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
+# Cache-bust for static assets (changes only on process restart / deploy)
+BUILD_ID = os.environ.get('RENDER_GIT_COMMIT') or os.environ.get('BUILD_ID') or str(int(os.path.getmtime(__file__)))
+
+
+# eventlet is flaky on Python 3.12+; keep threading (stable on Render 3.13)
+import sys as _sys
+_async_mode = 'threading'
+if _sys.version_info < (3, 12):
+    try:
+        import eventlet  # noqa: F401
+        _async_mode = 'eventlet'
+    except Exception:
+        pass
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode=_async_mode,
+    ping_timeout=60,
+    ping_interval=25,
+    logger=False,
+    engineio_logger=False,
+    # reduce transport upgrade churn on mobile
+    cors_credentials=True,
+)
 
 # ---- simple in-memory TTL cache (per-process) ----
 _cache = {}
@@ -216,19 +251,16 @@ class MediaFile(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 def current_user():
+    """Request-scoped user lookup (one DB hit per request max)."""
+    from flask import g
+    if hasattr(g, '_current_user'):
+        return g._current_user
+    u = None
     if 'user_id' in session:
         u = User.query.get(session['user_id'])
-        if u:
-            try:
-                # throttle last_seen writes: at most once per 60s
-                now = datetime.utcnow()
-                if not u.last_seen or (now - u.last_seen).total_seconds() > 60:
-                    u.last_seen = now
-                    db.session.commit()
-            except Exception:
-                db.session.rollback()
-        return u
-    return None
+    g._current_user = u
+    return u
+
 
 def format_last_seen(dt):
     if not dt:
@@ -329,15 +361,35 @@ def channel_plus_payload(ch):
 def _perf_headers(resp):
     try:
         path = request.path or ''
+        # API — never cache
         if path.startswith('/api/'):
             resp.headers['Cache-Control'] = 'no-store'
-        elif path.startswith('/static/') and (path.endswith('.js') or path.endswith('.css') or 'script' in path or 'style' in path):
-            resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-            resp.headers['Pragma'] = 'no-cache'
-        elif path in ('/', '/auth') or path.endswith('.html') or not path.startswith('/static/'):
-            if not path.startswith('/media') and not path.startswith('/uploads'):
-                resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-                resp.headers['Pragma'] = 'no-cache'
+        # Versioned static assets — long cache (HTML uses ?v=cache_bust)
+        elif path.startswith('/static/'):
+            resp.headers['Cache-Control'] = 'public, max-age=604800, immutable'
+        # Media blobs — already set in handler, reinforce
+        elif path.startswith('/media/') or path.startswith('/uploads/'):
+            if 'Cache-Control' not in resp.headers:
+                resp.headers['Cache-Control'] = 'public, max-age=604800'
+        # HTML shells — short cache so deploys show up quickly
+        elif path in ('/', '/auth') or path.endswith('.html'):
+            resp.headers['Cache-Control'] = 'no-cache'
+        # Lightweight compression for text responses (when not already encoded)
+        if resp.direct_passthrough is False and 'Content-Encoding' not in resp.headers:
+            accept = (request.headers.get('Accept-Encoding') or '')
+            ctype = (resp.headers.get('Content-Type') or '')
+            compressible = any(x in ctype for x in ('text/', 'javascript', 'json', 'css', 'svg'))
+            if 'gzip' in accept and compressible and resp.status_code == 200:
+                data = resp.get_data()
+                if data and 500 < len(data) < 2_000_000:
+                    import gzip
+                    compressed = gzip.compress(data, compresslevel=5)
+                    if len(compressed) < len(data):
+                        resp.set_data(compressed)
+                        resp.headers['Content-Encoding'] = 'gzip'
+                        resp.headers['Content-Length'] = str(len(compressed))
+                        vary = resp.headers.get('Vary', '')
+                        resp.headers['Vary'] = (vary + ', Accept-Encoding').strip(', ')
     except Exception:
         pass
     return resp
@@ -380,7 +432,7 @@ def index():
     user = current_user()
     if not user:
         return redirect(url_for('auth'))
-    return render_template('index.html', user=user, cache_bust=int(__import__('time').time()))
+    return render_template('index.html', user=user, cache_bust=BUILD_ID)
 
 @app.route('/auth', methods=['GET', 'POST'])
 def auth():
@@ -391,14 +443,14 @@ def auth():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         if not username or not password:
-            return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Заполните все поля')
+            return render_template('auth.html', cache_bust=BUILD_ID, error='Заполните все поля')
         if action == 'register':
             if has_emoji(username):
-                return render_template('auth.html', cache_bust=int(__import__('time').time()), error='В нике нельзя использовать эмодзи')
+                return render_template('auth.html', cache_bust=BUILD_ID, error='В нике нельзя использовать эмодзи')
             if len(username) < 3 or len(username) > 24:
-                return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Ник от 3 до 24 символов')
+                return render_template('auth.html', cache_bust=BUILD_ID, error='Ник от 3 до 24 символов')
             if User.query.filter_by(username=username).first():
-                return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Логин уже занят')
+                return render_template('auth.html', cache_bust=BUILD_ID, error='Логин уже занят')
             user = User(username=username, password_hash=generate_password_hash(password),
                         referral_code=secrets.token_hex(4),
                         is_admin=(username.lower() in ADMIN_USERNAMES),
@@ -413,8 +465,8 @@ def auth():
             if user and check_password_hash(user.password_hash, password):
                 session['user_id'] = user.id
                 return redirect(url_for('index'))
-            return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Неверный логин или пароль')
-    return render_template('auth.html', cache_bust=int(__import__('time').time()))
+            return render_template('auth.html', cache_bust=BUILD_ID, error='Неверный логин или пароль')
+    return render_template('auth.html', cache_bust=BUILD_ID)
 
 @app.route('/logout')
 def logout():
@@ -478,7 +530,7 @@ def api_channels():
     ).filter(Post.created_at >= cutoff).group_by(Post.channel_id).all()
     stats_map = {row.channel_id: (row.rp, int(row.rl or 0)) for row in stats}
 
-    channels = Channel.query.all()
+    channels = Channel.query.order_by(Channel.id.desc()).limit(500).all()
     scored = []
     for ch in channels:
         if ch.owner_id == me.id or ch.id in sub_ids:
@@ -504,7 +556,7 @@ def api_channels():
             'accent': ch.accent_color or '#8b5cf6',
         **channel_plus_payload(ch),
         })
-    cache_set(ckey, result, ttl=25)
+    cache_set(ckey, result, ttl=45)
     return jsonify(result)
 
 @app.route('/api/my_subscriptions')
@@ -1987,12 +2039,14 @@ def serve_media_db(media_id):
         if os.path.isfile(path):
             return send_from_directory(UPLOAD_FOLDER, media_id, max_age=86400)
         return jsonify({'error': 'not found'}), 404
+    size = media.size or (len(media.data) if media.data else 0)
     return Response(
         media.data,
         mimetype=media.content_type or 'application/octet-stream',
         headers={
-            'Cache-Control': 'public, max-age=604800',
-            'Content-Length': str(media.size or len(media.data)),
+            'Cache-Control': 'public, max-age=604800, immutable',
+            'Content-Length': str(size),
+            'Accept-Ranges': 'bytes',
         },
     )
 
