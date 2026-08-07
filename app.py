@@ -1387,8 +1387,9 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXT
 
 @app.route('/uploads/<path:filename>')
+@app.route('/static/uploads/<path:filename>')
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+    return send_from_directory(UPLOAD_FOLDER, filename, max_age=86400)
 
 @app.route('/api/upload', methods=['POST'])
 @login_required
@@ -1399,10 +1400,12 @@ def upload_file():
     if not f or not f.filename:
         return jsonify({'error': 'Пустой файл'}), 400
     if not allowed_file(f.filename):
-        return jsonify({'error': 'Только изображения'}), 400
+        return jsonify({'error': 'Неподдерживаемый формат файла'}), 400
     ext = f.filename.rsplit('.', 1)[1].lower()
     name = f"{uuid.uuid4().hex}.{ext}"
-    f.save(os.path.join(UPLOAD_FOLDER, name))
+    path = os.path.join(UPLOAD_FOLDER, name)
+    f.save(path)
+    # also keep under static path for clients that expect /static/uploads
     return jsonify({'url': f"/uploads/{name}"})
 
 @app.route('/api/profile/avatar', methods=['POST'])

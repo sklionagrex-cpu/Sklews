@@ -80,10 +80,38 @@ function showToast(title, text, icon) {
 }
 document.getElementById('btn-toast-ok').onclick = () => document.getElementById('modal-toast').classList.add('hidden');
 
+
+function setAvatarEl(el, url, letter) {
+    if (!el) return;
+    const L = ((letter || '?')[0] || '?').toUpperCase();
+    el.style.backgroundImage = '';
+    el.textContent = '';
+    el.querySelectorAll('img').forEach(i => i.remove());
+    if (url) {
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = '';
+        img.loading = 'lazy';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit';
+        img.onerror = () => { img.remove(); el.textContent = L; };
+        el.appendChild(img);
+    } else {
+        el.textContent = L;
+    }
+}
+
 function avatarHtml(letter, url, cls) {
     const c = cls || 'avatar';
-    if (url) return `<div class="${c}" style="background-image:url(${url});background-size:cover;background-position:center"></div>`;
-    return `<div class="${c}">${(letter||'?')[0].toUpperCase()}</div>`;
+    const L = ((letter || '?')[0] || '?').toUpperCase();
+    if (url) {
+        const safe = String(url).replace(/"/g, '');
+        return `<div class="${c}" style="overflow:hidden;position:relative">` +
+            `<img src="${safe}" alt="" loading="lazy" decoding="async" ` +
+            `style="width:100%;height:100%;object-fit:cover;display:block" ` +
+            `onerror="this.style.display='none';this.parentNode.textContent='${L}';this.parentNode.style.display='flex';this.parentNode.style.alignItems='center';this.parentNode.style.justifyContent='center'">` +
+            `</div>`;
+    }
+    return `<div class="${c}">${L}</div>`;
 }
 
 function escapeHtml(t) {
@@ -952,15 +980,7 @@ async function loadProfile() {
     document.getElementById('profile-status').textContent = p.status || 'Статус не указан';
     document.getElementById('profile-crystals').textContent = p.crystals;
     document.getElementById('profile-friends').textContent = p.hide_friends ? '•' : p.friends;
-    const av = document.getElementById('profile-avatar');
-    if (p.avatar) {
-        av.style.backgroundImage = 'url(' + p.avatar + ')';
-        av.style.backgroundSize = 'cover';
-        av.textContent = '';
-    } else {
-        av.style.backgroundImage = '';
-        av.textContent = p.username[0].toUpperCase();
-    }
+    setAvatarEl(document.getElementById('profile-avatar'), p.avatar, p.username);
     const banner = document.getElementById('profile-banner');
     if (banner) {
         if (p.banner) {
@@ -1137,12 +1157,9 @@ async function openUserProfile(userId) {
     document.getElementById('user-channels').textContent = u.channels_count === null ? '•' : (u.channels_count ?? 0);
     const av = document.getElementById('user-avatar');
     if (u.avatar) {
-        av.style.backgroundImage = 'url(' + u.avatar + ')';
-        av.style.backgroundSize = 'cover';
-        av.textContent = '';
+        setAvatarEl(av, u.avatar, u.username);
     } else {
-        av.style.backgroundImage = '';
-        av.textContent = u.username[0].toUpperCase();
+        setAvatarEl(av, null, u.username);
     }
     const banner = document.getElementById('user-banner');
     if (banner) {
@@ -1349,7 +1366,7 @@ async function openComments(postId) {
     list.innerHTML = comments.length ? '' : '<div class="empty-state">Нет комментариев</div>';
     comments.forEach(c => {
         const av = c.avatar
-            ? '<div class="avatar comment-av" style="background-image:url(' + c.avatar + ');background-size:cover;background-position:center"></div>'
+            ? avatarHtml(c.username, c.avatar, 'avatar comment-av')
             : '<div class="avatar comment-av">' + (c.username ? c.username[0].toUpperCase() : '?') + '</div>';
         let media = '';
         if (c.media_url && c.media_type === 'photo') {
@@ -1645,14 +1662,14 @@ function formatMessage(content, isSuper) {
     else if (body.startsWith('[video]')) body = '<video src="' + body.slice(7) + '" controls playsinline style="max-width:220px;border-radius:12px"></video>';
     else if (body.startsWith('[voice]')) {
         const src = body.slice(7);
-        const bars = Array.from({length:18}, (_,i) => {
-            const h = 6 + ((i * 11) % 20);
-            return '<i style="display:inline-block;width:3px;height:' + h + 'px;margin:0 1px;border-radius:2px;background:rgba(255,255,255,0.85);vertical-align:middle"></i>';
+        const bars = Array.from({length:12}, (_,i) => {
+            const h = 5 + ((i * 9) % 14);
+            return '<i style="display:inline-block;width:2px;height:' + h + 'px;margin:0 1px;border-radius:1px;background:rgba(255,255,255,0.8);vertical-align:middle"></i>';
         }).join('');
-        body = '<div class="voice-msg" data-src="' + src + '" style="display:flex;align-items:center;gap:10px;min-width:200px;padding:4px 0">' +
-            '<button type="button" class="voice-msg-play" style="width:40px;height:40px;border-radius:50%;border:none;background:rgba(0,0,0,0.25);color:#fff;flex-shrink:0;cursor:pointer;font-size:14px"><i class="fa-solid fa-play"></i></button>' +
-            '<div class="voice-msg-wave" style="flex:1;display:flex;align-items:center;height:32px">' + bars + '</div>' +
-            '<span class="voice-msg-dur" style="font-size:12px;opacity:0.9;min-width:36px">🎙</span>' +
+        body = '<div class="voice-msg" data-src="' + src + '" style="display:flex;align-items:center;gap:8px;min-width:140px;max-width:180px;padding:2px 0">' +
+            '<button type="button" class="voice-msg-play" style="width:28px;height:28px;border-radius:50%;border:none;background:rgba(0,0,0,0.28);color:#fff;flex-shrink:0;cursor:pointer;font-size:11px"><i class="fa-solid fa-play"></i></button>' +
+            '<div class="voice-msg-wave" style="flex:1;display:flex;align-items:center;height:22px">' + bars + '</div>' +
+            '<span class="voice-msg-dur" style="font-size:11px;opacity:0.9;min-width:28px">🎙</span>' +
             '<audio preload="metadata" src="' + src + '" style="display:none"></audio></div>';
     }
     else body = linkifyMentions(body);
@@ -1940,48 +1957,82 @@ document.getElementById('btn-circle-cancel')?.addEventListener('click', () => {
 });
 document.getElementById('btn-circle-flip')?.addEventListener('click', async () => {
     const nextFacing = circleFacing === 'user' ? 'environment' : 'user';
-    try {
-        // Prefer swapping only the video track so MediaRecorder keeps going
-        const newVideoStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: nextFacing }, width: { ideal: 720 }, height: { ideal: 720 } },
-            audio: false
-        });
-        const newTrack = newVideoStream.getVideoTracks()[0];
-        if (!newTrack) throw new Error('no video');
-        circleFacing = nextFacing;
+    const wasRecording = circleRecorder && circleRecorder.state === 'recording';
+    const savedOnStop = wasRecording ? circleRecorder.onstop : null;
+    const savedSecs = circleSecs;
 
-        if (circleStream) {
-            const oldTrack = circleStream.getVideoTracks()[0];
-            if (oldTrack) {
-                try {
-                    // replaceTrack on sender isn't available; mutate MediaStream
-                    circleStream.removeTrack(oldTrack);
-                    oldTrack.stop();
-                } catch (e) {}
-            }
-            circleStream.addTrack(newTrack);
-        } else {
-            circleStream = newVideoStream;
+    // Stop recorder without finishing upload
+    if (wasRecording) {
+        try {
+            circleRecorder.onstop = null;
+            if (circleRecorder.state === 'recording') circleRecorder.stop();
+        } catch (e) {}
+    }
+
+    // Fully release old camera (required on mobile before opening the other)
+    if (circleStream) {
+        try { circleStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+        circleStream = null;
+    }
+    const preview = document.getElementById('circle-preview');
+    if (preview) preview.srcObject = null;
+
+    try {
+        let stream = null;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { exact: nextFacing }, width: { ideal: 720 }, height: { ideal: 720 } },
+                audio: true
+            });
+        } catch (e1) {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: nextFacing }, width: { ideal: 480 }, height: { ideal: 480 } },
+                audio: true
+            });
         }
-        const preview = document.getElementById('circle-preview');
+        circleStream = stream;
+        circleFacing = nextFacing;
         if (preview) {
-            preview.srcObject = null;
             preview.srcObject = circleStream;
+            preview.muted = true;
             try { await preview.play(); } catch (e) {}
         }
-        // If recorder died after track swap (some browsers), soft-restart recorder only
-        if (circleRecorder && circleRecorder.state !== 'recording' && circleStream) {
+
+        if (wasRecording && circleStream) {
             const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' :
-                         MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
-            const prevOnStop = circleRecorder.onstop;
+                         MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' :
+                         MediaRecorder.isTypeSupported('video/mp4') ? 'video/mp4' : '';
             circleRecorder = new MediaRecorder(circleStream, mime ? { mimeType: mime } : undefined);
             circleRecorder.ondataavailable = e => { if (e.data && e.data.size) circleChunks.push(e.data); };
-            circleRecorder.onstop = prevOnStop;
-            try { circleRecorder.start(200); } catch (e) {}
+            circleRecorder.onstop = savedOnStop;
+            circleRecorder.start(200);
+            circleSecs = savedSecs;
         }
     } catch (err) {
         console.warn('flip camera', err);
-        showToast('Ошибка', 'Не удалось переключить камеру', '!');
+        showToast('Камера', 'Не удалось переключить. На эмуляторе/ПК часто только одна камера.', '!');
+        // try restore previous facing
+        try {
+            circleStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: circleFacing } },
+                audio: true
+            });
+            if (preview) {
+                preview.srcObject = circleStream;
+                try { await preview.play(); } catch (e) {}
+            }
+            if (wasRecording && circleStream) {
+                const mime = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+                circleRecorder = new MediaRecorder(circleStream, mime ? { mimeType: mime } : undefined);
+                circleRecorder.ondataavailable = e => { if (e.data && e.data.size) circleChunks.push(e.data); };
+                circleRecorder.onstop = savedOnStop;
+                circleRecorder.start(200);
+                circleSecs = savedSecs;
+            }
+        } catch (e2) {
+            showToast('Ошибка', 'Камера недоступна', '!');
+            document.getElementById('circle-recorder')?.classList.add('hidden');
+        }
     }
 });
 document.getElementById('circle-preview')?.addEventListener('click', stopCircle);
@@ -2225,7 +2276,10 @@ function applyThemeVars(p) {
     if (meta) meta.setAttribute('content', p.accent);
 }
 function applyFontSize(px) {
-    document.documentElement.style.fontSize = px + 'px';
+    const n = parseInt(px, 10) || 16;
+    document.documentElement.style.setProperty('--app-font', n + 'px');
+    document.documentElement.style.setProperty('--msg-font', Math.max(13, n - 1.5) + 'px');
+    document.body.style.fontSize = n + 'px';
 }
 function loadSavedTheme() {
     try {
