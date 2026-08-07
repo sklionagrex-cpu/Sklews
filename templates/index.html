@@ -123,6 +123,13 @@ window.SKLEWS_BUILD = '20260807m';
                 <div class="shop-item"><div><strong>Серебряный буст</strong><p>24 часа · Топ-10</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="silver">350 ✦</button></div>
                 <div class="shop-item"><div><strong>Золотой буст</strong><p>48 часов · закреп</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="gold">800 ✦</button></div>
                 <div class="shop-item"><div><strong>Премиум 30 дней</strong><p>✦ у ника + пульсирующее свечение</p></div><button class="btn btn-primary btn-sm" id="btn-buy-premium">200 ✦</button></div>
+                <div class="shop-item shop-item-plus">
+                    <div>
+                        <strong><i class="fa-solid fa-crown" style="color:#fbbf24"></i> Premium+</strong>
+                        <p>Все возможности Premium · студия профиля и канала · навсегда</p>
+                    </div>
+                    <button class="btn btn-primary btn-sm" id="btn-buy-premium-plus">600 ✦</button>
+                </div>
 
                 <div class="shop-section-title"><i class="fa-solid fa-gem" style="color:#fbbf24"></i> Супер-темы <span>· навсегда</span></div>
                 <p class="shop-section-hint">Эксклюзивные детализированные темы. Покупка один раз — навсегда.</p>
@@ -422,7 +429,88 @@ window.SKLEWS_BUILD = '20260807m';
 
         <!-- MODALS -->
 
-                <div id="modal-mines" class="modal hidden">
+                
+        <div id="modal-plus-studio" class="modal hidden">
+            <div class="modal-content plus-studio-sheet">
+                <div class="plus-studio-head">
+                    <h3><i class="fa-solid fa-wand-magic-sparkles" style="color:#fbbf24"></i> Premium+ студия</h3>
+                    <button type="button" id="btn-plus-studio-close" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="plus-studio-tabs">
+                    <button type="button" class="plus-studio-tab active" data-stab="profile">Профиль</button>
+                    <button type="button" class="plus-studio-tab" data-stab="channel">Канал</button>
+                </div>
+                <div id="plus-studio-profile" class="plus-studio-page">
+                    <div class="plus-preview" id="plus-preview-profile">
+                        <div class="plus-prev-banner" id="plus-prev-banner"><div class="plus-prev-banner-fx"></div></div>
+                        <div class="plus-prev-avatar-wrap" id="plus-prev-avatar-wrap"><div class="plus-prev-avatar">✦</div></div>
+                        <div class="plus-prev-name" id="plus-prev-name">@you</div>
+                        <div class="plus-prev-badge" id="plus-prev-badge"></div>
+                    </div>
+                    <label class="plus-label">Эффект ника</label>
+                    <div class="plus-chip-row" id="plus-name-fx">
+                        <button type="button" class="plus-chip active" data-v="">Нет</button>
+                        <button type="button" class="plus-chip" data-v="gold">Gold</button>
+                        <button type="button" class="plus-chip" data-v="aurora">Aurora</button>
+                        <button type="button" class="plus-chip" data-v="crystal">Crystal</button>
+                        <button type="button" class="plus-chip" data-v="soft">Soft</button>
+                    </div>
+                    <label class="plus-label">Рамка аватара</label>
+                    <div class="plus-chip-row" id="plus-avatar-frame">
+                        <button type="button" class="plus-chip active" data-v="">Нет</button>
+                        <button type="button" class="plus-chip" data-v="gold">Gold</button>
+                        <button type="button" class="plus-chip" data-v="diamond">Diamond</button>
+                        <button type="button" class="plus-chip" data-v="aurora">Aurora</button>
+                        <button type="button" class="plus-chip" data-v="rose">Rose</button>
+                        <button type="button" class="plus-chip" data-v="obsidian">Obsidian</button>
+                    </div>
+                    <label class="plus-label">Аура профиля</label>
+                    <div class="plus-color-row">
+                        <input type="color" id="plus-aura" value="#fbbf24">
+                        <button type="button" class="btn btn-secondary btn-sm" id="plus-aura-clear">Сброс</button>
+                    </div>
+                    <label class="plus-label">Титул под ником</label>
+                    <input type="text" id="plus-badge" maxlength="24" placeholder="Например: Architect of Sklews" class="plus-input">
+                    <label class="plus-label">Эффект шапки</label>
+                    <div class="plus-chip-row" id="plus-banner-fx">
+                        <button type="button" class="plus-chip active" data-v="">Нет</button>
+                        <button type="button" class="plus-chip" data-v="rays">Лучи</button>
+                        <button type="button" class="plus-chip" data-v="particles">Частицы</button>
+                        <button type="button" class="plus-chip" data-v="silk">Шёлк</button>
+                    </div>
+                    <button type="button" id="btn-plus-save-profile" class="btn btn-primary full" style="margin-top:14px">Сохранить профиль</button>
+                </div>
+                <div id="plus-studio-channel" class="plus-studio-page hidden">
+                    <label class="plus-label">Канал</label>
+                    <select id="plus-channel-select" class="plus-input"></select>
+                    <label class="plus-label">Рамка карточки</label>
+                    <div class="plus-chip-row" id="plus-ch-frame">
+                        <button type="button" class="plus-chip active" data-v="">Нет</button>
+                        <button type="button" class="plus-chip" data-v="gold">Gold</button>
+                        <button type="button" class="plus-chip" data-v="crystal">Crystal</button>
+                        <button type="button" class="plus-chip" data-v="neon">Neon</button>
+                        <button type="button" class="plus-chip" data-v="silk">Silk</button>
+                    </div>
+                    <label class="plus-label">Эффект шапки канала</label>
+                    <div class="plus-chip-row" id="plus-ch-header-fx">
+                        <button type="button" class="plus-chip active" data-v="">Нет</button>
+                        <button type="button" class="plus-chip" data-v="shimmer">Shimmer</button>
+                        <button type="button" class="plus-chip" data-v="aurora">Aurora</button>
+                        <button type="button" class="plus-chip" data-v="ember">Ember</button>
+                    </div>
+                    <label class="plus-label">Свечение</label>
+                    <div class="plus-color-row">
+                        <input type="color" id="plus-ch-glow" value="#8b5cf6">
+                        <button type="button" class="btn btn-secondary btn-sm" id="plus-ch-glow-clear">Сброс</button>
+                    </div>
+                    <label class="plus-label">Бейдж канала</label>
+                    <input type="text" id="plus-ch-badge" maxlength="24" placeholder="Например: Official" class="plus-input">
+                    <button type="button" id="btn-plus-save-channel" class="btn btn-primary full" style="margin-top:14px">Сохранить канал</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-mines" class="modal hidden">
             <div class="modal-content mines-sheet">
                 <div class="mines-header">
                     <button type="button" id="btn-mines-close" class="mines-btn-icon" aria-label="Закрыть"><i class="fa-solid fa-xmark"></i></button>
@@ -497,6 +585,7 @@ window.SKLEWS_BUILD = '20260807m';
                 <button id="btn-set-status" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-pen"></i> Изменить статус</button>
                 <button id="btn-set-privacy" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-lock"></i> Приватность</button>
                 <button id="btn-open-theme" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-palette"></i> Палитра и шрифт</button>
+                <button id="btn-open-plus-studio" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-wand-magic-sparkles" style="color:#fbbf24"></i> Premium+ студия</button>
                 <button id="btn-daily" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-gift"></i> Бонус дня</button>
                 <button id="btn-logout" class="btn btn-secondary full" style="margin-bottom:10px;color:#f87171"><i class="fa-solid fa-right-from-bracket"></i> Выйти</button>
                 <button id="btn-close-settings" class="btn btn-primary full">Закрыть</button>

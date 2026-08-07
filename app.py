@@ -77,6 +77,13 @@ class User(db.Model):
     mines_day = db.Column(db.String(10), default='')
     mines_left = db.Column(db.Integer, default=10)
     owned_themes = db.Column(db.String(500), default='')  # comma-separated exclusive theme keys
+    is_premium_plus = db.Column(db.Boolean, default=False)
+    # Premium+ profile cosmetics
+    plus_name_fx = db.Column(db.String(32), default='')      # gold | aurora | crystal | soft
+    plus_avatar_frame = db.Column(db.String(32), default='') # gold | diamond | aurora | rose | obsidian
+    plus_aura = db.Column(db.String(20), default='')         # hex glow color
+    plus_badge = db.Column(db.String(24), default='')        # custom title under name
+    plus_banner_fx = db.Column(db.String(32), default='')    # rays | particles | silk | none
 
 class ChatHide(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -101,6 +108,11 @@ class Channel(db.Model):
     boost_level = db.Column(db.String(20), default='')
     boost_until = db.Column(db.DateTime, nullable=True)
     accent_color = db.Column(db.String(20), default='#8b5cf6')
+    # Premium+ channel cosmetics
+    plus_frame = db.Column(db.String(32), default='')      # gold | crystal | neon | silk
+    plus_header_fx = db.Column(db.String(32), default='')  # shimmer | aurora | ember | none
+    plus_badge = db.Column(db.String(24), default='')      # channel title badge
+    plus_glow = db.Column(db.String(20), default='')       # hex
 
 class Subscription(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -271,9 +283,36 @@ def is_muted(user):
 def premium_active(user):
     if not user:
         return False
+    if getattr(user, 'is_premium_plus', False):
+        return True
     if user.premium_until and user.premium_until > datetime.utcnow():
         return True
     return bool(user.is_premium and user.premium_until is None)
+
+def premium_plus_active(user):
+    return bool(user and getattr(user, 'is_premium_plus', False))
+
+def user_plus_payload(u):
+    if not u:
+        return {}
+    return {
+        'is_premium_plus': premium_plus_active(u),
+        'plus_name_fx': getattr(u, 'plus_name_fx', '') or '',
+        'plus_avatar_frame': getattr(u, 'plus_avatar_frame', '') or '',
+        'plus_aura': getattr(u, 'plus_aura', '') or '',
+        'plus_badge': getattr(u, 'plus_badge', '') or '',
+        'plus_banner_fx': getattr(u, 'plus_banner_fx', '') or '',
+    }
+
+def channel_plus_payload(ch):
+    if not ch:
+        return {}
+    return {
+        'plus_frame': getattr(ch, 'plus_frame', '') or '',
+        'plus_header_fx': getattr(ch, 'plus_header_fx', '') or '',
+        'plus_badge': getattr(ch, 'plus_badge', '') or '',
+        'plus_glow': getattr(ch, 'plus_glow', '') or '',
+    }
 
 
 
@@ -399,7 +438,8 @@ def api_channels():
                 'subscribers': ch.subscribers_count, 'views': ch.views,
                 'created_at': ch.created_at.strftime('%d.%m.%Y'),
                 'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '', 'label': '',
-                'accent': ch.accent_color or '#8b5cf6'
+                'accent': ch.accent_color or '#8b5cf6',
+                **channel_plus_payload(ch),
             })
         return jsonify(result)
 
@@ -449,7 +489,8 @@ def api_channels():
             'subscribers': ch.subscribers_count, 'views': ch.views,
             'created_at': ch.created_at.strftime('%d.%m.%Y') if ch.created_at else '',
             'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '', 'label': label,
-            'accent': ch.accent_color or '#8b5cf6'
+            'accent': ch.accent_color or '#8b5cf6',
+        **channel_plus_payload(ch),
         })
     cache_set(ckey, result, ttl=25)
     return jsonify(result)
@@ -503,7 +544,8 @@ def api_channel(channel_id):
         'notifications': sub.notifications if sub else True,
         'owner_id': ch.owner_id,
         'owner_username': owner.username if owner else '?',
-        'owner_avatar': owner.avatar if owner else ''
+        'owner_avatar': owner.avatar if owner else '',
+        **channel_plus_payload(ch),
     })
 
 @app.route('/api/channel/<int:channel_id>/join', methods=['POST'])
@@ -838,6 +880,7 @@ def api_profile():
         'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
         'is_premium': premium_active(user), 'referral_code': user.referral_code or '',
         'owned_themes': [t for t in (user.owned_themes or '').split(',') if t],
+        **user_plus_payload(user),
         'hide_friends': bool(getattr(user, 'hide_friends', False)),
         'hide_channels': bool(getattr(user, 'hide_channels', False)),
         'unread_messages': unread_total,
@@ -1078,6 +1121,90 @@ def buy_premium():
     db.session.commit()
     return jsonify({'status': 'ok', 'crystals': user.crystals})
 
+@app.route('/api/shop/premium-plus', methods=['POST'])
+@login_required
+def buy_premium_plus():
+    """Permanent Premium+: all Premium features + profile/channel studio."""
+    user = current_user()
+    if getattr(user, 'is_premium_plus', False):
+        return jsonify({'error': 'Premium+ уже активен', 'is_premium_plus': True}), 400
+    if user.crystals < 600:
+        return jsonify({'error': 'Нужно 600 ✦'}), 400
+    user.crystals -= 600
+    user.is_premium_plus = True
+    user.is_premium = True
+    # generous premium window on top
+    base = user.premium_until if user.premium_until and user.premium_until > datetime.utcnow() else datetime.utcnow()
+    user.premium_until = base + timedelta(days=90)
+    db.session.commit()
+    return jsonify({
+        'status': 'ok',
+        'crystals': user.crystals,
+        'is_premium_plus': True,
+        'is_premium': True,
+        **user_plus_payload(user),
+    })
+
+@app.route('/api/plus/profile', methods=['POST'])
+@login_required
+def save_plus_profile():
+    user = current_user()
+    if not premium_plus_active(user):
+        return jsonify({'error': 'Нужен Premium+'}), 403
+    data = request.json or {}
+    name_fx = str(data.get('plus_name_fx') or '')[:32]
+    frame = str(data.get('plus_avatar_frame') or '')[:32]
+    aura = str(data.get('plus_aura') or '')[:20]
+    badge = str(data.get('plus_badge') or '')[:24]
+    banner_fx = str(data.get('plus_banner_fx') or '')[:32]
+    allowed_fx = {'', 'gold', 'aurora', 'crystal', 'soft'}
+    allowed_frame = {'', 'gold', 'diamond', 'aurora', 'rose', 'obsidian'}
+    allowed_banner = {'', 'none', 'rays', 'particles', 'silk'}
+    if name_fx not in allowed_fx:
+        return jsonify({'error': 'Неверный эффект ника'}), 400
+    if frame not in allowed_frame:
+        return jsonify({'error': 'Неверная рамка'}), 400
+    if banner_fx not in allowed_banner:
+        return jsonify({'error': 'Неверный эффект шапки'}), 400
+    if aura and not re.match(r'^#[0-9A-Fa-f]{6}$', aura):
+        return jsonify({'error': 'Цвет ауры: #RRGGBB'}), 400
+    user.plus_name_fx = name_fx
+    user.plus_avatar_frame = frame
+    user.plus_aura = aura
+    user.plus_badge = badge
+    user.plus_banner_fx = banner_fx if banner_fx != 'none' else ''
+    db.session.commit()
+    return jsonify({'status': 'ok', **user_plus_payload(user)})
+
+@app.route('/api/plus/channel/<int:channel_id>', methods=['POST'])
+@login_required
+def save_plus_channel(channel_id):
+    user = current_user()
+    if not premium_plus_active(user):
+        return jsonify({'error': 'Нужен Premium+'}), 403
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    data = request.json or {}
+    frame = str(data.get('plus_frame') or '')[:32]
+    header_fx = str(data.get('plus_header_fx') or '')[:32]
+    badge = str(data.get('plus_badge') or '')[:24]
+    glow = str(data.get('plus_glow') or '')[:20]
+    allowed_frame = {'', 'gold', 'crystal', 'neon', 'silk'}
+    allowed_fx = {'', 'none', 'shimmer', 'aurora', 'ember'}
+    if frame not in allowed_frame:
+        return jsonify({'error': 'Неверная рамка канала'}), 400
+    if header_fx not in allowed_fx:
+        return jsonify({'error': 'Неверный эффект шапки'}), 400
+    if glow and not re.match(r'^#[0-9A-Fa-f]{6}$', glow):
+        return jsonify({'error': 'Цвет свечения: #RRGGBB'}), 400
+    ch.plus_frame = frame
+    ch.plus_header_fx = header_fx if header_fx != 'none' else ''
+    ch.plus_badge = badge
+    ch.plus_glow = glow
+    db.session.commit()
+    return jsonify({'status': 'ok', **channel_plus_payload(ch)})
+
 
 EXCLUSIVE_THEMES = {
     'obsidian_gold': {'name': 'Obsidian Gold', 'price': 500},
@@ -1149,7 +1276,8 @@ def my_channels():
     return jsonify([{
         'id': ch.id, 'name': ch.name, 'subscribers': ch.subscribers_count,
         'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '',
-        'accent': ch.accent_color or '#8b5cf6', 'avatar': ch.avatar or ''
+        'accent': ch.accent_color or '#8b5cf6', 'avatar': ch.avatar or '',
+        **channel_plus_payload(ch),
     } for ch in channels])
 
 # ==================== ANALYTICS (basic) ====================
@@ -1415,6 +1543,7 @@ def user_public(user_id):
         'banner': getattr(u, 'banner', '') or '',
         'status': u.status,
         'is_premium': premium_active(u),
+        **user_plus_payload(u),
         'friends_count': friends_count if not u.hide_friends else None,
         'channels_count': channels_count if not u.hide_channels else None,
         'hide_friends': bool(u.hide_friends),
@@ -2076,7 +2205,17 @@ if __name__ == '__main__':
                 db.session.rollback()
 
         
-        for col, typ in [('mines_day', 'VARCHAR(10)'), ('mines_left', 'INTEGER'), ('owned_themes', "VARCHAR(500) DEFAULT ''")]:
+        for col, typ in [
+            ('mines_day', 'VARCHAR(10)'),
+            ('mines_left', 'INTEGER'),
+            ('owned_themes', "VARCHAR(500) DEFAULT ''"),
+            ('is_premium_plus', 'BOOLEAN DEFAULT FALSE' if dialect != 'postgresql' else 'BOOLEAN DEFAULT FALSE'),
+            ('plus_name_fx', "VARCHAR(32) DEFAULT ''"),
+            ('plus_avatar_frame', "VARCHAR(32) DEFAULT ''"),
+            ('plus_aura', "VARCHAR(20) DEFAULT ''"),
+            ('plus_badge', "VARCHAR(24) DEFAULT ''"),
+            ('plus_banner_fx', "VARCHAR(32) DEFAULT ''"),
+        ]:
             # re-inspect in case previous adds changed set
             existing_user = _existing_columns('user')
             if col in existing_user:
@@ -2089,6 +2228,26 @@ if __name__ == '__main__':
             except Exception as e:
                 db.session.rollback()
                 print('ALTER user col failed:', e, flush=True)
+
+
+        # Channel plus columns
+        existing_ch = _existing_columns('channel')
+        for col, typ in [
+            ('plus_frame', "VARCHAR(32) DEFAULT ''"),
+            ('plus_header_fx', "VARCHAR(32) DEFAULT ''"),
+            ('plus_badge', "VARCHAR(24) DEFAULT ''"),
+            ('plus_glow', "VARCHAR(20) DEFAULT ''"),
+        ]:
+            if col in existing_ch:
+                continue
+            try:
+                sql = f'ALTER TABLE channel ADD COLUMN {col} {typ}'
+                print('Migrating:', sql, flush=True)
+                db.session.execute(text(sql))
+                db.session.commit()
+            except Exception as e:
+                db.session.rollback()
+                print('ALTER channel col failed:', e, flush=True)
 
         # Ensure admin flag for reserved username (safe if column exists)
         try:

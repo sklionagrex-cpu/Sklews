@@ -19,15 +19,78 @@ let anChannelId = null;
 let viewingPosts = false;
 let reactPostId = null;
 
-function premiumNickHtml(username, isPremium) {
-    if (isPremium) {
-        return '<span class="premium-nick">@' + escapeHtml(username) + '<span class="prem-gem">✦</span></span>';
+
+function setMePlusFromProfile(p) {
+    meHasPremium = !!p.is_premium;
+    meHasPremiumPlus = !!p.is_premium_plus;
+    mePlus = {
+        plus_name_fx: p.plus_name_fx || '',
+        plus_avatar_frame: p.plus_avatar_frame || '',
+        plus_aura: p.plus_aura || '',
+        plus_badge: p.plus_badge || '',
+        plus_banner_fx: p.plus_banner_fx || '',
+    };
+    if (Array.isArray(p.owned_themes)) meOwnedThemes = p.owned_themes;
+}
+
+function applyPlusToProfileHero(p) {
+    const hero = document.getElementById('profile-hero');
+    const av = document.getElementById('profile-avatar');
+    const banner = document.getElementById('profile-banner');
+    const pun = document.getElementById('profile-username');
+    if (!p) return;
+    // wrap avatar
+    if (av && av.parentElement) {
+        let wrap = av.parentElement.classList.contains('avatar-hero-wrap') ? av.parentElement : null;
+        if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.className = 'avatar-hero-wrap';
+            av.parentNode.insertBefore(wrap, av);
+            wrap.appendChild(av);
+        }
+        wrap.className = 'avatar-hero-wrap' + (p.plus_avatar_frame ? ' frame-' + p.plus_avatar_frame : '');
     }
-    return '@' + escapeHtml(username);
+    if (hero) {
+        if (p.plus_aura) {
+            hero.classList.add('has-aura');
+            hero.style.setProperty('--plus-aura', p.plus_aura + '66');
+        } else {
+            hero.classList.remove('has-aura');
+            hero.style.removeProperty('--plus-aura');
+        }
+    }
+    if (banner) {
+        banner.classList.remove('banner-fx-rays', 'banner-fx-particles', 'banner-fx-silk');
+        if (p.plus_banner_fx) banner.classList.add('banner-fx-' + p.plus_banner_fx);
+    }
+    if (pun) {
+        pun.innerHTML = premiumNickHtml(p.username, p.is_premium || p.is_premium_plus, p.plus_name_fx);
+        let badge = document.getElementById('profile-plus-badge');
+        if (p.plus_badge) {
+            if (!badge) {
+                badge = document.createElement('div');
+                badge.id = 'profile-plus-badge';
+                badge.className = 'profile-plus-badge';
+                pun.after(badge);
+            }
+            badge.textContent = p.plus_badge;
+            badge.style.display = '';
+        } else if (badge) badge.style.display = 'none';
+    }
+}
+
+
+function premiumNickHtml(username, isPremium, plusFx) {
+    const name = escapeHtml(username || '');
+    if (!isPremium && !plusFx) return '@' + name;
+    const fx = plusFx ? (' nick-fx-' + plusFx) : '';
+    return '<span class="premium-nick' + fx + '">@' + name + '<span class="prem-gem">✦</span></span>';
 }
 
 let meIsAdmin = false;
 let meHasPremium = false;
+let meHasPremiumPlus = false;
+let mePlus = { plus_name_fx:'', plus_avatar_frame:'', plus_aura:'', plus_badge:'', plus_banner_fx:'' };
 let meId = null;
 let meUserId = null;
 let meOwnedThemes = [];
@@ -39,10 +102,10 @@ const EXCLUSIVE_THEME_KEYS = ['obsidian_gold', 'aurora_void', 'crimson_neon', 'h
         const res = await fetch('/api/profile');
         if (!res.ok) return;
         const p = await res.json();
-        meHasPremium = !!p.is_premium;
+        setMePlusFromProfile(p);
     if (p.id) meId = p.id;
     if (p.username) window.__meUsername = p.username;
-    if (Array.isArray(p.owned_themes)) { meOwnedThemes = p.owned_themes; loadSavedTheme(); }
+    if (Array.isArray(p.owned_themes)) loadSavedTheme();
         meUserId = p.id;
         meIsAdmin = !!p.is_admin;
         updatePremiumNav();
@@ -401,10 +464,11 @@ async function loadChannels() {
         }
         channels.forEach(ch => {
             const card = document.createElement('div');
-            card.className = 'channel-card' + (ch.is_boosted ? ' boosted boosted-' + (ch.boost_level || 'bronze') : '');
+            card.className = 'channel-card' + (ch.is_boosted ? ' boosted boosted-' + (ch.boost_level || 'bronze') : '') + (ch.plus_frame ? ' plus-frame-' + ch.plus_frame : '');
             card.dataset.channelId = ch.id;
             if (adminSelectMode && adminSelectedChannels.has(ch.id)) card.classList.add('admin-selected');
-            const badge = ch.label ? '<span class="boost-label">' + ch.label + '</span>' : '';
+            if (ch.plus_glow) card.style.boxShadow = '0 0 22px ' + ch.plus_glow + '44';
+            const badge = (ch.label ? '<span class="boost-label">' + ch.label + '</span>' : '') + (ch.plus_badge ? '<span class="channel-plus-badge">' + escapeHtml(ch.plus_badge) + '</span>' : '');
             const check = adminSelectMode ? '<div class="admin-check"></div>' : '';
             card.innerHTML = check + avatarHtml(ch.name, ch.avatar) +
                 '<div class="channel-info"><h3>' + escapeHtml(ch.name) + ' ' + badge + '</h3><p>' + ch.subscribers + ' участников</p></div>';
@@ -569,7 +633,18 @@ async function openChannel(id) {
             return;
         }
         document.getElementById('channel-title').textContent = ch.name;
-        document.getElementById('channel-name').textContent = ch.name;
+        const chNameEl = document.getElementById('channel-name');
+        chNameEl.textContent = ch.name;
+        if (ch.plus_badge) {
+            chNameEl.innerHTML = escapeHtml(ch.name) + ' <span class="channel-plus-badge">' + escapeHtml(ch.plus_badge) + '</span>';
+        }
+        const head = document.querySelector('#screen-channel .channel-header') || document.getElementById('channel-header');
+        if (head) {
+            head.classList.remove('fx-shimmer','fx-aurora','fx-ember');
+            if (ch.plus_header_fx) head.classList.add('fx-' + ch.plus_header_fx);
+            if (ch.plus_glow) head.style.boxShadow = '0 0 30px ' + ch.plus_glow + '33';
+            else head.style.boxShadow = '';
+        }
         document.getElementById('channel-subs').textContent = ch.subscribers + ' участников';
         document.getElementById('channel-desc').textContent = ch.description || 'Нет описания';
         const av = document.getElementById('channel-avatar');
@@ -1236,13 +1311,12 @@ document.getElementById('btn-confirm-delete-channel')?.addEventListener('click',
 async function loadProfile() {
     const res = await fetch('/api/profile');
     const p = await res.json();
-    const pun = document.getElementById('profile-username');
-    pun.innerHTML = premiumNickHtml(p.username, p.is_premium);
     meIsAdmin = !!p.is_admin;
-    meHasPremium = !!p.is_premium;
+    setMePlusFromProfile(p);
+    applyPlusToProfileHero(p);
     if (p.id) meId = p.id;
     if (p.username) window.__meUsername = p.username;
-    if (Array.isArray(p.owned_themes)) { meOwnedThemes = p.owned_themes; loadSavedTheme(); }
+    if (Array.isArray(p.owned_themes)) loadSavedTheme();
     meUserId = p.id;
     updatePremiumNav();
     const fab = document.getElementById('admin-fab');
@@ -1434,7 +1508,29 @@ async function openUserProfile(userId) {
     const res = await fetch('/api/user/' + userId);
     const u = await res.json();
     window._viewUserId = u.id;
-    document.getElementById('user-username').innerHTML = premiumNickHtml(u.username, u.is_premium);
+    document.getElementById('user-username').innerHTML = premiumNickHtml(u.username, u.is_premium || u.is_premium_plus, u.plus_name_fx);
+    // plus badge on user profile
+    let ub = document.getElementById('user-plus-badge');
+    const un = document.getElementById('user-username');
+    if (u.plus_badge) {
+        if (!ub && un) { ub = document.createElement('div'); ub.id = 'user-plus-badge'; ub.className = 'profile-plus-badge'; un.after(ub); }
+        if (ub) { ub.textContent = u.plus_badge; ub.style.display = ''; }
+    } else if (ub) ub.style.display = 'none';
+    const uav = document.getElementById('user-avatar');
+    if (uav) {
+        let wrap = uav.parentElement?.classList?.contains('avatar-hero-wrap') ? uav.parentElement : null;
+        if (!wrap && uav.parentElement) {
+            wrap = document.createElement('div');
+            uav.parentElement.insertBefore(wrap, uav);
+            wrap.appendChild(uav);
+        }
+        if (wrap) wrap.className = 'avatar-hero-wrap' + (u.plus_avatar_frame ? ' frame-' + u.plus_avatar_frame : '');
+    }
+    const uban = document.getElementById('user-banner');
+    if (uban) {
+        uban.classList.remove('banner-fx-rays','banner-fx-particles','banner-fx-silk');
+        if (u.plus_banner_fx) uban.classList.add('banner-fx-' + u.plus_banner_fx);
+    }
     document.getElementById('user-status').textContent = u.status || '';
     document.getElementById('user-friends').textContent = u.friends_count === null ? '•' : (u.friends_count ?? 0);
     document.getElementById('user-channels').textContent = u.channels_count === null ? '•' : (u.channels_count ?? 0);
@@ -2548,10 +2644,10 @@ console.log('Sklews build', window.SKLEWS_BUILD || 'unknown');
         const res = await fetch('/api/profile');
         const p = await res.json();
         meIsAdmin = !!p.is_admin;
-    meHasPremium = !!p.is_premium;
+    setMePlusFromProfile(p);
     if (p.id) meId = p.id;
     if (p.username) window.__meUsername = p.username;
-    if (Array.isArray(p.owned_themes)) { meOwnedThemes = p.owned_themes; loadSavedTheme(); }
+    if (Array.isArray(p.owned_themes)) loadSavedTheme();
     meUserId = p.id;
     updatePremiumNav();
         const fab = document.getElementById('admin-fab');
@@ -3117,6 +3213,196 @@ socket.on('premium_chat_new', data => {
 });
 
 socket.on('premium_chat_joined', () => { premiumChatJoined = true; });
+
+
+// ===== Premium+ studio =====
+function plusSelectChip(rowId, value) {
+    const row = document.getElementById(rowId);
+    if (!row) return;
+    row.querySelectorAll('.plus-chip').forEach(c => c.classList.toggle('active', c.dataset.v === value));
+}
+function plusSelectedChip(rowId) {
+    return document.getElementById(rowId)?.querySelector('.plus-chip.active')?.dataset.v || '';
+}
+function updatePlusPreview() {
+    const nameFx = plusSelectedChip('plus-name-fx');
+    const frame = plusSelectedChip('plus-avatar-frame');
+    const bannerFx = plusSelectedChip('plus-banner-fx');
+    const badge = (document.getElementById('plus-badge')?.value || '').trim();
+    const aura = document.getElementById('plus-aura')?.value || '';
+    const nameEl = document.getElementById('plus-prev-name');
+    const wrap = document.getElementById('plus-prev-avatar-wrap');
+    const ban = document.getElementById('plus-prev-banner');
+    const badgeEl = document.getElementById('plus-prev-badge');
+    if (nameEl) nameEl.innerHTML = premiumNickHtml(window.__meUsername || 'you', true, nameFx);
+    if (wrap) wrap.className = 'plus-prev-avatar-wrap' + (frame ? ' frame-' + frame : '');
+    if (ban) {
+        ban.className = 'plus-prev-banner' + (bannerFx ? ' fx-' + bannerFx : '');
+    }
+    if (badgeEl) badgeEl.textContent = badge;
+    const prev = document.getElementById('plus-preview-profile');
+    if (prev && aura) prev.style.boxShadow = '0 0 28px ' + aura + '55';
+    else if (prev) prev.style.boxShadow = '';
+}
+async function openPlusStudio() {
+    if (!meHasPremiumPlus) {
+        showToast('Premium+', 'Купи в магазине за 600 ✦', '✦');
+        return;
+    }
+    document.getElementById('modal-settings')?.classList.add('hidden');
+    const m = document.getElementById('modal-plus-studio');
+    if (!m) return;
+    plusSelectChip('plus-name-fx', mePlus.plus_name_fx || '');
+    plusSelectChip('plus-avatar-frame', mePlus.plus_avatar_frame || '');
+    plusSelectChip('plus-banner-fx', mePlus.plus_banner_fx || '');
+    const badge = document.getElementById('plus-badge');
+    if (badge) badge.value = mePlus.plus_badge || '';
+    const aura = document.getElementById('plus-aura');
+    if (aura) aura.value = mePlus.plus_aura || '#fbbf24';
+    updatePlusPreview();
+    // channels for studio
+    try {
+        const res = await fetch('/api/my_channels');
+        const list = await res.json();
+        const sel = document.getElementById('plus-channel-select');
+        if (sel) {
+            sel.innerHTML = '';
+            (list || []).forEach(ch => {
+                const o = document.createElement('option');
+                o.value = ch.id;
+                o.textContent = ch.name;
+                sel.appendChild(o);
+            });
+            if (!list || !list.length) {
+                const o = document.createElement('option');
+                o.value = '';
+                o.textContent = 'Нет своих каналов';
+                sel.appendChild(o);
+            } else {
+                await loadPlusChannelForm(list[0].id);
+            }
+        }
+    } catch (e) {}
+    m.classList.remove('hidden');
+    m.style.display = 'flex';
+}
+async function loadPlusChannelForm(id) {
+    if (!id) return;
+    try {
+        const res = await fetch('/api/channel/' + id);
+        const ch = await res.json();
+        plusSelectChip('plus-ch-frame', ch.plus_frame || '');
+        plusSelectChip('plus-ch-header-fx', ch.plus_header_fx || '');
+        const b = document.getElementById('plus-ch-badge');
+        if (b) b.value = ch.plus_badge || '';
+        const g = document.getElementById('plus-ch-glow');
+        if (g) g.value = ch.plus_glow || '#8b5cf6';
+    } catch (e) {}
+}
+document.getElementById('btn-open-plus-studio')?.addEventListener('click', openPlusStudio);
+document.getElementById('btn-plus-studio-close')?.addEventListener('click', () => {
+    const m = document.getElementById('modal-plus-studio');
+    if (m) { m.classList.add('hidden'); m.style.display = ''; }
+});
+document.querySelectorAll('.plus-studio-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.plus-studio-tab').forEach(b => b.classList.toggle('active', b === btn));
+        const tab = btn.dataset.stab;
+        document.getElementById('plus-studio-profile')?.classList.toggle('hidden', tab !== 'profile');
+        document.getElementById('plus-studio-channel')?.classList.toggle('hidden', tab !== 'channel');
+    });
+});
+document.querySelectorAll('.plus-chip-row').forEach(row => {
+    row.addEventListener('click', e => {
+        const chip = e.target.closest('.plus-chip');
+        if (!chip) return;
+        row.querySelectorAll('.plus-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        if (row.id && row.id.startsWith('plus-') && !row.id.startsWith('plus-ch')) updatePlusPreview();
+    });
+});
+document.getElementById('plus-badge')?.addEventListener('input', updatePlusPreview);
+document.getElementById('plus-aura')?.addEventListener('input', updatePlusPreview);
+document.getElementById('plus-aura-clear')?.addEventListener('click', () => {
+    const a = document.getElementById('plus-aura');
+    if (a) a.value = '#000000';
+    // treat black as clear on save if user clears - use empty by clear btn
+    a.dataset.cleared = '1';
+    updatePlusPreview();
+});
+document.getElementById('plus-ch-glow-clear')?.addEventListener('click', () => {
+    const g = document.getElementById('plus-ch-glow');
+    if (g) { g.value = '#000000'; g.dataset.cleared = '1'; }
+});
+document.getElementById('plus-channel-select')?.addEventListener('change', e => loadPlusChannelForm(e.target.value));
+
+document.getElementById('btn-plus-save-profile')?.addEventListener('click', async () => {
+    const auraEl = document.getElementById('plus-aura');
+    let aura = auraEl?.value || '';
+    if (auraEl?.dataset.cleared === '1' || aura === '#000000') aura = '';
+    const body = {
+        plus_name_fx: plusSelectedChip('plus-name-fx'),
+        plus_avatar_frame: plusSelectedChip('plus-avatar-frame'),
+        plus_banner_fx: plusSelectedChip('plus-banner-fx'),
+        plus_badge: (document.getElementById('plus-badge')?.value || '').trim(),
+        plus_aura: aura,
+    };
+    const res = await fetch('/api/plus/profile', {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await res.json();
+    if (d.error) return showToast('Premium+', d.error, '!');
+    mePlus = { ...mePlus, ...body };
+    if (auraEl) auraEl.dataset.cleared = '';
+    showToast('Premium+', 'Профиль обновлён', '✓');
+    loadProfile();
+});
+document.getElementById('btn-plus-save-channel')?.addEventListener('click', async () => {
+    const id = document.getElementById('plus-channel-select')?.value;
+    if (!id) return showToast('Канал', 'Нет канала', '!');
+    const glowEl = document.getElementById('plus-ch-glow');
+    let glow = glowEl?.value || '';
+    if (glowEl?.dataset.cleared === '1' || glow === '#000000') glow = '';
+    const body = {
+        plus_frame: plusSelectedChip('plus-ch-frame'),
+        plus_header_fx: plusSelectedChip('plus-ch-header-fx'),
+        plus_badge: (document.getElementById('plus-ch-badge')?.value || '').trim(),
+        plus_glow: glow,
+    };
+    const res = await fetch('/api/plus/channel/' + id, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    const d = await res.json();
+    if (d.error) return showToast('Premium+', d.error, '!');
+    if (glowEl) glowEl.dataset.cleared = '';
+    showToast('Premium+', 'Канал обновлён', '✓');
+});
+
+document.getElementById('btn-buy-premium-plus')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-buy-premium-plus');
+    if (btn) btn.disabled = true;
+    try {
+        const res = await fetch('/api/shop/premium-plus', { method: 'POST' });
+        const d = await res.json();
+        if (d.error) {
+            showToast('Premium+', d.error, '!');
+            if (btn) btn.disabled = false;
+            return;
+        }
+        meHasPremiumPlus = true;
+        meHasPremium = true;
+        const bal = document.getElementById('shop-balance');
+        if (bal && d.crystals != null) bal.textContent = d.crystals;
+        if (btn) { btn.textContent = 'Активен'; btn.classList.add('owned'); }
+        showToast('Premium+', 'Активирован навсегда!', '✦');
+        updatePremiumNav();
+        loadProfile();
+    } catch (e) {
+        showToast('Ошибка', 'Не удалось купить', '!');
+        if (btn) btn.disabled = false;
+    }
+});
+
 
 // ===== Minesweeper Premium UI =====
 const MS = {
