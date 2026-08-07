@@ -15,11 +15,11 @@
             <button class="nav-btn active" data-tab="home"><i class="fa-solid fa-house icon"></i><span>Лента</span></button>
             <button class="nav-btn" data-tab="create"><i class="fa-solid fa-plus icon"></i><span>Создать</span></button>
             <button class="nav-btn" data-tab="analytics"><i class="fa-solid fa-chart-line icon"></i><span>Аналитика</span></button>
+            <button class="nav-btn" data-tab="shop"><i class="fa-solid fa-gem icon"></i><span>Магазин</span></button>
             <button class="nav-btn" data-tab="chats"><i class="fa-solid fa-comments icon"></i><span>Чаты</span></button>
             <button class="nav-btn" data-tab="profile"><i class="fa-solid fa-user icon"></i><span>Профиль</span></button>
         </nav>
 
-        <!-- HOME -->
         <div id="screen-home" class="screen active">
             <header class="header"><div class="header-logo">Sklews</div></header>
             <div class="filters">
@@ -37,7 +37,6 @@
             <div id="my-subs" class="feed"></div>
         </div>
 
-        <!-- CREATE -->
         <div id="screen-create" class="screen">
             <header class="header"><h1>Мои каналы</h1></header>
             <div style="padding:0 16px 12px">
@@ -46,46 +45,11 @@
             <div id="my-channels-list" class="feed"></div>
         </div>
 
-        <!-- CHATS -->
-        <div id="screen-chats" class="screen">
-            <header class="header"><h1>Чаты</h1></header>
-            <div class="search-box"><input type="text" id="search-users" placeholder="Найти пользователя..."></div>
-            <div id="search-results" class="feed"></div>
-            <div id="chats-list" class="feed"></div>
-        </div>
-
-        <!-- PROFILE -->
-        <div id="screen-profile" class="screen">
-            <header class="header">
-                <h1>Профиль</h1>
-                <button id="btn-logout" class="btn-icon"><i class="fa-solid fa-right-from-bracket"></i></button>
-            </header>
-            <div class="profile-card">
-                <div class="avatar-large" id="profile-avatar" style="cursor:pointer;position:relative;overflow:hidden">?
-                <input type="file" id="avatar-input" accept="image/*" style="display:none">
-                </div>
-                <h2 id="profile-username">—</h2>
-                <p id="profile-status" class="status-text">Нажми, чтобы изменить статус</p>
-                <div class="crystals-badge" id="crystals-badge">✦ <span id="profile-crystals">0</span></div>
-                <div class="profile-stats">
-                    <div><span id="profile-friends">0</span>Друзья</div>
-                    <div><span id="profile-channels">0</span>Каналы</div>
-                </div>
-                <div class="profile-actions">
-                    <button id="btn-edit-profile" class="btn btn-secondary">Изменить профиль</button>
-                    <button id="btn-daily" class="btn btn-secondary">Бонус дня</button>
-                    <button id="btn-open-shop" class="btn btn-primary btn-wide">Магазин ✦</button>
-                </div>
-            </div>
-        </div>
-
-
-        <!-- ANALYTICS TAB -->
         <div id="screen-analytics" class="screen">
             <header class="header"><h1>Аналитика</h1></header>
             <div id="analytics-list" class="feed"></div>
             <div id="analytics-detail" class="feed hidden" style="padding:16px">
-                <button id="btn-an-back" class="btn btn-secondary btn-sm" style="margin-bottom:12px">← Назад</button>
+                <button id="btn-an-back" class="btn btn-secondary btn-sm" style="margin-bottom:12px"><i class="fa-solid fa-arrow-left"></i> Назад</button>
                 <h2 id="an-channel-name" style="margin-bottom:12px"></h2>
                 <div class="filter-buttons" style="margin-bottom:16px" id="an-periods">
                     <button class="filter-btn active" data-period="1h">1 час</button>
@@ -101,32 +65,87 @@
             </div>
         </div>
 
-        <!-- CHANNEL VIEW -->
+        <div id="screen-shop" class="screen">
+            <header class="header"><h1>Магазин</h1></header>
+            <div class="feed" style="padding:16px">
+                <p style="font-size:14px;color:var(--muted);margin-bottom:16px">Баланс: <strong id="shop-balance" style="color:var(--accent3)">0</strong> ✦</p>
+                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Канал для буста</label>
+                <select id="shop-channel-select" style="width:100%;padding:12px 14px;margin-bottom:16px;background:var(--card);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px"></select>
+                <div class="shop-item"><div><strong>Бронзовый буст</strong><p>12 часов</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="bronze">50 ✦</button></div>
+                <div class="shop-item"><div><strong>Серебряный буст</strong><p>24 часа · Топ-10</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="silver">150 ✦</button></div>
+                <div class="shop-item"><div><strong>Золотой буст</strong><p>48 часов · закреп</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="gold">350 ✦</button></div>
+                <div class="shop-item"><div><strong>Премиум 30 дней</strong><p><i class="fa-solid fa-gem"></i> в профиле</p></div><button class="btn btn-primary btn-sm" id="btn-buy-premium">200 ✦</button></div>
+            </div>
+        </div>
+
+        <div id="screen-chats" class="screen">
+            <header class="header"><h1>Чаты</h1></header>
+            <div class="search-box"><input type="text" id="search-users" placeholder="Найти пользователя..."></div>
+            <div id="search-results" class="feed"></div>
+        </div>
+
+        <div id="screen-profile" class="screen">
+            <header class="header">
+                <h1>Профиль</h1>
+                <button id="btn-settings" class="btn-icon"><i class="fa-solid fa-gear"></i></button>
+            </header>
+            <div class="profile-card">
+                <div class="avatar-large" id="profile-avatar">?</div>
+                <h2 id="profile-username">—</h2>
+                <p id="profile-status" class="status-text">Статус не указан</p>
+                <div class="crystals-badge" id="crystals-badge"><i class="fa-solid fa-gem"></i> <span id="profile-crystals">0</span></div>
+                <div class="profile-actions" style="grid-template-columns:1fr 1fr">
+                    <button id="btn-open-friends" class="btn btn-secondary"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span></button>
+                    <button id="btn-open-subs" class="btn btn-secondary"><i class="fa-solid fa-bookmark"></i> Подписки</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="screen-friends" class="screen">
+            <header class="header">
+                <button class="btn-back" id="btn-back-friends"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1>Друзья</h1>
+                <div style="width:40px"></div>
+            </header>
+            <div id="friends-page-list" class="feed"></div>
+        </div>
+
+        <div id="screen-subs" class="screen">
+            <header class="header">
+                <button class="btn-back" id="btn-back-subs"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1>Подписки</h1>
+                <div style="width:40px"></div>
+            </header>
+            <div id="subs-page-list" class="feed"></div>
+        </div>
+
+        <!-- CHANNEL CARD (визитка) -->
         <div id="screen-channel" class="screen">
             <header class="header">
                 <button class="btn-back" id="btn-back-channel"><i class="fa-solid fa-arrow-left"></i></button>
                 <h1 id="channel-title">Канал</h1>
                 <button class="btn-icon" id="btn-channel-menu"><i class="fa-solid fa-ellipsis-vertical"></i></button>
             </header>
-            <div class="channel-header">
+            <div class="channel-header" id="channel-card-view">
                 <div class="channel-avatar-big" id="channel-avatar">?</div>
                 <h2 id="channel-name" style="font-size:22px;margin-bottom:4px"></h2>
                 <p id="channel-subs" class="muted"></p>
                 <p id="channel-desc" class="desc"></p>
-                <div class="channel-actions" id="channel-actions">
+                <div class="channel-actions">
                     <button id="btn-join" class="btn btn-primary">Вступить</button>
-                    <button id="btn-watch" class="btn btn-secondary">Смотреть без вступления</button>
-                    <button id="btn-analytics" class="btn btn-secondary hidden">Аналитика</button>
+                    <button id="btn-watch" class="btn btn-secondary">Читать</button>
                     <button id="btn-edit-channel" class="btn btn-secondary hidden">Редактор</button>
+                    <button id="btn-analytics" class="btn btn-secondary hidden">Аналитика</button>
                 </div>
             </div>
-            <div id="posts-feed" class="feed"></div>
-            <div style="padding:0 16px 20px">
-                <button id="btn-add-post" class="btn btn-primary full hidden"><i class="fa-solid fa-plus"></i> Добавить пост</button>
+            <div id="posts-section" class="hidden">
+                <div id="posts-feed" class="feed"></div>
+                <div style="padding:0 16px 20px">
+                    <button id="btn-add-post" class="btn btn-primary full hidden"><i class="fa-solid fa-plus"></i> Добавить пост</button>
+                </div>
             </div>
         </div>
 
-        <!-- CHAT VIEW -->
         <div id="screen-chat" class="screen">
             <header class="header">
                 <button class="btn-back" id="btn-back-chat"><i class="fa-solid fa-arrow-left"></i></button>
@@ -135,39 +154,89 @@
             </header>
             <div id="messages" class="messages"></div>
             <div class="chat-input-area">
-                <button id="btn-super" class="btn-super" title="Супер (30✦)">✦</button>
-                <button id="btn-voice" class="btn-super" title="Голос" style="font-size:14px">🎤</button>
+                <button id="btn-super" class="btn-super" title="Супер"><i class="fa-solid fa-bolt"></i></button>
+                <button id="btn-voice" class="btn-super" title="Голос"><i class="fa-solid fa-microphone"></i></button>
                 <input type="file" id="chat-file" accept="image/*,video/*" style="display:none">
-                <button id="btn-attach" class="btn-super" title="Файл" style="font-size:14px">📎</button>
+                <button id="btn-attach" class="btn-super" title="Файл"><i class="fa-solid fa-paperclip"></i></button>
                 <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off">
                 <button id="btn-send" class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
         </div>
 
-        <!-- ANALYTICS -->
-        <div id="screen-analytics" class="screen">
-            <header class="header">
-                <button class="btn-back" id="btn-back-analytics"><i class="fa-solid fa-arrow-left"></i></button>
-                <h1>Аналитика</h1>
-                <div style="width:40px"></div>
-            </header>
-            <div id="analytics-content" class="feed" style="padding:16px"></div>
+        <!-- MODALS -->
+        <div id="modal-settings" class="modal hidden">
+            <div class="modal-content">
+                <h3><i class="fa-solid fa-gear"></i> Настройки</h3>
+                <button id="btn-set-avatar" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-image"></i> Изменить аватар</button>
+                <input type="file" id="avatar-input" accept="image/*" style="display:none">
+                <button id="btn-set-status" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-pen"></i> Изменить статус</button>
+                <button id="btn-set-privacy" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-lock"></i> Приватность</button>
+                <button id="btn-daily" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-gift"></i> Бонус дня</button>
+                <button id="btn-logout" class="btn btn-secondary full" style="margin-bottom:10px;color:#f87171"><i class="fa-solid fa-right-from-bracket"></i> Выйти</button>
+                <button id="btn-close-settings" class="btn btn-primary full">Закрыть</button>
+            </div>
         </div>
 
-        <!-- MODALS -->
+        <div id="modal-status" class="modal hidden">
+            <div class="modal-content">
+                <h3>Статус</h3>
+                <input type="text" id="edit-status" placeholder="Ваш статус" maxlength="120">
+                <div class="modal-actions">
+                    <button id="btn-cancel-status" class="btn btn-secondary">Отмена</button>
+                    <button id="btn-save-status" class="btn btn-primary">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-privacy" class="modal hidden">
+            <div class="modal-content">
+                <h3>Приватность</h3>
+                <label class="shop-item" style="cursor:pointer">
+                    <span>Скрыть кол-во друзей</span>
+                    <input type="checkbox" id="priv-friends" style="width:20px;height:20px">
+                </label>
+                <label class="shop-item" style="cursor:pointer">
+                    <span>Скрыть кол-во сообществ</span>
+                    <input type="checkbox" id="priv-channels" style="width:20px;height:20px">
+                </label>
+                <button id="btn-save-privacy" class="btn btn-primary full" style="margin-top:16px">Сохранить</button>
+                <button id="btn-close-privacy" class="btn btn-secondary full" style="margin-top:8px">Закрыть</button>
+            </div>
+        </div>
+
         <div id="modal-create" class="modal hidden">
             <div class="modal-content">
                 <h3>Новый канал</h3>
                 <div style="text-align:center;margin-bottom:14px">
                     <div id="new-channel-avatar-preview" class="avatar-large" style="width:72px;height:72px;font-size:28px;margin:0 auto 8px;cursor:pointer">+</div>
                     <input type="file" id="new-channel-avatar" accept="image/*" style="display:none">
-                    <p style="font-size:12px;color:var(--muted)">Нажми, чтобы выбрать аватар</p>
+                    <p style="font-size:12px;color:var(--muted)">Аватар канала</p>
                 </div>
-                <input type="text" id="new-channel-name" placeholder="Название канала" maxlength="50">
+                <input type="text" id="new-channel-name" placeholder="Название" maxlength="50">
                 <textarea id="new-channel-desc" placeholder="Описание" maxlength="300"></textarea>
                 <div class="modal-actions">
                     <button id="btn-cancel-create" class="btn btn-secondary">Отмена</button>
                     <button id="btn-confirm-create" class="btn btn-primary">Создать (+10✦)</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-post" class="modal hidden">
+            <div class="modal-content">
+                <h3>Новый пост</h3>
+                <textarea id="new-post-content" placeholder="Что нового?" maxlength="2000" rows="4"></textarea>
+                <div id="post-photo-preview" style="display:none;margin-bottom:12px;border-radius:12px;overflow:hidden">
+                    <img id="post-photo-img" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px">
+                </div>
+                <input type="file" id="post-photo-input" accept="image/*" style="display:none">
+                <input type="file" id="post-video-input" accept="video/*" style="display:none">
+                <div style="display:flex;gap:8px;margin-bottom:12px">
+                    <button type="button" id="btn-add-photo" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-image"></i> Фото</button>
+                    <button type="button" id="btn-add-video" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-video"></i> Видео</button>
+                </div>
+                <div class="modal-actions">
+                    <button id="btn-cancel-post" class="btn btn-secondary">Отмена</button>
+                    <button id="btn-confirm-post" class="btn btn-primary">Опубликовать</button>
                 </div>
             </div>
         </div>
@@ -191,67 +260,9 @@
                 <div id="comments-list" style="flex:1;overflow-y:auto;margin-bottom:12px"></div>
                 <div style="display:flex;gap:8px">
                     <input type="text" id="comment-input" placeholder="Комментарий..." style="flex:1;margin:0">
-                    <button id="btn-send-comment" class="btn btn-primary btn-sm">➤</button>
+                    <button id="btn-send-comment" class="btn btn-primary btn-sm"><i class="fa-solid fa-paper-plane"></i></button>
                 </div>
                 <button id="btn-close-comments" class="btn btn-secondary full" style="margin-top:12px">Закрыть</button>
-            </div>
-        </div>
-
-        <div id="modal-post" class="modal hidden">
-            <div class="modal-content">
-                <h3>Новый пост</h3>
-                <textarea id="new-post-content" placeholder="Что нового?" maxlength="2000" rows="4"></textarea>
-                <div id="post-photo-preview" style="display:none;margin-bottom:12px;border-radius:12px;overflow:hidden">
-                    <img id="post-photo-img" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px">
-                </div>
-                <input type="file" id="post-photo-input" accept="image/*" style="display:none">
-                <div style="display:flex;gap:8px;margin-bottom:12px">
-                    <button type="button" id="btn-add-photo" class="btn btn-secondary" style="flex:1">📷 Фото</button>
-                    <button type="button" id="btn-add-video" class="btn btn-secondary" style="flex:1">🎬 Видео</button>
-                </div>
-                <input type="file" id="post-video-input" accept="video/*" style="display:none">
-                <div class="modal-actions">
-                    <button id="btn-cancel-post" class="btn btn-secondary">Отмена</button>
-                    <button id="btn-confirm-post" class="btn btn-primary">Опубликовать</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="modal-profile" class="modal hidden">
-            <div class="modal-content">
-                <h3>Редактор профиля</h3>
-                <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Нажми на аватар в профиле, чтобы сменить фото</p>
-                <label style="font-size:13px;color:var(--muted)">Статус</label>
-                <input type="text" id="edit-status" placeholder="Ваш статус" maxlength="120">
-                <div class="modal-actions">
-                    <button id="btn-cancel-profile" class="btn btn-secondary">Отмена</button>
-                    <button id="btn-save-profile" class="btn btn-primary">Сохранить</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="modal-shop" class="modal hidden">
-            <div class="modal-content" style="max-height:85vh;overflow-y:auto">
-                <h3>Магазин ✦</h3>
-                <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Баланс: <strong id="shop-balance" style="color:var(--accent3)">0</strong> ✦</p>
-                <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px">Канал для буста</label>
-                <select id="shop-channel-select" style="width:100%;padding:12px 14px;margin-bottom:16px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text);font-size:14px">
-                    <option value="">Загрузка...</option>
-                </select>
-                <div class="shop-item"><div><strong>Бронзовый буст</strong><p>12 часов · поднятие в ленте</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="bronze">50 ✦</button></div>
-                <div class="shop-item"><div><strong>Серебряный буст</strong><p>24 часа · Топ-10</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="silver">150 ✦</button></div>
-                <div class="shop-item"><div><strong>Золотой буст</strong><p>48 часов · закреп сверху</p></div><button class="btn btn-primary btn-sm btn-boost" data-level="gold">350 ✦</button></div>
-                <div class="shop-item"><div><strong>Премиум 30 дней</strong><p>💎 в профиле и чатах</p></div><button class="btn btn-primary btn-sm" id="btn-buy-premium">200 ✦</button></div>
-                <button id="btn-close-shop" class="btn btn-secondary full" style="margin-top:16px">Закрыть</button>
-            </div>
-        </div>
-
-        <div id="modal-toast" class="modal hidden">
-            <div class="modal-content" style="text-align:center;padding:28px 24px">
-                <div id="toast-icon" style="font-size:36px;margin-bottom:12px">✦</div>
-                <h3 id="toast-title" style="margin-bottom:8px">Готово</h3>
-                <p id="toast-text" style="color:var(--muted);font-size:14px;margin-bottom:20px"></p>
-                <button id="btn-toast-ok" class="btn btn-primary full">Ок</button>
             </div>
         </div>
 
@@ -278,6 +289,15 @@
                     <button id="btn-add-role" class="btn btn-primary full">Добавить</button>
                 </div>
                 <button id="btn-close-roles" class="btn btn-secondary full" style="margin-top:12px">Закрыть</button>
+            </div>
+        </div>
+
+        <div id="modal-toast" class="modal hidden">
+            <div class="modal-content" style="text-align:center;padding:28px 24px">
+                <div id="toast-icon" style="font-size:36px;margin-bottom:12px">✦</div>
+                <h3 id="toast-title" style="margin-bottom:8px">Готово</h3>
+                <p id="toast-text" style="color:var(--muted);font-size:14px;margin-bottom:20px"></p>
+                <button id="btn-toast-ok" class="btn btn-primary full">Ок</button>
             </div>
         </div>
     </div>

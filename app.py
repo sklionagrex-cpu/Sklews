@@ -27,6 +27,8 @@ class User(db.Model):
     last_daily = db.Column(db.DateTime, nullable=True)
     referral_code = db.Column(db.String(20), unique=True, nullable=True)
     referred_by = db.Column(db.Integer, nullable=True)
+    hide_friends = db.Column(db.Boolean, default=False)
+    hide_channels = db.Column(db.Boolean, default=False)
 
 class Channel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -84,6 +86,18 @@ class ChannelRole(db.Model):
     channel_id = db.Column(db.Integer, db.ForeignKey('channel.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     role = db.Column(db.String(20), default='moderator')  # admin / moderator / coauthor
+
+
+class PostLike(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+class PostReaction(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    emoji = db.Column(db.String(16), nullable=False)
 
 class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -172,7 +186,8 @@ def api_channels():
             ch.boost_until = None
     db.session.commit()
 
-    channels = Channel.query.all()
+    me = current_user()
+    channels = Channel.query.filter(Channel.owner_id != me.id).all()
     scored = []
     for ch in channels:
         posts = Post.query.filter_by(channel_id=ch.id).all()
@@ -304,10 +319,16 @@ def channel_posts(channel_id):
     result = []
     for p in posts:
         author = User.query.get(p.author_id)
+        me = current_user()
+        liked = PostLike.query.filter_by(post_id=p.id, user_id=me.id).first() is not None
+        reacts = {}
+        for r in PostReaction.query.filter_by(post_id=p.id).all():
+            reacts[r.emoji] = reacts.get(r.emoji, 0) + 1
         result.append({
             'id': p.id, 'content': p.content, 'author': author.username if author else '?',
             'likes': p.likes, 'comments': p.comments_count, 'views': p.views, 'is_pinned': p.is_pinned,
             'media_type': p.media_type, 'media_url': p.media_url,
+            'liked': liked, 'reactions': reacts,
             'created_at': p.created_at.strftime('%d.%m %H:%M')
         })
         p.views += 1
@@ -337,14 +358,23 @@ def create_post(channel_id):
 @app.route('/api/post/<int:post_id>/like', methods=['POST'])
 @login_required
 def like_post(post_id):
+    user = current_user()
     post = Post.query.get_or_404(post_id)
-    post.likes += 1
-    if post.likes in (50, 200):
-        author = User.query.get(post.author_id)
-        if author:
-            author.crystals += 5 if post.likes == 50 else 15
+    existing = PostLike.query.filter_by(post_id=post_id, user_id=user.id).first()
+    if existing:
+        db.session.delete(existing)
+        post.likes = max(0, post.likes - 1)
+        liked = False
+    else:
+        db.session.add(PostLike(post_id=post_id, user_id=user.id))
+        post.likes += 1
+        liked = True
+        if post.likes in (50, 200):
+            author = User.query.get(post.author_id)
+            if author:
+                author.crystals += 5 if post.likes == 50 else 15
     db.session.commit()
-    return jsonify({'likes': post.likes})
+    return jsonify({'likes': post.likes, 'liked': liked})
 
 @app.route('/api/post/<int:post_id>/pin', methods=['POST'])
 @login_required
@@ -418,7 +448,9 @@ def api_profile():
     return jsonify({
         'username': user.username, 'status': user.status, 'avatar': user.avatar,
         'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
-        'is_premium': user.is_premium, 'referral_code': user.referral_code or ''
+        'is_premium': user.is_premium, 'referral_code': user.referral_code or '',
+        'hide_friends': bool(getattr(user, 'hide_friends', False)),
+        'hide_channels': bool(getattr(user, 'hide_channels', False))
     })
 
 @app.route('/api/profile/update', methods=['POST'])
@@ -430,6 +462,10 @@ def update_profile():
         user.status = str(data['status'])[:120]
     if 'avatar' in data:
         user.avatar = str(data['avatar'])[:256]
+    if 'hide_friends' in data:
+        user.hide_friends = bool(data['hide_friends'])
+    if 'hide_channels' in data:
+        user.hide_channels = bool(data['hide_channels'])
     db.session.commit()
     return jsonify({'status': 'ok'})
 
@@ -600,7 +636,7 @@ def my_channels():
     return jsonify([{
         'id': ch.id, 'name': ch.name, 'subscribers': ch.subscribers_count,
         'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '',
-        'accent': ch.accent_color or '#8b5cf6'
+        'accent': ch.accent_color or '#8b5cf6', 'avatar': ch.avatar or ''
     } for ch in channels])
 
 # ==================== ANALYTICS (basic) ====================
@@ -783,12 +819,89 @@ def channel_analytics_detailed(channel_id):
 @app.route('/api/post/<int:post_id>/react', methods=['POST'])
 @login_required
 def react_post(post_id):
+    user = current_user()
     post = Post.query.get_or_404(post_id)
-    emoji = (request.json or {}).get('emoji', '❤️')
-    # store as increment likes for simplicity + return emoji
-    post.likes += 1
+    emoji = (request.json or {}).get('emoji', '🔥')
+    existing = PostReaction.query.filter_by(post_id=post_id, user_id=user.id, emoji=emoji).first()
+    if existing:
+        db.session.delete(existing)
+        active = False
+    else:
+        # one reaction type at a time optional - allow multiple types
+        db.session.add(PostReaction(post_id=post_id, user_id=user.id, emoji=emoji))
+        active = True
     db.session.commit()
-    return jsonify({'likes': post.likes, 'emoji': emoji})
+    counts = {}
+    for r in PostReaction.query.filter_by(post_id=post_id).all():
+        counts[r.emoji] = counts.get(r.emoji, 0) + 1
+    return jsonify({'reactions': counts, 'active': active, 'emoji': emoji})
+
+
+
+@app.route('/api/user/<int:user_id>')
+@login_required
+def user_public(user_id):
+    u = User.query.get_or_404(user_id)
+    me = current_user()
+    friends_count = Friendship.query.filter(
+        ((Friendship.user_id == u.id) | (Friendship.friend_id == u.id)) &
+        (Friendship.status == 'accepted')
+    ).count()
+    channels_count = Channel.query.filter_by(owner_id=u.id).count()
+    fr = Friendship.query.filter(
+        ((Friendship.user_id == me.id) & (Friendship.friend_id == u.id)) |
+        ((Friendship.user_id == u.id) & (Friendship.friend_id == me.id))
+    ).first()
+    return jsonify({
+        'id': u.id, 'username': u.username, 'avatar': u.avatar, 'status': u.status,
+        'is_premium': u.is_premium,
+        'friends_count': friends_count if not u.hide_friends else None,
+        'channels_count': channels_count if not u.hide_channels else None,
+        'hide_friends': bool(u.hide_friends),
+        'hide_channels': bool(u.hide_channels),
+        'friendship': fr.status if fr else 'none',
+        'is_me': u.id == me.id
+    })
+
+@app.route('/api/user/<int:user_id>/friends')
+@login_required
+def user_friends_list(user_id):
+    u = User.query.get_or_404(user_id)
+    me = current_user()
+    if u.hide_friends and u.id != me.id:
+        return jsonify({'error': 'Скрыто настройками приватности', 'friends': []})
+    result = []
+    for f in Friendship.query.filter(
+        ((Friendship.user_id == u.id) | (Friendship.friend_id == u.id)) &
+        (Friendship.status == 'accepted')
+    ).all():
+        fid = f.friend_id if f.user_id == u.id else f.user_id
+        fu = User.query.get(fid)
+        if fu:
+            result.append({'id': fu.id, 'username': fu.username, 'avatar': fu.avatar})
+    return jsonify(result)
+
+@app.route('/api/user/<int:user_id>/channels')
+@login_required
+def user_channels_list(user_id):
+    u = User.query.get_or_404(user_id)
+    me = current_user()
+    if u.hide_channels and u.id != me.id:
+        return jsonify({'error': 'Скрыто настройками приватности', 'channels': []})
+    channels = Channel.query.filter_by(owner_id=u.id).all()
+    return jsonify([{'id': c.id, 'name': c.name, 'avatar': c.avatar, 'subscribers': c.subscribers_count} for c in channels])
+
+@app.route('/api/privacy', methods=['POST'])
+@login_required
+def update_privacy():
+    user = current_user()
+    data = request.json or {}
+    if 'hide_friends' in data:
+        user.hide_friends = bool(data['hide_friends'])
+    if 'hide_channels' in data:
+        user.hide_channels = bool(data['hide_channels'])
+    db.session.commit()
+    return jsonify({'hide_friends': user.hide_friends, 'hide_channels': user.hide_channels})
 
 
 import uuid

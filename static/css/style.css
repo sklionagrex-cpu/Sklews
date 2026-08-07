@@ -818,3 +818,47 @@ body:has(#screen-chat.active) .bottom-nav {
 }
 .react-bar { display:flex; gap:8px; margin-top:8px; }
 .react-bar button { background:var(--card2); border:1px solid var(--border); border-radius:20px; padding:4px 10px; font-size:14px; cursor:pointer; }
+
+/* Chat tools */
+.chat-tool {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 14px;
+    padding: 0;
+}
+.chat-tool.active, .btn-super.active {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    color: #fff;
+    border-color: transparent;
+}
+.chat-input-area {
+    gap: 6px;
+    padding: 8px 10px;
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+.chat-input-area input {
+    min-width: 0;
+    flex: 1;
+    padding: 11px 14px;
+    font-size: 15px;
+}
+.btn-send {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+}
+.avatar.has-img {
+    background-size: cover !important;
+    background-position: center !important;
+    color: transparent !important;
+}
+.like-btn.liked { color: #f472b6; }
