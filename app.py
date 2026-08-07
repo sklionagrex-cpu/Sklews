@@ -722,12 +722,81 @@ def platform_activity():
     return jsonify({'today': posts})
 
 
+
+@app.route('/api/channel/<int:channel_id>/analytics/detailed')
+@login_required
+def channel_analytics_detailed(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    period = request.args.get('period', '24h')
+    now = datetime.utcnow()
+    if period == '1h':
+        cutoff = now - timedelta(hours=1)
+        buckets = 6
+        delta = timedelta(minutes=10)
+    elif period == '24h':
+        cutoff = now - timedelta(hours=24)
+        buckets = 12
+        delta = timedelta(hours=2)
+    elif period == 'week':
+        cutoff = now - timedelta(days=7)
+        buckets = 7
+        delta = timedelta(days=1)
+    elif period == 'month':
+        cutoff = now - timedelta(days=30)
+        buckets = 10
+        delta = timedelta(days=3)
+    else:
+        cutoff = ch.created_at or (now - timedelta(days=365))
+        buckets = 12
+        delta = (now - cutoff) / buckets if buckets else timedelta(days=30)
+
+    posts = Post.query.filter_by(channel_id=channel_id).all()
+    labels, likes_s, views_s, posts_s = [], [], [], []
+    for i in range(buckets):
+        start = cutoff + delta * i
+        end = cutoff + delta * (i + 1)
+        labels.append(start.strftime('%d.%m %H:%M') if period in ('1h', '24h') else start.strftime('%d.%m'))
+        pl = [p for p in posts if p.created_at and start <= p.created_at < end]
+        posts_s.append(len(pl))
+        likes_s.append(sum(p.likes for p in pl))
+        views_s.append(sum(p.views for p in pl))
+
+    total_likes = sum(p.likes for p in posts)
+    total_views = sum(p.views for p in posts)
+    best = max(posts, key=lambda p: p.views) if posts else None
+    return jsonify({
+        'labels': labels,
+        'likes': likes_s,
+        'views': views_s,
+        'posts': posts_s,
+        'subscribers': ch.subscribers_count,
+        'total_likes': total_likes,
+        'total_views': total_views,
+        'total_posts': len(posts),
+        'best_post': {'content': best.content[:80], 'views': best.views, 'likes': best.likes} if best else None,
+        'created_at': ch.created_at.strftime('%d.%m.%Y')
+    })
+
+@app.route('/api/post/<int:post_id>/react', methods=['POST'])
+@login_required
+def react_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    emoji = (request.json or {}).get('emoji', '❤️')
+    # store as increment likes for simplicity + return emoji
+    post.likes += 1
+    db.session.commit()
+    return jsonify({'likes': post.likes, 'emoji': emoji})
+
+
 import uuid
 from flask import send_from_directory
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'webm', 'mov', 'mp3', 'ogg', 'wav', 'm4a'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXT

@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div id="app">
@@ -83,6 +84,21 @@
         <div id="screen-analytics" class="screen">
             <header class="header"><h1>Аналитика</h1></header>
             <div id="analytics-list" class="feed"></div>
+            <div id="analytics-detail" class="feed hidden" style="padding:16px">
+                <button id="btn-an-back" class="btn btn-secondary btn-sm" style="margin-bottom:12px">← Назад</button>
+                <h2 id="an-channel-name" style="margin-bottom:12px"></h2>
+                <div class="filter-buttons" style="margin-bottom:16px" id="an-periods">
+                    <button class="filter-btn active" data-period="1h">1 час</button>
+                    <button class="filter-btn" data-period="24h">24 часа</button>
+                    <button class="filter-btn" data-period="week">Неделя</button>
+                    <button class="filter-btn" data-period="month">Месяц</button>
+                    <button class="filter-btn" data-period="all">Всё</button>
+                </div>
+                <div style="background:var(--card);border-radius:16px;padding:12px;border:1px solid var(--border);margin-bottom:16px">
+                    <canvas id="an-chart" height="200"></canvas>
+                </div>
+                <div id="an-summary"></div>
+            </div>
         </div>
 
         <!-- CHANNEL VIEW -->
@@ -120,6 +136,9 @@
             <div id="messages" class="messages"></div>
             <div class="chat-input-area">
                 <button id="btn-super" class="btn-super" title="Супер (30✦)">✦</button>
+                <button id="btn-voice" class="btn-super" title="Голос" style="font-size:14px">🎤</button>
+                <input type="file" id="chat-file" accept="image/*,video/*" style="display:none">
+                <button id="btn-attach" class="btn-super" title="Файл" style="font-size:14px">📎</button>
                 <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off">
                 <button id="btn-send" class="btn-send"><i class="fa-solid fa-paper-plane"></i></button>
             </div>
@@ -186,7 +205,11 @@
                     <img id="post-photo-img" style="width:100%;max-height:200px;object-fit:cover;border-radius:12px">
                 </div>
                 <input type="file" id="post-photo-input" accept="image/*" style="display:none">
-                <button type="button" id="btn-add-photo" class="btn btn-secondary full" style="margin-bottom:12px">📷 Добавить фото</button>
+                <div style="display:flex;gap:8px;margin-bottom:12px">
+                    <button type="button" id="btn-add-photo" class="btn btn-secondary" style="flex:1">📷 Фото</button>
+                    <button type="button" id="btn-add-video" class="btn btn-secondary" style="flex:1">🎬 Видео</button>
+                </div>
+                <input type="file" id="post-video-input" accept="video/*" style="display:none">
                 <div class="modal-actions">
                     <button id="btn-cancel-post" class="btn btn-secondary">Отмена</button>
                     <button id="btn-confirm-post" class="btn btn-primary">Опубликовать</button>

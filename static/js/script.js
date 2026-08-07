@@ -61,7 +61,7 @@ async function loadChannels() {
         }
         channels.forEach(ch => {
             const card = document.createElement('div');
-            card.className = 'channel-card' + (ch.is_boosted ? ' boosted' : '');
+            card.className = 'channel-card' + (ch.is_boosted ? ' boosted boosted-' + (ch.boost_level || 'bronze') : '');
             const badge = ch.label ? `<span class="boost-label">${ch.label}</span>` : '';
             card.innerHTML = `<div class="avatar">${ch.name[0].toUpperCase()}</div>
                 <div class="channel-info"><h3>${escapeHtml(ch.name)} ${badge}</h3>
@@ -222,7 +222,10 @@ async function loadPosts(channelId) {
             card.className = 'channel-card';
             card.style.cssText = 'flex-direction:column;align-items:stretch';
             const pin = p.is_pinned ? '<span style="color:var(--accent);font-size:12px">📌 </span>' : '';
-            const photo = (p.media_type === 'photo' && p.media_url) ? `<img src="${p.media_url}" style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;object-fit:cover">` : '';
+            let mediaHtml = '';
+            if (p.media_type === 'photo' && p.media_url) mediaHtml = `<img src="${p.media_url}" style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;object-fit:cover">`;
+            if (p.media_type === 'video' && p.media_url) mediaHtml = `<video src="${p.media_url}" controls playsinline style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;background:#000"></video>`;
+            const photo = mediaHtml;
             card.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:8px">
                 <strong>${pin}${escapeHtml(p.author)}</strong>
                 <span style="font-size:12px;color:var(--muted)">${p.created_at}</span></div>
@@ -232,7 +235,12 @@ async function loadPosts(channelId) {
                 <span class="like-btn" data-id="${p.id}" style="cursor:pointer">❤️ ${p.likes}</span>
                 <span class="comment-btn" data-id="${p.id}" style="cursor:pointer">💬 ${p.comments || 0}</span>
                 <span>👁 ${p.views}</span>
-                <span class="pin-btn" data-id="${p.id}" style="cursor:pointer">📌</span></div>`;
+                <span class="pin-btn" data-id="${p.id}" style="cursor:pointer">📌</span></div>
+                <div class="react-bar">
+                    <button class="react-btn" data-id="${p.id}" data-emoji="🔥">🔥</button>
+                    <button class="react-btn" data-id="${p.id}" data-emoji="✨">✨</button>
+                    <button class="react-btn" data-id="${p.id}" data-emoji="❤️‍🔥">❤️‍🔥</button>
+                </div>`;
             feed.appendChild(card);
         });
         document.querySelectorAll('.like-btn').forEach(btn => {
@@ -255,6 +263,18 @@ async function loadPosts(channelId) {
             btn.onclick = async e => {
                 e.stopPropagation();
                 openComments(btn.dataset.id);
+            };
+        });
+        document.querySelectorAll('.react-btn').forEach(btn => {
+            btn.onclick = async e => {
+                e.stopPropagation();
+                const r = await fetch(`/api/post/${btn.dataset.id}/react`, {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ emoji: btn.dataset.emoji })
+                });
+                const d = await r.json();
+                const likeBtn = btn.closest('.channel-card').querySelector('.like-btn');
+                if (likeBtn) likeBtn.innerHTML = `❤️ ${d.likes}`;
             };
         });
 
@@ -299,6 +319,27 @@ document.getElementById('btn-add-post').onclick = () => {
 };
 document.getElementById('btn-cancel-post').onclick = () => document.getElementById('modal-post').classList.add('hidden');
 document.getElementById('btn-add-photo').onclick = () => document.getElementById('post-photo-input').click();
+document.getElementById('btn-add-video')?.addEventListener('click', () => document.getElementById('post-video-input').click());
+document.getElementById('post-video-input')?.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    pendingPostPhoto = file; // reuse var for any media
+    pendingPostPhoto._type = 'video';
+    document.getElementById('post-photo-preview').style.display = 'block';
+    document.getElementById('post-photo-img').src = '';
+    document.getElementById('post-photo-img').alt = '🎬 ' + file.name;
+    document.getElementById('post-photo-img').style.display = 'none';
+    let v = document.getElementById('post-video-preview');
+    if (!v) {
+        v = document.createElement('video');
+        v.id = 'post-video-preview';
+        v.controls = true;
+        v.style.cssText = 'width:100%;max-height:200px;border-radius:12px';
+        document.getElementById('post-photo-preview').appendChild(v);
+    }
+    v.src = URL.createObjectURL(file);
+    v.style.display = 'block';
+});
 document.getElementById('post-photo-input').onchange = e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -317,7 +358,7 @@ document.getElementById('btn-confirm-post').onclick = async () => {
         const upData = await up.json();
         if (upData.error) { showToast('Ошибка', upData.error, '!'); return; }
         media_url = upData.url;
-        media_type = 'photo';
+        media_type = (pendingPostPhoto._type === 'video') ? 'video' : 'photo';
     }
     await fetch(`/api/channel/${currentChannelId}/post`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -408,7 +449,7 @@ async function loadMyChannels() {
             card.innerHTML = `<div class="avatar">${ch.name[0].toUpperCase()}</div>
                 <div class="channel-info"><h3>${escapeHtml(ch.name)} ${badge}</h3>
                 <p>${ch.subscribers} участников</p></div>`;
-            card.onclick = () => openChannel(ch.id);
+            card.onclick = () => openAnalyticsDetail(ch.id, ch.name);
             list.appendChild(card);
         });
     } catch (e) { console.error(e); }
@@ -443,7 +484,7 @@ async function loadAnalyticsTab() {
                     <div><span>${ch.views}</span>просм.</div>
                 </div>
                 <p style="margin-top:12px;font-size:12px;color:var(--muted);text-align:center">Средний охват: ${avg}</p>`;
-            card.onclick = () => openChannel(ch.id);
+            card.onclick = () => openAnalyticsDetail(ch.id, ch.name);
             list.appendChild(card);
         });
     } catch (e) {
@@ -661,11 +702,20 @@ async function loadMessages(userId) {
     messages.forEach(m => {
         const div = document.createElement('div');
         div.className = `message ${m.is_mine?'mine':'theirs'}${m.is_super?' super':''}`;
-        div.innerHTML = m.is_super ? `<span style="font-size:11px;opacity:.85">✦ SUPER</span><br>${escapeHtml(m.content)}` : escapeHtml(m.content);
+        div.innerHTML = formatMessage(m.content, m.is_super);
         box.appendChild(div);
     });
     box.scrollTop = box.scrollHeight;
 }
+function formatMessage(content, isSuper) {
+    let body = content || '';
+    if (body.startsWith('[photo]')) body = `<img src="${body.slice(7)}" style="max-width:220px;border-radius:12px">`;
+    else if (body.startsWith('[video]')) body = `<video src="${body.slice(7)}" controls playsinline style="max-width:220px;border-radius:12px"></video>`;
+    else if (body.startsWith('[voice]')) body = `<audio src="${body.slice(7)}" controls style="max-width:220px"></audio>`;
+    else body = escapeHtml(body);
+    return (isSuper ? `<span style="font-size:11px;opacity:.85">✦ SUPER</span><br>` : '') + body;
+}
+
 
 document.getElementById('btn-super').onclick = () => {
     isSuperMode = !isSuperMode;
@@ -692,11 +742,59 @@ socket.on('new_message', data => {
     const box = document.getElementById('messages');
     const div = document.createElement('div');
     div.className = `message ${data.is_mine?'mine':'theirs'}${data.is_super?' super':''}`;
-    div.innerHTML = data.is_super ? `<span style="font-size:11px;opacity:.85">✦ SUPER</span><br>${escapeHtml(data.content)}` : escapeHtml(data.content);
+    div.innerHTML = formatMessage(data.content, data.is_super);
     box.appendChild(div);
     box.scrollTop = box.scrollHeight;
 });
 socket.on('error', d => showToast('Ошибка', d.msg || 'Ошибка', '!'));
+
+document.getElementById('btn-attach')?.addEventListener('click', () => document.getElementById('chat-file').click());
+document.getElementById('chat-file')?.addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file || !currentChatUserId) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    const up = await fetch('/api/upload', { method: 'POST', body: fd });
+    const ud = await up.json();
+    if (ud.error) return showToast('Ошибка', ud.error, '!');
+    const isVideo = file.type.startsWith('video');
+    const content = isVideo ? `[video]${ud.url}` : `[photo]${ud.url}`;
+    socket.emit('send_message', { receiver_id: currentChatUserId, content, is_super: false });
+    e.target.value = '';
+});
+
+let mediaRecorder = null;
+let voiceChunks = [];
+document.getElementById('btn-voice')?.addEventListener('click', async () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        document.getElementById('btn-voice').classList.remove('active');
+        return;
+    }
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        voiceChunks = [];
+        mediaRecorder.ondataavailable = e => voiceChunks.push(e.data);
+        mediaRecorder.onstop = async () => {
+            const blob = new Blob(voiceChunks, { type: 'audio/webm' });
+            const fd = new FormData();
+            fd.append('file', blob, 'voice.webm');
+            const up = await fetch('/api/upload', { method: 'POST', body: fd });
+            const ud = await up.json();
+            if (ud.url && currentChatUserId) {
+                socket.emit('send_message', { receiver_id: currentChatUserId, content: `[voice]${ud.url}`, is_super: false });
+            }
+            stream.getTracks().forEach(t => t.stop());
+        };
+        mediaRecorder.start();
+        document.getElementById('btn-voice').classList.add('active');
+        showToast('Запись', 'Нажми 🎤 ещё раз чтобы отправить', '🎤');
+    } catch (err) {
+        showToast('Ошибка', 'Нет доступа к микрофону', '!');
+    }
+});
+
 
 function escapeHtml(t) {
     if (!t) return '';
