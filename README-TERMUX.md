@@ -3,7 +3,7 @@
 ## 1. Сервер на телефоне
 
 ```bash
-pkg update && pkg install python git
+pkg update && pkg install python git libsqlite sqlite
 cd ~
 git clone https://github.com/sklionagrex-cpu/Sklews.git
 cd Sklews
@@ -15,9 +15,15 @@ chmod +x run-termux.sh
 Или вручную:
 
 ```bash
+pkg install -y libsqlite sqlite
 pip install -r requirements.txt
 python app.py
 ```
+
+> **Если была ошибка `ModuleNotFoundError: No module named '_sqlite3'`** — это решено:
+> - в `requirements.txt` добавлен `pysqlite3-binary`
+> - в `app.py` добавлен автоматический fallback на pysqlite3
+> - `run-termux.sh` ставит `libsqlite` / `sqlite`
 
 Открой в Chrome: **http://127.0.0.1:5000**
 
@@ -61,6 +67,12 @@ python app.py
 
 ## Важно
 
-- База `sklews.db` хранится в папке проекта на телефоне  
-- Для доступа из интернета нужен туннель (ngrok, cloudflared) или VPS  
-- Socket.IO и загрузки работают через тот же порт 5000  
+- База `sklews.db` хранится в папке проекта.
+- Загрузки файлов — в `static/uploads/`.
+- Для доступа из сети телефон и клиент должны быть в одной Wi‑Fi.
+- Если Python всё равно ругается на sqlite — выполни:
+  ```bash
+  pkg reinstall python
+  pkg install libsqlite
+  pip install --force-reinstall pysqlite3-binary
+  ```

@@ -4,9 +4,15 @@ cd "$(dirname "$0")"
 
 echo "=== Sklews Termux ==="
 
-# deps
-pkg install -y python 2>/dev/null
+# System deps (sqlite needed for Python _sqlite3 / pysqlite3)
+pkg update -y 2>/dev/null || true
+pkg install -y python libsqlite sqlite clang make 2>/dev/null || true
+
+# Python deps
+pip install -q --upgrade pip 2>/dev/null || true
 pip install -q -r requirements.txt
+
+# Fallback: if system sqlite still missing, pysqlite3-binary will be used via shim in app.py
 
 # wake lock so phone doesn't kill server
 if command -v termux-wake-lock >/dev/null 2>&1; then
