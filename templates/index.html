@@ -128,19 +128,12 @@ window.SKLEWS_BUILD = '20260807m';
 
         
         <div id="screen-premium" class="screen">
-            <header class="header">
-                <div class="brand-logo header-logo" style="gap:8px">
-                    <i class="fa-solid fa-crown" style="color:#fbbf24"></i>
-                    <span>Premium</span>
+            <div class="premium-topbar">
+                <div class="premium-topbar-title"><i class="fa-solid fa-crown"></i> Premium</div>
+                <div class="premium-tabs" role="tablist">
+                    <button type="button" class="premium-tab active" data-ptab="posts" id="ptab-posts">Посты</button>
+                    <button type="button" class="premium-tab" data-ptab="chat" id="ptab-chat">Чат</button>
                 </div>
-            </header>
-            <div class="premium-tabs" role="tablist">
-                <button type="button" class="premium-tab active" data-ptab="posts" id="ptab-posts">
-                    <i class="fa-solid fa-newspaper"></i> Посты
-                </button>
-                <button type="button" class="premium-tab" data-ptab="chat" id="ptab-chat">
-                    <i class="fa-solid fa-comments"></i> Чат
-                </button>
             </div>
             <div id="premium-page-posts" class="premium-page">
                 <div class="premium-feed-compose">
@@ -156,8 +149,19 @@ window.SKLEWS_BUILD = '20260807m';
             </div>
             <div id="premium-page-chat" class="premium-page hidden">
                 <div id="premium-chat-messages" class="premium-chat-messages"></div>
+                <div id="premium-voice-rec-bar" class="voice-rec-bar hidden">
+                    <div class="voice-rec-pulse"></div>
+                    <span id="premium-voice-rec-timer">0:00</span>
+                    <span class="voice-rec-hint">Идёт запись</span>
+                    <button type="button" id="btn-premium-voice-cancel" class="btn-voice-act" title="Отмена"><i class="fa-solid fa-trash"></i></button>
+                    <button type="button" id="btn-premium-voice-stop" class="btn-voice-act send" title="Отправить"><i class="fa-solid fa-check"></i></button>
+                </div>
                 <div class="premium-chat-input-area">
-                    <input type="text" id="premium-chat-input" placeholder="Сообщение в Premium-чат..." autocomplete="off" maxlength="1000">
+                    <button type="button" id="btn-premium-voice" class="btn-super" title="Голос"><i class="fa-solid fa-microphone"></i></button>
+                    <button type="button" id="btn-premium-circle" class="btn-super" title="Видео-кружок"><i class="fa-solid fa-video"></i></button>
+                    <input type="file" id="premium-chat-file" accept="image/*,video/*" style="display:none">
+                    <button type="button" id="btn-premium-attach" class="btn-super" title="Файл"><i class="fa-solid fa-paperclip"></i></button>
+                    <input type="text" id="premium-chat-input" placeholder="Сообщение..." autocomplete="off" maxlength="2000">
                     <button type="button" id="btn-premium-chat-send" class="btn-send" title="Отправить"><i class="fa-solid fa-paper-plane"></i></button>
                 </div>
             </div>

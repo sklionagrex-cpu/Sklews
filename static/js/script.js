@@ -88,7 +88,10 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const tab = btn.dataset.tab;
-        showScreen('screen-' + tab);
+        NAV_STACK.length = 0;
+        currentChatUserId = null;
+        showScreen('screen-' + tab, { push: false });
+        try { history.replaceState({ sklews: 1, root: 1, tab }, '', '#' + tab); } catch (e) {}
         if (tab === 'home') loadHome();
         if (tab === 'premium') {
             const activeP = document.querySelector('.premium-tab.active')?.dataset.ptab || 'posts';
@@ -107,7 +110,21 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
     });
 });
 
-function showScreen(id) {
+// ===== In-app navigation stack (hardware back button) =====
+const NAV_STACK = [];
+let _navSuppress = false;
+
+function showScreen(id, opts) {
+    opts = opts || {};
+    const push = opts.push !== false; // default push
+    const current = document.querySelector('.screen.active');
+    const curId = current ? current.id : null;
+    if (push && curId && curId !== id) {
+        NAV_STACK.push({ screen: curId, chatUserId: currentChatUserId, extra: opts.fromExtra || null });
+        try {
+            history.pushState({ sklews: 1, screen: id, depth: NAV_STACK.length }, '', '#' + id);
+        } catch (e) {}
+    }
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const el = document.getElementById(id);
     if (!el) {
@@ -117,6 +134,60 @@ function showScreen(id) {
     el.classList.add('active');
     try { el.scrollTop = 0; } catch (e) {}
 }
+
+function navGoBack() {
+    // Close open modals first
+    const openModal = document.querySelector('.modal:not(.hidden)');
+    if (openModal) {
+        openModal.classList.add('hidden');
+        return true;
+    }
+    if (!NAV_STACK.length) {
+        // On root tabs — don't exit; stay
+        return true;
+    }
+    const prev = NAV_STACK.pop();
+    _navSuppress = true;
+    if (prev.screen === 'screen-chat' && prev.chatUserId) {
+        // rare
+        currentChatUserId = prev.chatUserId;
+    } else if (prev.screen !== 'screen-chat') {
+        currentChatUserId = null;
+    }
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const el = document.getElementById(prev.screen);
+    if (el) el.classList.add('active');
+    // Sync bottom nav highlight for root tabs
+    const tabMap = {
+        'screen-home': 'home', 'screen-premium': 'premium', 'screen-create': 'create',
+        'screen-analytics': 'analytics', 'screen-shop': 'shop', 'screen-chats': 'chats',
+        'screen-profile': 'profile'
+    };
+    if (tabMap[prev.screen]) {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('.nav-btn[data-tab="' + tabMap[prev.screen] + '"]')?.classList.add('active');
+    }
+    try {
+        history.pushState({ sklews: 1, screen: prev.screen, depth: NAV_STACK.length }, '', '#' + prev.screen);
+    } catch (e) {}
+    _navSuppress = false;
+    return true;
+}
+
+window.addEventListener('popstate', e => {
+    if (_navSuppress) return;
+    // Android/iOS system back
+    if (NAV_STACK.length) {
+        navGoBack();
+    } else {
+        // Keep a state so another back can be intercepted again
+        try { history.pushState({ sklews: 1, root: 1 }, '', location.pathname); } catch (err) {}
+    }
+});
+
+// Seed history so first back is interceptable
+try { history.replaceState({ sklews: 1, root: 1 }, '', location.pathname); } catch (e) {}
+
 
 function showToast(title, text, icon) {
     document.getElementById('toast-title').textContent = title || 'Готово';
@@ -169,8 +240,71 @@ function escapeHtml(t) {
 
 function linkifyMentions(text) {
     const esc = escapeHtml(text || '');
-    return esc.replace(/@([a-zA-Z0-9_]{2,32})/g, '<span class="mention-link" data-username="$1">@$1</span>');
+    // URLs first, then mentions
+    let out = esc.replace(/(https?:\/\/[^\s<]+)/gi, '<a class="msg-link" href="$1" target="_blank" rel="noopener" data-preview-url="$1">$1</a>');
+    out = out.replace(/@([a-zA-Z0-9_]{2,32})/g, '<span class="mention-link" data-username="$1">@$1</span>');
+    return out;
 }
+
+const _linkPreviewCache = {};
+async function fetchLinkPreview(url) {
+    if (_linkPreviewCache[url]) return _linkPreviewCache[url];
+    try {
+        const res = await fetch('/api/link-preview?url=' + encodeURIComponent(url));
+        const data = await res.json();
+        _linkPreviewCache[url] = data;
+        return data;
+    } catch (e) {
+        return null;
+    }
+}
+
+function buildLinkPreviewHtml(data) {
+    if (!data || data.error && !data.image && !data.video && !data.title) return '';
+    if (data.type === 'image' || (data.image && !data.title && data.type !== 'page')) {
+        const src = data.image || data.url;
+        return '<a class="link-preview" href="' + escapeHtml(data.url || src) + '" target="_blank" rel="noopener">' +
+            '<img class="link-preview-media" src="' + escapeHtml(src) + '" alt="" loading="lazy"></a>';
+    }
+    if (data.type === 'video' || data.video) {
+        const src = data.video || data.url;
+        return '<div class="link-preview"><video class="link-preview-video" src="' + escapeHtml(src) + '" controls playsinline preload="metadata"></video></div>';
+    }
+    if (!data.title && !data.image && !data.description) return '';
+    let media = '';
+    if (data.image) media = '<img class="link-preview-media" src="' + escapeHtml(data.image) + '" alt="" loading="lazy">';
+    return '<a class="link-preview" href="' + escapeHtml(data.url || '#') + '" target="_blank" rel="noopener">' + media +
+        '<div class="link-preview-body">' +
+        (data.site ? '<div class="link-preview-site">' + escapeHtml(data.site) + '</div>' : '') +
+        (data.title ? '<div class="link-preview-title">' + escapeHtml(data.title) + '</div>' : '') +
+        (data.description ? '<div class="link-preview-desc">' + escapeHtml(data.description) + '</div>' : '') +
+        '</div></a>';
+}
+
+async function enhanceLinkPreviews(root) {
+    if (!root) return;
+    const links = root.querySelectorAll('a.msg-link[data-preview-url]');
+    const seen = new Set();
+    for (const a of links) {
+        const url = a.getAttribute('data-preview-url');
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        // skip if preview already next sibling under same bubble
+        const bubble = a.closest('.msg-bubble, .pc-msg, .pf-text, .post-text');
+        if (bubble && bubble.querySelector('.link-preview[data-for="' + url.replace(/"/g, '') + '"]')) continue;
+        const data = await fetchLinkPreview(url);
+        const html = buildLinkPreviewHtml(data);
+        if (!html) continue;
+        const wrap = document.createElement('div');
+        wrap.innerHTML = html;
+        const node = wrap.firstElementChild;
+        if (!node) continue;
+        node.setAttribute('data-for', url);
+        if (bubble) bubble.appendChild(node);
+        else a.insertAdjacentElement('afterend', node);
+    }
+}
+
 function bindMentions(root) {
     if (!root) return;
     root.querySelectorAll('.mention-link').forEach(el => {
@@ -503,7 +637,7 @@ async function openChannel(id) {
 }
 document.getElementById('btn-open-posts').onclick = () => openPostsPage(currentChannelId);
 
-document.getElementById('btn-back-channel').onclick = () => { showScreen('screen-home'); loadHome(); };
+document.getElementById('btn-back-channel').onclick = () => { if (NAV_STACK.length) navGoBack(); else { showScreen('screen-home', { push: false }); loadHome(); } };
 safeOn('btn-watch', 'click', () => openPostsPage(currentChannelId));
 safeOn('btn-join', 'click', async () => {
     const isLeave = document.getElementById('btn-join').textContent === 'Покинуть';
@@ -523,7 +657,7 @@ async function openPostsPage(id) {
     document.getElementById('btn-add-post').classList.toggle('hidden', !canPost);
     loadPosts(id);
 }
-document.getElementById('btn-back-posts').onclick = () => openChannel(currentChannelId);
+document.getElementById('btn-back-posts').onclick = () => { if (NAV_STACK.length) navGoBack(); else openChannel(currentChannelId); };
 
 
 document.getElementById('btn-support-channel')?.addEventListener('click', () => {
@@ -704,6 +838,7 @@ async function loadPosts(channelId) {
             card.addEventListener('mouseleave', cancelLP);
         }
         feed.appendChild(card);
+        enhanceLinkPreviews(card);
     });
     document.querySelectorAll('.react-pill').forEach(pill => {
         pill.onclick = async e => {
@@ -1269,7 +1404,7 @@ document.getElementById('btn-open-friends').onclick = async () => {
         list.appendChild(card);
     });
 };
-document.getElementById('btn-back-friends').onclick = () => { showScreen('screen-profile'); loadProfile(); };
+document.getElementById('btn-back-friends').onclick = () => { if (NAV_STACK.length) navGoBack(); else { showScreen('screen-profile', { push: false }); loadProfile(); } };
 
 document.getElementById('btn-open-subs').onclick = async () => {
     showScreen('screen-subs');
@@ -1287,7 +1422,7 @@ document.getElementById('btn-open-subs').onclick = async () => {
         list.appendChild(card);
     });
 };
-document.getElementById('btn-back-subs').onclick = () => { showScreen('screen-profile'); loadProfile(); };
+document.getElementById('btn-back-subs').onclick = () => { if (NAV_STACK.length) navGoBack(); else { showScreen('screen-profile', { push: false }); loadProfile(); } };
 
 async function openUserProfile(userId) {
     showScreen('screen-user');
@@ -1381,7 +1516,7 @@ document.getElementById('btn-user-channels-list')?.addEventListener('click', asy
     });
 });
 
-document.getElementById('btn-back-user').onclick = () => { showScreen('screen-chats'); };
+document.getElementById('btn-back-user').onclick = () => { if (NAV_STACK.length) navGoBack(); else showScreen('screen-chats', { push: false }); };
 
 async function loadShop() {
     await loadProfile();
@@ -1721,7 +1856,8 @@ function openChat(userId, username, avatar, lastSeen) {
     }).catch(() => {});
 }
 document.getElementById('btn-back-chat').onclick = () => {
-    showScreen('screen-chats');
+    if (NAV_STACK.length) { navGoBack(); return; }
+    showScreen('screen-chats', { push: false });
     currentChatUserId = null;
     loadChatsList();
     loadProfile();
@@ -1855,6 +1991,7 @@ async function loadMessages(userId) {
     });
     bindMentions(box);
     bindVoicePlayers(box);
+    enhanceLinkPreviews(box);
     box.scrollTop = box.scrollHeight;
 }
 
@@ -2055,6 +2192,9 @@ async function startCircleRecording(mode) {
             if (!ud.url) return showToast('Ошибка', ud.error || 'Загрузка', '!');
             if (circleMode === 'chat' && currentChatUserId) {
                 socket.emit('send_message', { receiver_id: currentChatUserId, content: '[circle]' + ud.url, is_super: false });
+            } else if (circleMode === 'premium' || window.__premiumCirclePending) {
+                window.__premiumCirclePending = false;
+                if (typeof sendPremiumChat === 'function') sendPremiumChat('[circle]' + ud.url);
             } else if (circleMode === 'post') {
                 pendingPostCircleUrl = ud.url;
                 pendingPostPhoto = null;
@@ -2203,6 +2343,7 @@ socket.on('new_message', data => {
             bindMsgLongPress(div, data.id);
         }
         box.appendChild(div);
+        enhanceLinkPreviews(div);
         box.scrollTop = box.scrollHeight;
         box.querySelectorAll('.media-clickable').forEach(el => {
             el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
@@ -2611,6 +2752,7 @@ async function loadPremiumFeed() {
             });
             card.querySelector('.avatar')?.addEventListener('click', () => { if (p.user_id) openUserProfile(p.user_id); });
             list.appendChild(card);
+            enhanceLinkPreviews(card);
         });
     } catch (e) {
         list.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
@@ -2663,10 +2805,17 @@ function renderPremiumChatMsg(m) {
     div.className = 'pc-msg' + (isMine ? ' mine' : '');
     div.dataset.id = m.id || '';
     const nick = premiumNickHtml(m.username || '?', true);
+    const body = formatMessage(m.content || '', false);
     div.innerHTML =
         '<div class="pc-msg-author">' + nick + '</div>' +
-        '<div class="pc-msg-text">' + escapeHtml(m.content || '') + '</div>' +
+        '<div class="pc-msg-text">' + body + '</div>' +
         '<div class="pc-msg-time">' + escapeHtml(m.created_at || '') + '</div>';
+    div.querySelectorAll('.media-clickable').forEach(el => {
+        el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
+    });
+    bindMentions(div);
+    bindVoicePlayers(div);
+    enhanceLinkPreviews(div);
     return div;
 }
 
@@ -2704,25 +2853,117 @@ async function openPremiumChat() {
     }
 }
 
-function sendPremiumChat() {
+function sendPremiumChat(content) {
     if (!meHasPremium) return showToast('Premium', 'Нужен Premium', '!');
     const input = document.getElementById('premium-chat-input');
-    const content = (input?.value || '').trim();
-    if (!content) return;
+    const text = (content != null ? content : (input?.value || '')).trim();
+    if (!text) return;
     if (!premiumChatJoined) socket.emit('join_premium_chat');
-    socket.emit('premium_chat_message', { content });
-    input.value = '';
+    socket.emit('premium_chat_message', { content: text });
+    if (content == null && input) input.value = '';
 }
 
-document.getElementById('btn-premium-chat-send')?.addEventListener('click', sendPremiumChat);
+document.getElementById('btn-premium-chat-send')?.addEventListener('click', () => sendPremiumChat());
 document.getElementById('premium-chat-input')?.addEventListener('keypress', e => {
     if (e.key === 'Enter') { e.preventDefault(); sendPremiumChat(); }
 });
 
+document.getElementById('btn-premium-attach')?.addEventListener('click', () => document.getElementById('premium-chat-file')?.click());
+document.getElementById('premium-chat-file')?.addEventListener('change', async e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !meHasPremium) return;
+    const fd = new FormData();
+    fd.append('file', file);
+    const up = await fetch('/api/upload', { method: 'POST', body: fd });
+    const ud = await up.json();
+    if (ud.error) return showToast('Ошибка', ud.error, '!');
+    const content = file.type.startsWith('video') ? '[video]' + ud.url : '[photo]' + ud.url;
+    sendPremiumChat(content);
+    e.target.value = '';
+});
+
+// Premium voice (separate recorder state so private chat not broken)
+let premMediaRecorder = null, premVoiceChunks = [], premVoiceStream = null, premVoiceTimer = null, premVoiceSecs = 0, premVoiceCancelled = false;
+
+function showPremiumVoiceBar(on) {
+    const bar = document.getElementById('premium-voice-rec-bar');
+    const input = document.querySelector('#premium-page-chat .premium-chat-input-area');
+    if (!bar) return;
+    if (on) {
+        bar.classList.remove('hidden');
+        if (input) input.style.display = 'none';
+        const t = document.getElementById('premium-voice-rec-timer');
+        if (t) t.textContent = '0:00';
+    } else {
+        bar.classList.add('hidden');
+        if (input) input.style.display = '';
+        document.getElementById('btn-premium-voice')?.classList.remove('active');
+    }
+}
+function stopPremiumVoice(send) {
+    premVoiceCancelled = !send;
+    if (premVoiceTimer) { clearInterval(premVoiceTimer); premVoiceTimer = null; }
+    if (premMediaRecorder && premMediaRecorder.state === 'recording') {
+        try { premMediaRecorder.stop(); } catch (e) {}
+    } else {
+        if (premVoiceStream) premVoiceStream.getTracks().forEach(t => t.stop());
+        premVoiceStream = null;
+        showPremiumVoiceBar(false);
+    }
+}
+async function startPremiumVoice() {
+    if (premMediaRecorder && premMediaRecorder.state === 'recording') return;
+    try {
+        premVoiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+                     MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+        premMediaRecorder = new MediaRecorder(premVoiceStream, mime ? { mimeType: mime } : undefined);
+        premVoiceChunks = [];
+        premVoiceSecs = 0;
+        premVoiceCancelled = false;
+        premMediaRecorder.ondataavailable = e => { if (e.data && e.data.size) premVoiceChunks.push(e.data); };
+        premMediaRecorder.onstop = async () => {
+            if (premVoiceStream) premVoiceStream.getTracks().forEach(t => t.stop());
+            premVoiceStream = null;
+            showPremiumVoiceBar(false);
+            if (premVoiceCancelled || !premVoiceChunks.length || premVoiceSecs < 1) return;
+            const blob = new Blob(premVoiceChunks, { type: 'audio/webm' });
+            const fd = new FormData();
+            fd.append('file', blob, 'voice.webm');
+            const up = await fetch('/api/upload', { method: 'POST', body: fd });
+            const ud = await up.json();
+            if (ud.url) sendPremiumChat('[voice]' + ud.url);
+            else if (ud.error) showToast('Ошибка', ud.error, '!');
+        };
+        premMediaRecorder.start(200);
+        document.getElementById('btn-premium-voice')?.classList.add('active');
+        showPremiumVoiceBar(true);
+        premVoiceTimer = setInterval(() => {
+            premVoiceSecs++;
+            const el = document.getElementById('premium-voice-rec-timer');
+            if (el) el.textContent = formatVoiceTime(premVoiceSecs);
+            if (premVoiceSecs >= 120) stopPremiumVoice(true);
+        }, 1000);
+    } catch (err) {
+        showToast('Ошибка', 'Нет доступа к микрофону', '!');
+    }
+}
+document.getElementById('btn-premium-voice')?.addEventListener('click', () => startPremiumVoice());
+document.getElementById('btn-premium-voice-stop')?.addEventListener('click', () => stopPremiumVoice(true));
+document.getElementById('btn-premium-voice-cancel')?.addEventListener('click', () => stopPremiumVoice(false));
+
+document.getElementById('btn-premium-circle')?.addEventListener('click', () => {
+    // reuse circle recorder; on stop send to premium if flag set
+    window.__premiumCirclePending = true;
+    startCircleRecording('premium');
+});
+
+// Patch circle onstop path: handled by wrapping startCircleRecording mode
+const _origStartCircle = typeof startCircleRecording === 'function' ? startCircleRecording : null;
+
 socket.on('premium_chat_new', data => {
     const box = document.getElementById('premium-chat-messages');
     if (!box) return;
-    // only append if chat page visible-ish
     const empty = box.querySelector('.premium-chat-empty');
     if (empty) empty.remove();
     const myId = (typeof meId !== 'undefined') ? meId : null;

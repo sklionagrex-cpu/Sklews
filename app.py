@@ -15,6 +15,9 @@ import uuid
 import os
 import secrets
 import re
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
+import html as html_lib
 
 app = Flask(__name__)
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -1519,7 +1522,7 @@ def handle_premium_chat_message(data):
     content = (data.get('content') or '').strip()
     if not content:
         return
-    if len(content) > 1000:
+    if len(content) > 2000:
         emit('error', {'msg': 'Слишком длинное сообщение'})
         return
     msg = PremiumChatMessage(user_id=user.id, content=content)
@@ -1536,6 +1539,78 @@ def handle_premium_chat_message(data):
     }
     # broadcast to room; clients mark is_mine themselves
     emit('premium_chat_new', payload, room='premium_chat')
+
+
+
+@app.route('/api/link-preview')
+@login_required
+def link_preview():
+    """Fetch Open Graph / basic metadata for a URL (Telegram-style preview)."""
+    url = (request.args.get('url') or '').strip()
+    if not url or len(url) > 2000:
+        return jsonify({'error': 'bad_url'}), 400
+    if not re.match(r'^https?://', url, re.I):
+        return jsonify({'error': 'bad_url'}), 400
+    # Direct media by extension
+    path = urlparse(url).path.lower()
+    img_ext = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.avif')
+    vid_ext = ('.mp4', '.webm', '.mov', '.m4v', '.ogg')
+    if any(path.endswith(e) for e in img_ext):
+        return jsonify({'type': 'image', 'url': url, 'image': url, 'title': '', 'description': '', 'site': urlparse(url).netloc})
+    if any(path.endswith(e) for e in vid_ext):
+        return jsonify({'type': 'video', 'url': url, 'video': url, 'title': '', 'description': '', 'site': urlparse(url).netloc})
+    try:
+        req = Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (compatible; SklewsBot/1.0; +https://sklews.app)',
+            'Accept': 'text/html,application/xhtml+xml',
+        })
+        with urlopen(req, timeout=5) as resp:
+            ctype = (resp.headers.get('Content-Type') or '').lower()
+            if 'image/' in ctype:
+                return jsonify({'type': 'image', 'url': url, 'image': url, 'title': '', 'description': '', 'site': urlparse(url).netloc})
+            if 'video/' in ctype:
+                return jsonify({'type': 'video', 'url': url, 'video': url, 'title': '', 'description': '', 'site': urlparse(url).netloc})
+            raw = resp.read(250000)
+            try:
+                text = raw.decode('utf-8', errors='ignore')
+            except Exception:
+                text = raw.decode('latin-1', errors='ignore')
+        def meta(prop):
+            # og:prop or name=
+            patterns = [
+                rf'<meta[^>]+property=["\']og:{prop}["\'][^>]+content=["\']([^"\']+)["\']',
+                rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:{prop}["\']',
+                rf'<meta[^>]+name=["\']{prop}["\'][^>]+content=["\']([^"\']+)["\']',
+                rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']{prop}["\']',
+            ]
+            for p in patterns:
+                m = re.search(p, text, re.I)
+                if m:
+                    return html_lib.unescape(m.group(1).strip())
+            return ''
+        title = meta('title')
+        if not title:
+            tm = re.search(r'<title[^>]*>([^<]+)</title>', text, re.I)
+            title = html_lib.unescape(tm.group(1).strip()) if tm else ''
+        image = meta('image')
+        description = meta('description')
+        site = meta('site_name') or urlparse(url).netloc
+        # resolve relative image
+        if image and image.startswith('//'):
+            image = 'https:' + image
+        elif image and image.startswith('/'):
+            p = urlparse(url)
+            image = f'{p.scheme}://{p.netloc}{image}'
+        return jsonify({
+            'type': 'page',
+            'url': url,
+            'title': title[:200],
+            'description': description[:300],
+            'image': image[:500] if image else '',
+            'site': site[:100],
+        })
+    except Exception as e:
+        return jsonify({'type': 'page', 'url': url, 'title': '', 'description': '', 'image': '', 'site': urlparse(url).netloc, 'error': str(e)[:80]})
 
 
 def _mines_reset_if_needed(user):
