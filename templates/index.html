@@ -134,16 +134,33 @@ window.SKLEWS_BUILD = '20260807m';
                     <span>Premium</span>
                 </div>
             </header>
-            <div class="premium-feed-compose">
-                <textarea id="pf-input" placeholder="Что нового? Только для Premium..." maxlength="2000" rows="2"></textarea>
-                <div class="premium-feed-compose-actions">
-                    <button type="button" id="btn-pf-photo" class="btn btn-secondary btn-sm"><i class="fa-solid fa-image"></i></button>
-                    <input type="file" id="pf-photo-input" accept="image/*" style="display:none">
-                    <button type="button" id="btn-pf-post" class="btn btn-primary btn-sm">Опубликовать</button>
-                </div>
-                <div id="pf-photo-preview" class="hidden" style="margin-top:8px"></div>
+            <div class="premium-tabs" role="tablist">
+                <button type="button" class="premium-tab active" data-ptab="posts" id="ptab-posts">
+                    <i class="fa-solid fa-newspaper"></i> Посты
+                </button>
+                <button type="button" class="premium-tab" data-ptab="chat" id="ptab-chat">
+                    <i class="fa-solid fa-comments"></i> Чат
+                </button>
             </div>
-            <div id="premium-feed-list" class="premium-feed-list"></div>
+            <div id="premium-page-posts" class="premium-page">
+                <div class="premium-feed-compose">
+                    <textarea id="pf-input" placeholder="Что нового? Только для Premium..." maxlength="2000" rows="2"></textarea>
+                    <div class="premium-feed-compose-actions">
+                        <button type="button" id="btn-pf-photo" class="btn btn-secondary btn-sm"><i class="fa-solid fa-image"></i></button>
+                        <input type="file" id="pf-photo-input" accept="image/*" style="display:none">
+                        <button type="button" id="btn-pf-post" class="btn btn-primary btn-sm">Опубликовать</button>
+                    </div>
+                    <div id="pf-photo-preview" class="hidden" style="margin-top:8px"></div>
+                </div>
+                <div id="premium-feed-list" class="premium-feed-list"></div>
+            </div>
+            <div id="premium-page-chat" class="premium-page hidden">
+                <div id="premium-chat-messages" class="premium-chat-messages"></div>
+                <div class="premium-chat-input-area">
+                    <input type="text" id="premium-chat-input" placeholder="Сообщение в Premium-чат..." autocomplete="off" maxlength="1000">
+                    <button type="button" id="btn-premium-chat-send" class="btn-send" title="Отправить"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            </div>
         </div>
 
         <div id="screen-chats" class="screen">

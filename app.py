@@ -177,6 +177,13 @@ class ProfilePost(db.Model):
     media_type = db.Column(db.String(20), default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class PremiumChatMessage(db.Model):
+    """Global chat for Premium members."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False, default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class MediaFile(db.Model):
     """Persistent media storage in DB (survives Render redeploys)."""
     id = db.Column(db.String(32), primary_key=True)
@@ -1463,6 +1470,72 @@ def delete_premium_feed_post(post_id):
     db.session.delete(p)
     db.session.commit()
     return jsonify({'status': 'ok'})
+
+
+@app.route('/api/premium/chat')
+@login_required
+def premium_chat_history():
+    me = current_user()
+    if not premium_active(me):
+        return jsonify({'error': 'premium_required', 'messages': []}), 403
+    rows = PremiumChatMessage.query.order_by(PremiumChatMessage.id.desc()).limit(120).all()
+    rows = list(reversed(rows))
+    out = []
+    for m in rows:
+        u = User.query.get(m.user_id)
+        out.append({
+            'id': m.id,
+            'user_id': m.user_id,
+            'username': u.username if u else '?',
+            'avatar': u.avatar if u else '',
+            'author_premium': premium_active(u) if u else False,
+            'content': m.content,
+            'created_at': m.created_at.strftime('%H:%M') if m.created_at else '',
+            'is_mine': m.user_id == me.id,
+        })
+    return jsonify({'messages': out})
+
+
+@socketio.on('join_premium_chat')
+def on_join_premium_chat():
+    user = current_user()
+    if user and premium_active(user):
+        join_room('premium_chat')
+        emit('premium_chat_joined', {'ok': True})
+
+
+@socketio.on('leave_premium_chat')
+def on_leave_premium_chat():
+    from flask_socketio import leave_room
+    leave_room('premium_chat')
+
+
+@socketio.on('premium_chat_message')
+def handle_premium_chat_message(data):
+    user = current_user()
+    if not user or not premium_active(user):
+        emit('error', {'msg': 'Только для Premium'})
+        return
+    content = (data.get('content') or '').strip()
+    if not content:
+        return
+    if len(content) > 1000:
+        emit('error', {'msg': 'Слишком длинное сообщение'})
+        return
+    msg = PremiumChatMessage(user_id=user.id, content=content)
+    db.session.add(msg)
+    db.session.commit()
+    payload = {
+        'id': msg.id,
+        'user_id': user.id,
+        'username': user.username,
+        'avatar': user.avatar or '',
+        'author_premium': True,
+        'content': content,
+        'created_at': msg.created_at.strftime('%H:%M') if msg.created_at else '',
+    }
+    # broadcast to room; clients mark is_mine themselves
+    emit('premium_chat_new', payload, room='premium_chat')
 
 
 def _mines_reset_if_needed(user):

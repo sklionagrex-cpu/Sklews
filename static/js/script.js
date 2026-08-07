@@ -28,6 +28,7 @@ function premiumNickHtml(username, isPremium) {
 
 let meIsAdmin = false;
 let meHasPremium = false;
+let meId = null;
 let meUserId = null;
 
 // Bootstrap premium/admin flags early so Premium tab appears without visiting profile
@@ -37,6 +38,8 @@ let meUserId = null;
         if (!res.ok) return;
         const p = await res.json();
         meHasPremium = !!p.is_premium;
+    if (p.id) meId = p.id;
+    if (p.username) window.__meUsername = p.username;
         meUserId = p.id;
         meIsAdmin = !!p.is_admin;
         updatePremiumNav();
@@ -87,7 +90,11 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
         const tab = btn.dataset.tab;
         showScreen('screen-' + tab);
         if (tab === 'home') loadHome();
-        if (tab === 'premium') loadPremiumFeed();
+        if (tab === 'premium') {
+            const activeP = document.querySelector('.premium-tab.active')?.dataset.ptab || 'posts';
+            if (activeP === 'chat') openPremiumChat();
+            else loadPremiumFeed();
+        }
         if (tab === 'profile') loadProfile();
         if (tab === 'create') loadMyChannels();
         if (tab === 'analytics') loadAnalyticsTab();
@@ -1095,6 +1102,8 @@ async function loadProfile() {
     pun.innerHTML = premiumNickHtml(p.username, p.is_premium);
     meIsAdmin = !!p.is_admin;
     meHasPremium = !!p.is_premium;
+    if (p.id) meId = p.id;
+    if (p.username) window.__meUsername = p.username;
     meUserId = p.id;
     updatePremiumNav();
     const fab = document.getElementById('admin-fab');
@@ -2335,6 +2344,8 @@ console.log('Sklews build', window.SKLEWS_BUILD || 'unknown');
         const p = await res.json();
         meIsAdmin = !!p.is_admin;
     meHasPremium = !!p.is_premium;
+    if (p.id) meId = p.id;
+    if (p.username) window.__meUsername = p.username;
     meUserId = p.id;
     updatePremiumNav();
         const fab = document.getElementById('admin-fab');
@@ -2511,7 +2522,7 @@ document.getElementById('font-size-row')?.addEventListener('click', e => {
 loadSavedTheme();
 
 
-// ===== Premium nav + feed =====
+// ===== Premium nav + feed + lobby chat =====
 function updatePremiumNav() {
     const btn = document.getElementById('nav-premium');
     if (!btn) return;
@@ -2525,10 +2536,35 @@ function updatePremiumNav() {
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.querySelector('.nav-btn[data-tab="home"]')?.classList.add('active');
         }
+        try { socket.emit('leave_premium_chat'); } catch (e) {}
     }
 }
 
 let pendingPfPhoto = null;
+let premiumChatJoined = false;
+
+function switchPremiumTab(ptab) {
+    document.querySelectorAll('.premium-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.ptab === ptab);
+    });
+    const posts = document.getElementById('premium-page-posts');
+    const chat = document.getElementById('premium-page-chat');
+    if (ptab === 'chat') {
+        if (posts) posts.classList.add('hidden');
+        if (chat) chat.classList.remove('hidden');
+        openPremiumChat();
+    } else {
+        if (chat) chat.classList.add('hidden');
+        if (posts) posts.classList.remove('hidden');
+        try { socket.emit('leave_premium_chat'); } catch (e) {}
+        premiumChatJoined = false;
+        loadPremiumFeed();
+    }
+}
+
+document.querySelectorAll('.premium-tab').forEach(btn => {
+    btn.addEventListener('click', () => switchPremiumTab(btn.dataset.ptab));
+});
 
 async function loadPremiumFeed() {
     const list = document.getElementById('premium-feed-list');
@@ -2621,6 +2657,82 @@ document.getElementById('btn-pf-post')?.addEventListener('click', async () => {
     loadPremiumFeed();
 });
 
+function renderPremiumChatMsg(m) {
+    const div = document.createElement('div');
+    const isMine = m.is_mine || (m.user_id && typeof meId !== 'undefined' && m.user_id === meId);
+    div.className = 'pc-msg' + (isMine ? ' mine' : '');
+    div.dataset.id = m.id || '';
+    const nick = premiumNickHtml(m.username || '?', true);
+    div.innerHTML =
+        '<div class="pc-msg-author">' + nick + '</div>' +
+        '<div class="pc-msg-text">' + escapeHtml(m.content || '') + '</div>' +
+        '<div class="pc-msg-time">' + escapeHtml(m.created_at || '') + '</div>';
+    return div;
+}
+
+async function openPremiumChat() {
+    const box = document.getElementById('premium-chat-messages');
+    if (!box) return;
+    if (!meHasPremium) {
+        box.innerHTML = '<div class="premium-chat-empty"><i class="fa-solid fa-crown"></i><span>Чат только для Premium</span></div>';
+        return;
+    }
+    box.innerHTML = '<div class="premium-chat-empty"><span>Загрузка…</span></div>';
+    try {
+        const res = await fetch('/api/premium/chat');
+        const data = await res.json();
+        if (res.status === 403) {
+            meHasPremium = false;
+            updatePremiumNav();
+            box.innerHTML = '<div class="premium-chat-empty"><i class="fa-solid fa-lock"></i><span>Только для Premium</span></div>';
+            return;
+        }
+        const msgs = data.messages || [];
+        box.innerHTML = '';
+        if (!msgs.length) {
+            box.innerHTML = '<div class="premium-chat-empty"><i class="fa-solid fa-comments"></i><span>Общий чат Premium<br>Напишите первым</span></div>';
+        } else {
+            msgs.forEach(m => box.appendChild(renderPremiumChatMsg(m)));
+            box.scrollTop = box.scrollHeight;
+        }
+        if (!premiumChatJoined) {
+            socket.emit('join_premium_chat');
+            premiumChatJoined = true;
+        }
+    } catch (e) {
+        box.innerHTML = '<div class="premium-chat-empty"><span>Ошибка загрузки</span></div>';
+    }
+}
+
+function sendPremiumChat() {
+    if (!meHasPremium) return showToast('Premium', 'Нужен Premium', '!');
+    const input = document.getElementById('premium-chat-input');
+    const content = (input?.value || '').trim();
+    if (!content) return;
+    if (!premiumChatJoined) socket.emit('join_premium_chat');
+    socket.emit('premium_chat_message', { content });
+    input.value = '';
+}
+
+document.getElementById('btn-premium-chat-send')?.addEventListener('click', sendPremiumChat);
+document.getElementById('premium-chat-input')?.addEventListener('keypress', e => {
+    if (e.key === 'Enter') { e.preventDefault(); sendPremiumChat(); }
+});
+
+socket.on('premium_chat_new', data => {
+    const box = document.getElementById('premium-chat-messages');
+    if (!box) return;
+    // only append if chat page visible-ish
+    const empty = box.querySelector('.premium-chat-empty');
+    if (empty) empty.remove();
+    const myId = (typeof meId !== 'undefined') ? meId : null;
+    if (myId != null) data.is_mine = data.user_id === myId;
+    else if (typeof window.__meUsername === 'string') data.is_mine = data.username === window.__meUsername;
+    box.appendChild(renderPremiumChatMsg(data));
+    box.scrollTop = box.scrollHeight;
+});
+
+socket.on('premium_chat_joined', () => { premiumChatJoined = true; });
 
 // ===== Minesweeper Premium UI =====
 const MS = {
