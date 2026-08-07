@@ -1734,3 +1734,8 @@ socket.on('friend_request', data => {
 socket.on('error', d => showToast('Ошибка', d.msg || 'Ошибка', '!'));
 
 loadHome();
+
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/sw.js').catch(() => {});
+}
