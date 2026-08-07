@@ -471,6 +471,7 @@ def api_profile():
         (Friendship.status == 'accepted')
     ).count()
     unread_total = Message.query.filter_by(receiver_id=user.id, is_read=False).count()
+    pending_requests = Friendship.query.filter_by(friend_id=user.id, status='pending').count()
     return jsonify({
         'username': user.username, 'status': user.status, 'avatar': user.avatar,
         'banner': getattr(user, 'banner', '') or '',
@@ -478,7 +479,8 @@ def api_profile():
         'is_premium': user.is_premium, 'referral_code': user.referral_code or '',
         'hide_friends': bool(getattr(user, 'hide_friends', False)),
         'hide_channels': bool(getattr(user, 'hide_channels', False)),
-        'unread_messages': unread_total
+        'unread_messages': unread_total,
+        'friend_requests': pending_requests
     })
 
 @app.route('/api/profile/update', methods=['POST'])

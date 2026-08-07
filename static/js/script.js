@@ -607,6 +607,16 @@ async function loadProfile() {
     const sb = document.getElementById('shop-balance');
     if (sb) sb.textContent = p.crystals;
     updateChatsBadge(p.unread_messages || 0);
+    const frBadge = document.getElementById('friends-req-badge');
+    if (frBadge) {
+        const n = p.friend_requests || 0;
+        if (n > 0) {
+            frBadge.textContent = n > 99 ? '99+' : n;
+            frBadge.classList.remove('hidden');
+        } else {
+            frBadge.classList.add('hidden');
+        }
+    }
 }
 
 document.getElementById('btn-settings').onclick = () => document.getElementById('modal-settings').classList.remove('hidden');
@@ -986,7 +996,7 @@ async function openComments(postId) {
             '<div class="comment-body">' +
             '<div class="comment-nick" data-uid="' + c.user_id + '">' + escapeHtml(c.username) + '</div>' +
             text + media +
-            '<div class="comment-time">' + c.created_at + (c.can_delete ? ' · зажми для удаления' : '') + '</div></div>';
+            '<div class="comment-time">' + c.created_at + '</div></div>';
         row.querySelector('.comment-nick').onclick = () => openUserProfile(c.user_id);
         row.querySelector('.comment-av')?.addEventListener('click', () => openUserProfile(c.user_id));
         row.querySelectorAll('.media-clickable').forEach(el => {
@@ -994,11 +1004,9 @@ async function openComments(postId) {
         });
         if (c.can_delete) {
             let timer = null;
-            const start = () => { timer = setTimeout(async () => {
-                if (!confirm('Удалить комментарий?')) return;
-                await fetch('/api/post/' + postId + '/comments/' + c.id, { method: 'DELETE' });
-                openComments(postId);
-                if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
+            const start = (e) => { timer = setTimeout(() => {
+                window._deleteComment = { postId: postId, commentId: c.id };
+                document.getElementById('modal-delete-comment').classList.remove('hidden');
             }, 550); };
             const cancel = () => clearTimeout(timer);
             row.addEventListener('touchstart', start, { passive: true });
@@ -1011,6 +1019,21 @@ async function openComments(postId) {
         list.appendChild(row);
     });
 }
+
+document.getElementById('btn-cancel-delete-comment')?.addEventListener('click', () => {
+    document.getElementById('modal-delete-comment').classList.add('hidden');
+    window._deleteComment = null;
+});
+document.getElementById('btn-confirm-delete-comment')?.addEventListener('click', async () => {
+    const d = window._deleteComment;
+    document.getElementById('modal-delete-comment').classList.add('hidden');
+    if (!d) return;
+    await fetch('/api/post/' + d.postId + '/comments/' + d.commentId, { method: 'DELETE' });
+    window._deleteComment = null;
+    openComments(d.postId);
+    if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
+});
+
 document.getElementById('btn-close-comments').onclick = () => document.getElementById('modal-comments').classList.add('hidden');
 document.getElementById('btn-comment-photo')?.addEventListener('click', () => document.getElementById('comment-photo-input').click());
 document.getElementById('comment-photo-input')?.addEventListener('change', e => {
@@ -1141,7 +1164,6 @@ async function respondRequest(id, action) {
 function openChat(userId, username, avatar) {
     currentChatUserId = userId;
     isSuperMode = false;
-    document.getElementById('btn-super').classList.remove('active');
     document.getElementById('chat-title').textContent = username;
     const peerAv = document.getElementById('chat-peer-avatar');
     if (avatar) {
@@ -1204,7 +1226,7 @@ async function loadChatsList() {
 function formatMessage(content, isSuper) {
     let body = content || '';
     if (body.startsWith('[photo]')) body = '<img class="media-clickable" data-type="photo" data-src="' + body.slice(7) + '" src="' + body.slice(7) + '" style="max-width:220px;border-radius:12px">';
-    else if (body.startsWith('[circle]')) body = '<video class="circle-video" src="' + body.slice(8) + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()" style="width:180px;height:180px;border-radius:50%;object-fit:cover;background:#111;display:block"></video>';
+    else if (body.startsWith('[circle]')) body = '<video class="circle-video" src="' + body.slice(8) + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()" style="width:180px;height:180px;border-radius:50%;object-fit:cover;background:#111;display:block;border:none"></video>';
     else if (body.startsWith('[video]')) body = '<video src="' + body.slice(7) + '" controls playsinline style="max-width:220px;border-radius:12px"></video>';
     else if (body.startsWith('[voice]')) body = '<audio src="' + body.slice(7) + '" controls style="max-width:220px"></audio>';
     else body = escapeHtml(body);
@@ -1229,10 +1251,6 @@ async function loadMessages(userId) {
     box.scrollTop = box.scrollHeight;
 }
 
-document.getElementById('btn-super').onclick = () => {
-    isSuperMode = !isSuperMode;
-    document.getElementById('btn-super').classList.toggle('active', isSuperMode);
-};
 document.getElementById('btn-send').onclick = sendMessage;
 document.getElementById('message-input').addEventListener('keypress', e => {
     if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
@@ -1244,7 +1262,6 @@ function sendMessage() {
     socket.emit('send_message', { receiver_id: currentChatUserId, content: content, is_super: isSuperMode });
     input.value = '';
     isSuperMode = false;
-    document.getElementById('btn-super').classList.remove('active');
 }
 document.getElementById('btn-attach').onclick = () => document.getElementById('chat-file').click();
 document.getElementById('chat-file').onchange = async e => {
@@ -1388,6 +1405,14 @@ socket.on('new_message', data => {
 socket.on('friend_request', data => {
     notifyUser('friend');
     showToast('Заявка в друзья', (data.from_username || 'Кто-то') + ' хочет добавить вас', '👋');
+    const frBadge = document.getElementById('friends-req-badge');
+    if (frBadge) {
+        let n = parseInt(frBadge.textContent) || 0;
+        if (frBadge.classList.contains('hidden')) n = 0;
+        n += 1;
+        frBadge.textContent = n > 99 ? '99+' : n;
+        frBadge.classList.remove('hidden');
+    }
 });
 socket.on('error', d => showToast('Ошибка', d.msg || 'Ошибка', '!'));
 

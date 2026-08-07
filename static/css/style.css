@@ -1195,8 +1195,9 @@ body:has(#screen-chat.active) .bottom-nav {
 
 /* Video circle in chat */
 .circle-video {
-    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.35);
-    border: 2px solid var(--accent);
+    box-shadow: none;
+    border: none !important;
+    outline: none;
 }
 #btn-circle.active {
     background: #ef4444 !important;
@@ -1205,4 +1206,15 @@ body:has(#screen-chat.active) .bottom-nav {
 #circle-recorder .modal-content,
 #circle-recorder {
     z-index: 200;
+}
+
+#btn-open-friends { position: relative; overflow: visible; }
+#friends-req-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+}
+#circle-preview {
+    border: none !important;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.15);
 }
