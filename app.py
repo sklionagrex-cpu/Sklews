@@ -309,6 +309,10 @@ def can_moderate(user, channel):
     role = ChannelRole.query.filter_by(channel_id=channel.id, user_id=user.id).first()
     return role and role.role in ('admin', 'moderator')
 
+@app.route('/__build')
+def __build():
+    return "BUILD-20260807-1500", 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"}
+
 @app.route('/')
 def index():
     user = current_user()
