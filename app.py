@@ -61,6 +61,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     avatar = db.Column(db.String(256), default='')
     banner = db.Column(db.String(256), default='')
+    banner_type = db.Column(db.String(16), default='image')  # image | video
     status = db.Column(db.String(120), default='')
     crystals = db.Column(db.Integer, default=0)
     is_premium = db.Column(db.Boolean, default=False)
@@ -885,6 +886,7 @@ def api_profile():
         'id': user.id,
         'username': user.username, 'status': user.status, 'avatar': user.avatar,
         'banner': getattr(user, 'banner', '') or '',
+        'banner_type': getattr(user, 'banner_type', 'image') or 'image',
         'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
         'is_premium': premium_active(user), 'referral_code': user.referral_code or '',
         'owned_themes': [t for t in (user.owned_themes or '').split(',') if t],
@@ -1622,6 +1624,7 @@ def user_public(user_id):
     return jsonify({
         'id': u.id, 'username': u.username, 'avatar': u.avatar,
         'banner': getattr(u, 'banner', '') or '',
+        'banner_type': getattr(u, 'banner_type', 'image') or 'image',
         'status': u.status,
         'is_premium': premium_active(u),
         **user_plus_payload(u),
@@ -2045,15 +2048,22 @@ def update_banner():
     user = current_user()
     if 'file' not in request.files:
         return jsonify({'error': 'Нет файла'}), 400
+    f = request.files['file']
+    ctype = (getattr(f, 'mimetype', None) or '').lower()
+    is_video = ctype.startswith('video/')
+    if is_video and not premium_plus_active(user):
+        return jsonify({'error': 'Видео-шапка только для Premium+'}), 403
     try:
-        url = save_media_to_db(request.files['file'], user_id=user.id)
+        url = save_media_to_db(f, user_id=user.id)
         user.banner = url
+        user.banner_type = 'video' if is_video else 'image'
         db.session.commit()
-        return jsonify({'status': 'ok', 'banner': user.banner})
+        return jsonify({'status': 'ok', 'banner': user.banner, 'banner_type': user.banner_type})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         db.session.rollback()
+        print('banner upload error:', e, flush=True)
         return jsonify({'error': 'Ошибка сохранения'}), 500
 
 @app.route('/api/channel/<int:channel_id>/avatar', methods=['POST'])
@@ -2245,6 +2255,7 @@ def ensure_db_schema():
     if dialect == 'postgresql':
         user_cols = [
             ('banner', "VARCHAR(256) DEFAULT ''"),
+            ('banner_type', "VARCHAR(16) DEFAULT 'image'"),
             ('last_seen', 'TIMESTAMP'),
             ('is_admin', 'BOOLEAN DEFAULT FALSE'),
             ('muted_until', 'TIMESTAMP'),
@@ -2268,6 +2279,7 @@ def ensure_db_schema():
     else:
         user_cols = [
             ('banner', "VARCHAR(256) DEFAULT ''"),
+            ('banner_type', "VARCHAR(16) DEFAULT 'image'"),
             ('last_seen', 'DATETIME'),
             ('is_admin', 'BOOLEAN DEFAULT 0'),
             ('muted_until', 'DATETIME'),
@@ -2325,6 +2337,7 @@ if __name__ == '__main__':
         if dialect == 'postgresql':
             user_cols = [
                 ('banner', "VARCHAR(256) DEFAULT ''"),
+            ('banner_type', "VARCHAR(16) DEFAULT 'image'"),
                 ('last_seen', 'TIMESTAMP'),
                 ('is_admin', 'BOOLEAN DEFAULT FALSE'),
                 ('muted_until', 'TIMESTAMP'),
@@ -2336,6 +2349,7 @@ if __name__ == '__main__':
         else:
             user_cols = [
                 ('banner', "VARCHAR(256) DEFAULT ''"),
+            ('banner_type', "VARCHAR(16) DEFAULT 'image'"),
                 ('last_seen', 'DATETIME'),
                 ('is_admin', 'BOOLEAN DEFAULT 0'),
                 ('muted_until', 'DATETIME'),

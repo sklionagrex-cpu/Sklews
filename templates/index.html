@@ -267,7 +267,9 @@ window.SKLEWS_BUILD = '20260807m';
 
         <div id="screen-profile" class="screen" style="overflow:hidden">
             <div class="profile-hero" id="profile-hero">
-                <div class="profile-banner" id="profile-banner"></div>
+                <div class="profile-banner" id="profile-banner">
+                    <video id="profile-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
+                </div>
                 <div class="plus-under-banner" id="profile-plus-under"></div>
                 <div class="avatar-hero" id="profile-avatar">?</div>
                 <button id="btn-settings" class="btn-icon profile-gear"><i class="fa-solid fa-gear"></i></button>
@@ -319,7 +321,9 @@ window.SKLEWS_BUILD = '20260807m';
         <div id="screen-user" data-has-wall="1" class="screen" style="overflow:hidden">
             <button class="btn-icon profile-back" id="btn-back-user"><i class="fa-solid fa-arrow-left"></i></button>
             <div class="profile-hero" id="user-hero">
-                <div class="profile-banner" id="user-banner"></div>
+                <div class="profile-banner" id="user-banner">
+                    <video id="user-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
+                </div>
                 <div class="plus-under-banner" id="user-plus-under"></div>
                 <div class="avatar-hero" id="user-avatar">?</div>
                 <div class="profile-hero-info">
@@ -476,7 +480,7 @@ window.SKLEWS_BUILD = '20260807m';
                         <input type="color" id="plus-aura" value="#fbbf24">
                         <button type="button" class="btn btn-secondary btn-sm" id="plus-aura-clear">Сброс</button>
                     </div>
-                    <label class="plus-label">Личный акцент</label>
+                    <label class="plus-label">Цвет пульса Premium+</label>
                     <div class="plus-color-row">
                         <input type="color" id="plus-accent" value="#8b5cf6">
                         <button type="button" class="btn btn-secondary btn-sm" id="plus-accent-clear">Сброс</button>
@@ -621,7 +625,7 @@ window.SKLEWS_BUILD = '20260807m';
                 <button id="btn-set-avatar" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-image"></i> Изменить аватар</button>
                 <input type="file" id="avatar-input" accept="image/*" style="display:none">
                 <button id="btn-set-banner" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-panorama"></i> Изменить шапку</button>
-                <input type="file" id="banner-input" accept="image/*" style="display:none">
+                <input type="file" id="banner-input" accept="image/*,video/mp4,video/webm,video/quicktime" style="display:none">
                 <button id="btn-set-status" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-pen"></i> Изменить статус</button>
                 <button id="btn-set-privacy" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-lock"></i> Приватность</button>
                 <button id="btn-open-theme" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-palette"></i> Палитра и шрифт</button>

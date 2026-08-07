@@ -94,7 +94,7 @@ function applyPlusToProfileHero(p, opts) {
     }
 
     if (pun) {
-        pun.innerHTML = premiumNickHtml(p.username, p.is_premium || p.is_premium_plus, p.plus_name_fx);
+        pun.innerHTML = premiumNickHtml(p.username, p.is_premium || p.is_premium_plus, p.plus_name_fx, p.plus_accent || p.plus_aura || '');
         let badge = document.getElementById(badgeId);
         if (p.plus_badge) {
             if (!badge) {
@@ -112,12 +112,45 @@ function applyPlusToProfileHero(p, opts) {
 }
 
 
-function premiumNickHtml(username, isPremium, plusFx) {
+function premiumNickHtml(username, isPremium, plusFx, pulseColor) {
     const name = escapeHtml(username || '');
     if (!isPremium && !plusFx) return '@' + name;
     const fx = plusFx ? (' nick-fx-' + plusFx) : '';
-    return '<span class="premium-nick' + fx + '">@' + name + '<span class="prem-gem">✦</span></span>';
+    const style = (pulseColor && /^#[0-9A-Fa-f]{6}$/.test(pulseColor))
+        ? (' style="--prem-pulse:' + pulseColor + '"') : '';
+    return '<span class="premium-nick' + fx + '"' + style + '>@' + name + '</span>';
 }
+
+function setProfileBanner(bannerEl, videoEl, url, bannerType) {
+    if (!bannerEl) return;
+    const isVideo = bannerType === 'video' || (!!url && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url));
+    if (videoEl) {
+        videoEl.pause();
+        videoEl.removeAttribute('src');
+        videoEl.load();
+    }
+    if (!url) {
+        bannerEl.classList.remove('has-banner', 'has-video');
+        bannerEl.style.backgroundImage = '';
+        return;
+    }
+    if (isVideo && videoEl) {
+        bannerEl.classList.add('has-banner', 'has-video');
+        bannerEl.style.backgroundImage = '';
+        videoEl.muted = true;
+        videoEl.loop = true;
+        videoEl.playsInline = true;
+        videoEl.setAttribute('playsinline', '');
+        videoEl.setAttribute('muted', '');
+        videoEl.src = url;
+        videoEl.play().catch(() => {});
+    } else {
+        bannerEl.classList.add('has-banner');
+        bannerEl.classList.remove('has-video');
+        bannerEl.style.backgroundImage = 'url(' + url + ')';
+    }
+}
+
 
 let meIsAdmin = false;
 let meHasPremium = false;
@@ -1358,16 +1391,12 @@ async function loadProfile() {
     document.getElementById('profile-crystals').textContent = p.crystals;
     document.getElementById('profile-friends').textContent = p.hide_friends ? '•' : p.friends;
     setAvatarEl(document.getElementById('profile-avatar'), p.avatar, p.username);
-    const banner = document.getElementById('profile-banner');
-    if (banner) {
-        if (p.banner) {
-            banner.style.backgroundImage = 'url(' + p.banner + ')';
-            banner.classList.add('has-banner');
-        } else {
-            banner.style.backgroundImage = '';
-            banner.classList.remove('has-banner');
-        }
-    }
+    setProfileBanner(
+        document.getElementById('profile-banner'),
+        document.getElementById('profile-banner-video'),
+        p.banner || '',
+        p.banner_type || 'image'
+    );
     const sb = document.getElementById('shop-balance');
     if (sb) sb.textContent = p.crystals;
     updateChatsBadge(p.unread_messages || 0);
@@ -1407,15 +1436,30 @@ document.getElementById('avatar-input').onchange = async e => {
 };
 document.getElementById('btn-set-banner').onclick = () => document.getElementById('banner-input').click();
 document.getElementById('banner-input').onchange = async e => {
-    const file = e.target.files[0];
-    if (!file) return;
+    const f = e.target.files[0];
+    if (!f) return;
+    const isVideo = (f.type || '').startsWith('video/');
+    if (isVideo && !meHasPremiumPlus) {
+        showToast('Шапка', 'Видео-шапка только для Premium+', '!');
+        e.target.value = '';
+        return;
+    }
     const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch('/api/profile/banner', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (data.error) showToast('Ошибка', data.error, '!');
-    else { showToast('Шапка', 'Обновлена', '✓'); loadProfile(); }
-    document.getElementById('modal-settings').classList.add('hidden');
+    fd.append('file', f);
+    try {
+        const res = await fetch('/api/profile/banner', { method: 'POST', body: fd });
+        const raw = await res.text();
+        let d = {};
+        try { d = raw ? JSON.parse(raw) : {}; } catch (err) { d = { error: 'Ошибка сервера' }; }
+        if (!res.ok || d.error) showToast('Шапка', d.error || 'Не удалось', '!');
+        else {
+            showToast('Шапка', isVideo ? 'Видео-шапка установлена' : 'Обновлена', '✓');
+            loadProfile();
+        }
+    } catch (err) {
+        showToast('Шапка', 'Сеть', '!');
+    }
+    e.target.value = '';
 };
 document.getElementById('btn-set-status').onclick = () => {
     document.getElementById('modal-settings').classList.add('hidden');
@@ -1533,55 +1577,39 @@ document.getElementById('btn-back-subs').onclick = () => { if (NAV_STACK.length)
 
 async function openUserProfile(userId) {
     showScreen('screen-user');
-    // wall loaded after profile data below
     const res = await fetch('/api/user/' + userId);
     const u = await res.json();
     window._viewUserId = u.id;
-    applyPlusToProfileHero(u, { heroId: 'user-hero', avId: 'user-avatar', bannerId: 'user-banner', nameId: 'user-username', badgeId: 'user-plus-badge', underId: 'user-plus-under' });
-    // legacy nick line kept via apply
-    if (!document.getElementById('user-username').innerHTML) document.getElementById('user-username').innerHTML = premiumNickHtml(u.username, u.is_premium || u.is_premium_plus, u.plus_name_fx);
-    // plus badge on user profile
-    let ub = document.getElementById('user-plus-badge');
-    const un = document.getElementById('user-username');
-    if (u.plus_badge) {
-        if (!ub && un) { ub = document.createElement('div'); ub.id = 'user-plus-badge'; ub.className = 'profile-plus-badge'; un.after(ub); }
-        if (ub) { ub.textContent = u.plus_badge; ub.style.display = ''; }
-    } else if (ub) ub.style.display = 'none';
+
+    // Clean legacy wrappers
     const uav = document.getElementById('user-avatar');
-    if (uav) {
-        let wrap = uav.parentElement?.classList?.contains('avatar-hero-wrap') ? uav.parentElement : null;
-        if (!wrap && uav.parentElement) {
-            wrap = document.createElement('div');
-            uav.parentElement.insertBefore(wrap, uav);
-            wrap.appendChild(uav);
-        }
-        if (wrap) wrap.className = 'avatar-hero-wrap' + (u.plus_avatar_frame ? ' frame-' + u.plus_avatar_frame : '');
+    if (uav && uav.parentElement && uav.parentElement.classList.contains('avatar-hero-wrap')) {
+        const wrap = uav.parentElement;
+        wrap.parentNode.insertBefore(uav, wrap);
+        wrap.remove();
     }
-    const uban = document.getElementById('user-banner');
-    if (uban) {
-        uban.classList.remove('banner-fx-rays','banner-fx-particles','banner-fx-silk');
-        if (u.plus_banner_fx) uban.classList.add('banner-fx-' + u.plus_banner_fx);
-    }
+
+    setAvatarEl(uav, u.avatar || null, u.username);
+    setProfileBanner(
+        document.getElementById('user-banner'),
+        document.getElementById('user-banner-video'),
+        u.banner || '',
+        u.banner_type || 'image'
+    );
+
+    applyPlusToProfileHero(u, {
+        heroId: 'user-hero',
+        avId: 'user-avatar',
+        bannerId: 'user-banner',
+        nameId: 'user-username',
+        badgeId: 'user-plus-badge',
+        underId: 'user-plus-under'
+    });
+
     document.getElementById('user-status').textContent = u.status || '';
     document.getElementById('user-friends').textContent = u.friends_count === null ? '•' : (u.friends_count ?? 0);
     document.getElementById('user-channels').textContent = u.channels_count === null ? '•' : (u.channels_count ?? 0);
-    const av = document.getElementById('user-avatar');
-    if (u.avatar) {
-        setAvatarEl(av, u.avatar, u.username);
- 
-    } else {
-        setAvatarEl(av, null, u.username);
-    }
-    const banner = document.getElementById('user-banner');
-    if (banner) {
-        if (u.banner) {
-            banner.style.backgroundImage = 'url(' + u.banner + ')';
-            banner.classList.add('has-banner');
-        } else {
-            banner.style.backgroundImage = '';
-            banner.classList.remove('has-banner');
-        }
-    }
+
     const fb = document.getElementById('btn-user-friend');
     const mb = document.getElementById('btn-user-message');
     if (u.is_me) {
