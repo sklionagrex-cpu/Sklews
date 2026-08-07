@@ -2474,12 +2474,16 @@ loadSavedTheme();
 function updatePremiumNav() {
     const btn = document.getElementById('nav-premium');
     if (!btn) return;
-    // always show tab so deploy is visible; content still premium-only
-    btn.classList.remove('hidden');
-    if (!meHasPremium) {
-        btn.classList.add('nav-premium-locked');
-    } else {
+    if (meHasPremium) {
+        btn.classList.remove('hidden');
         btn.classList.remove('nav-premium-locked');
+    } else {
+        btn.classList.add('hidden');
+        if (document.getElementById('screen-premium')?.classList.contains('active')) {
+            showScreen('screen-home');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.nav-btn[data-tab="home"]')?.classList.add('active');
+        }
     }
 }
 
@@ -2576,188 +2580,216 @@ document.getElementById('btn-pf-post')?.addEventListener('click', async () => {
     loadPremiumFeed();
 });
 
-// ===== Minesweeper 16x16 =====
-const MINES_SIZE = 16;
-const MINES_COUNT = 40;
-let minesToken = null;
-let minesGrid = null; // {mine, open, flag, adj}[][]
-let minesAlive = false;
-let minesFlags = 0;
 
-function minesRandBoard() {
-    const g = Array.from({ length: MINES_SIZE }, () =>
-        Array.from({ length: MINES_SIZE }, () => ({ mine: false, open: false, flag: false, adj: 0 }))
-    );
-    let placed = 0;
-    while (placed < MINES_COUNT) {
-        const r = Math.floor(Math.random() * MINES_SIZE);
-        const c = Math.floor(Math.random() * MINES_SIZE);
-        if (!g[r][c].mine) { g[r][c].mine = true; placed++; }
+// ===== Minesweeper (clean, delegated events) =====
+const MS = { size: 16, bombs: 40, token: null, alive: false, flags: 0, grid: null };
+
+function msNewGrid() {
+    const n = MS.size, g = [];
+    for (let r = 0; r < n; r++) {
+        g[r] = [];
+        for (let c = 0; c < n; c++) g[r][c] = { m: 0, o: 0, f: 0, a: 0 };
     }
-    const dirs = [-1,0,1];
-    for (let r = 0; r < MINES_SIZE; r++) {
-        for (let c = 0; c < MINES_SIZE; c++) {
-            if (g[r][c].mine) continue;
-            let n = 0;
-            for (const dr of dirs) for (const dc of dirs) {
-                if (!dr && !dc) continue;
-                const rr = r + dr, cc = c + dc;
-                if (rr >= 0 && rr < MINES_SIZE && cc >= 0 && cc < MINES_SIZE && g[rr][cc].mine) n++;
-            }
-            g[r][c].adj = n;
+    let left = MS.bombs;
+    while (left) {
+        const r = (Math.random() * n) | 0, c = (Math.random() * n) | 0;
+        if (!g[r][c].m) { g[r][c].m = 1; left--; }
+    }
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+        if (g[r][c].m) continue;
+        let a = 0;
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+            const rr = r + dr, cc = c + dc;
+            if (rr >= 0 && rr < n && cc >= 0 && cc < n && g[rr][cc].m) a++;
         }
+        g[r][c].a = a;
     }
     return g;
 }
 
-function renderMinesBoard() {
+function msPaint() {
     const board = document.getElementById('mines-board');
-    if (!board || !minesGrid) return;
+    if (!board || !MS.grid) return;
+    const n = MS.size;
     board.innerHTML = '';
-    board.style.gridTemplateColumns = 'repeat(' + MINES_SIZE + ', 1fr)';
-    for (let r = 0; r < MINES_SIZE; r++) {
-        for (let c = 0; c < MINES_SIZE; c++) {
-            const cell = minesGrid[r][c];
+    const frag = document.createDocumentFragment();
+    for (let r = 0; r < n; r++) {
+        for (let c = 0; c < n; c++) {
+            const cell = MS.grid[r][c];
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'mines-cell';
-            if (cell.open) {
+            btn.dataset.r = r;
+            btn.dataset.c = c;
+            if (cell.o) {
                 btn.classList.add('open');
-                if (cell.mine) { btn.classList.add('boom'); btn.textContent = '💣'; }
-                else if (cell.adj) { btn.textContent = cell.adj; btn.dataset.n = cell.adj; }
-            } else if (cell.flag) {
+                if (cell.m) { btn.classList.add('boom'); btn.textContent = '💣'; }
+                else if (cell.a) { btn.textContent = String(cell.a); btn.dataset.n = cell.a; }
+            } else if (cell.f) {
                 btn.classList.add('flag');
                 btn.textContent = '🚩';
             }
-            btn.addEventListener('click', () => minesClick(r, c));
-            btn.addEventListener('contextmenu', e => { e.preventDefault(); minesFlag(r, c); });
-            let hold = null;
-            btn.addEventListener('touchstart', e => {
-                hold = setTimeout(() => { minesFlag(r, c); hold = null; }, 450);
-            }, { passive: true });
-            btn.addEventListener('touchend', () => { if (hold) clearTimeout(hold); });
-            board.appendChild(btn);
+            frag.appendChild(btn);
         }
     }
-    document.getElementById('mines-flags-label').textContent = '🚩 ' + minesFlags;
+    board.appendChild(frag);
+    const fl = document.getElementById('mines-flags-label');
+    if (fl) fl.textContent = '🚩 ' + MS.flags;
 }
 
-function minesFlood(r, c) {
-    const stack = [[r, c]];
+function msFlood(r, c) {
+    const n = MS.size, stack = [[r, c]];
     while (stack.length) {
         const [cr, cc] = stack.pop();
-        const cell = minesGrid[cr][cc];
-        if (cell.open || cell.flag) continue;
-        cell.open = true;
-        if (cell.adj === 0 && !cell.mine) {
+        const cell = MS.grid[cr][cc];
+        if (cell.o || cell.f) continue;
+        cell.o = 1;
+        if (!cell.m && cell.a === 0) {
             for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
                 const rr = cr + dr, cc2 = cc + dc;
-                if (rr >= 0 && rr < MINES_SIZE && cc2 >= 0 && cc2 < MINES_SIZE)
-                    if (!minesGrid[rr][cc2].open) stack.push([rr, cc2]);
+                if (rr >= 0 && rr < n && cc2 >= 0 && cc2 < n && !MS.grid[rr][cc2].o)
+                    stack.push([rr, cc2]);
             }
         }
     }
 }
 
-function minesCheckWin() {
-    let closedSafe = 0;
-    for (let r = 0; r < MINES_SIZE; r++)
-        for (let c = 0; c < MINES_SIZE; c++)
-            if (!minesGrid[r][c].mine && !minesGrid[r][c].open) closedSafe++;
-    return closedSafe === 0;
+function msWon() {
+    const n = MS.size;
+    for (let r = 0; r < n; r++)
+        for (let c = 0; c < n; c++)
+            if (!MS.grid[r][c].m && !MS.grid[r][c].o) return false;
+    return true;
 }
 
-async function minesClick(r, c) {
-    if (!minesAlive) return;
-    const cell = minesGrid[r][c];
-    if (cell.open || cell.flag) return;
-    if (cell.mine) {
-        cell.open = true;
-        minesAlive = false;
-        // reveal all mines
-        for (let i = 0; i < MINES_SIZE; i++)
-            for (let j = 0; j < MINES_SIZE; j++)
-                if (minesGrid[i][j].mine) minesGrid[i][j].open = true;
-        renderMinesBoard();
-        await fetch('/api/mines/lose', { method: 'POST' });
-        showToast('Сапёр', 'Мина! Попробуйте ещё', '💣');
+async function msOpen(r, c) {
+    if (!MS.alive) return;
+    const cell = MS.grid[r][c];
+    if (cell.o || cell.f) return;
+    if (cell.m) {
+        MS.alive = false;
+        const n = MS.size;
+        for (let i = 0; i < n; i++) for (let j = 0; j < n; j++)
+            if (MS.grid[i][j].m) MS.grid[i][j].o = 1;
+        msPaint();
+        try { await fetch('/api/mines/lose', { method: 'POST' }); } catch (e) {}
+        showToast('Сапёр', 'Мина!', '💣');
         return;
     }
-    minesFlood(r, c);
-    renderMinesBoard();
-    if (minesCheckWin()) {
-        minesAlive = false;
-        const res = await fetch('/api/mines/win', {
-            method: 'POST', headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({ token: minesToken })
-        });
-        const d = await res.json();
-        if (d.error) showToast('Сапёр', d.error, '!');
-        else {
-            showToast('Победа!', '+' + (d.reward || 10) + ' кристаллов', '✦');
-            loadProfile();
+    msFlood(r, c);
+    msPaint();
+    if (msWon()) {
+        MS.alive = false;
+        try {
+            const res = await fetch('/api/mines/win', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: MS.token })
+            });
+            const d = await res.json();
+            if (d.error) showToast('Сапёр', d.error, '!');
+            else {
+                showToast('Победа!', '+' + (d.reward || 10) + ' ✦', '✦');
+                if (typeof loadProfile === 'function') loadProfile();
+            }
+        } catch (e) {
+            showToast('Сапёр', 'Ошибка награды', '!');
         }
-        minesToken = null;
+        MS.token = null;
     }
 }
 
-function minesFlag(r, c) {
-    if (!minesAlive) return;
-    const cell = minesGrid[r][c];
-    if (cell.open) return;
-    cell.flag = !cell.flag;
-    minesFlags += cell.flag ? 1 : -1;
-    renderMinesBoard();
+function msFlag(r, c) {
+    if (!MS.alive) return;
+    const cell = MS.grid[r][c];
+    if (cell.o) return;
+    cell.f = cell.f ? 0 : 1;
+    MS.flags += cell.f ? 1 : -1;
+    msPaint();
 }
 
-async function startMinesGame() {
-    const st = await fetch('/api/mines/status').then(r => r.json());
-    document.getElementById('mines-left-label').textContent = 'Попытки: ' + st.left + '/' + (st.max || 10);
+async function msStart() {
+    const st = await fetch('/api/mines/status').then(r => r.json()).catch(() => ({ left: 0, max: 10 }));
+    const lab = document.getElementById('mines-left-label');
+    if (lab) lab.textContent = (st.left ?? 0) + '/' + (st.max || 10);
     const res = await fetch('/api/mines/start', { method: 'POST' });
     const d = await res.json();
     if (d.error) {
         showToast('Сапёр', d.error, '!');
-        return false;
+        return;
     }
-    minesToken = d.token;
-    minesGrid = minesRandBoard();
-    minesAlive = true;
-    minesFlags = 0;
-    document.getElementById('mines-left-label').textContent = 'Попытки: ' + d.left + '/10';
-    renderMinesBoard();
-    return true;
+    MS.token = d.token;
+    MS.grid = msNewGrid();
+    MS.alive = true;
+    MS.flags = 0;
+    if (lab) lab.textContent = d.left + '/10';
+    msPaint();
 }
 
 async function openMinesModal() {
-    document.getElementById('modal-mines').classList.remove('hidden');
-    const st = await fetch('/api/mines/status').then(r => r.json());
-    document.getElementById('mines-left-label').textContent = 'Попытки: ' + st.left + '/' + (st.max || 10);
-    if (!minesAlive) {
-        document.getElementById('mines-board').innerHTML = '<div class="empty-state" style="padding:24px;grid-column:1/-1">Нажмите «Новая игра»</div>';
+    const m = document.getElementById('modal-mines');
+    if (!m) return;
+    m.classList.remove('hidden');
+    const st = await fetch('/api/mines/status').then(r => r.json()).catch(() => ({ left: '—', max: 10 }));
+    const lab = document.getElementById('mines-left-label');
+    if (lab) lab.textContent = (st.left ?? '—') + '/' + (st.max || 10);
+    if (!MS.alive) {
+        const board = document.getElementById('mines-board');
+        if (board) board.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:28px;color:var(--muted);font-size:13px">Нажми «Заново»</div>';
     }
 }
 
-document.getElementById('btn-mines-close')?.addEventListener('click', () => {
-    document.getElementById('modal-mines').classList.add('hidden');
-});
-document.getElementById('btn-mines-new')?.addEventListener('click', () => startMinesGame());
+// One-time board listeners (delegation)
+(function bindMinesUI() {
+    const board = document.getElementById('mines-board');
+    if (board && !board.dataset.bound) {
+        board.dataset.bound = '1';
+        board.addEventListener('click', e => {
+            const btn = e.target.closest('.mines-cell');
+            if (!btn) return;
+            msOpen(+btn.dataset.r, +btn.dataset.c);
+        });
+        board.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            const btn = e.target.closest('.mines-cell');
+            if (!btn) return;
+            msFlag(+btn.dataset.r, +btn.dataset.c);
+        });
+        let holdT = null, holdBtn = null;
+        board.addEventListener('touchstart', e => {
+            const btn = e.target.closest('.mines-cell');
+            if (!btn) return;
+            holdBtn = btn;
+            holdT = setTimeout(() => {
+                msFlag(+btn.dataset.r, +btn.dataset.c);
+                holdT = null;
+                holdBtn = null;
+            }, 420);
+        }, { passive: true });
+        board.addEventListener('touchend', () => {
+            if (holdT) clearTimeout(holdT);
+            holdT = null;
+        });
+        board.addEventListener('touchmove', () => {
+            if (holdT) clearTimeout(holdT);
+            holdT = null;
+        }, { passive: true });
+    }
+    document.getElementById('btn-mines-close')?.addEventListener('click', () => {
+        document.getElementById('modal-mines')?.classList.add('hidden');
+    });
+    document.getElementById('btn-mines-new')?.addEventListener('click', () => msStart());
 
-// Triple-tap logo on home → mines
-(function() {
-    let taps = 0, timer = null;
+    // 3 taps on home logo
+    let taps = 0, tmr = null;
     document.addEventListener('click', e => {
-        const logo = e.target.closest('#home-logo-tap, #screen-home .header-logo, #screen-home .brand-logo');
-        if (!logo) return;
+        if (!e.target.closest('#home-logo-tap')) return;
         if (!document.getElementById('screen-home')?.classList.contains('active')) return;
         taps++;
-        clearTimeout(timer);
-        timer = setTimeout(() => { taps = 0; }, 900);
-        if (taps === 1) { /* silent */ }
-        else if (taps === 2) { try { showToast('Сапёр', 'Ещё 1 тап…', '⛏'); } catch(err) {} }
-        else if (taps >= 3) {
+        clearTimeout(tmr);
+        tmr = setTimeout(() => { taps = 0; }, 850);
+        if (taps >= 3) {
             taps = 0;
             openMinesModal();
         }
     });
 })();
-

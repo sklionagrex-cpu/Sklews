@@ -9,11 +9,11 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Sklews">
     <link rel="manifest" href="/static/manifest.json">
-    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v=20260807-buildJ">
-    <link rel="icon" type="image/png" sizes="192x192" href="/static/apple-touch-icon.png?v=20260807-buildJ">
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png?v=20260807k">
+    <link rel="icon" type="image/png" sizes="192x192" href="/static/apple-touch-icon.png?v=20260807k">
 
-    <title>Sklews · buildJ</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260807j">
+    <title>Sklews</title>
+    <link rel="stylesheet" href="/static/css/style.css?v=20260807k">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -25,15 +25,14 @@ if ('serviceWorker' in navigator) {
 if (window.caches) {
   caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
 }
-window.SKLEWS_BUILD = '20260807-buildJ';
+window.SKLEWS_BUILD = '20260807k';
 </script>
 </head>
 <body>
     <div id="app">
-        <div id="deploy-strip" style="position:sticky;top:0;z-index:9999;background:#7c3aed;color:#fff;text-align:center;font-size:11px;font-weight:700;padding:4px 8px;letter-spacing:.02em">Sklews buildJ · Premium tab · Сапёр ×3 лого</div>
-        <nav class="bottom-nav">
+        <nav class="bottom-nav" id="bottom-nav">
             <button class="nav-btn active" data-tab="home"><i class="fa-solid fa-house icon"></i><span>Лента</span></button>
-            <button class="nav-btn" data-tab="premium" id="nav-premium"><i class="fa-solid fa-crown icon"></i><span>Premium</span></button>
+            <button class="nav-btn hidden" data-tab="premium" id="nav-premium"><i class="fa-solid fa-crown icon"></i><span>Premium</span></button>
             <button class="nav-btn" data-tab="create"><i class="fa-solid fa-plus icon"></i><span>Создать</span></button>
             <button class="nav-btn" data-tab="analytics"><i class="fa-solid fa-chart-line icon"></i><span>Аналитика</span></button>
             <button class="nav-btn" data-tab="shop"><i class="fa-solid fa-gem icon"></i><span>Магазин</span></button>
@@ -44,10 +43,9 @@ window.SKLEWS_BUILD = '20260807-buildJ';
         <div id="screen-home" class="screen active">
             <header class="header">
                 <div class="brand-logo header-logo" id="home-logo-tap" title="×3 = сапёр">
-                    <img src="/static/icon-192.png?v=20260807-buildJ" alt="Sklews" width="34" height="34">
+                    <img src="/static/icon-192.png?v=20260807k" alt="Sklews" width="34" height="34">
                     <span>Sklews</span>
                 </div>
-                <span class="build-badge" id="build-badge">20260807-buildJ</span>
             </header>
             <div class="home-search-wrap">
                 <div class="home-search-box">
@@ -318,26 +316,21 @@ window.SKLEWS_BUILD = '20260807-buildJ';
 
         <!-- MODALS -->
 
-        <div id="modal-mines" class="modal hidden">
-            <div class="modal-content mines-modal">
-                <div class="mines-head">
-                    <h3>⛏ Сапёр</h3>
+                <div id="modal-mines" class="modal hidden">
+            <div class="modal-content mines-sheet">
+                <div class="mines-toolbar">
                     <button type="button" id="btn-mines-close" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                    <div class="mines-stats">
+                        <span id="mines-bombs">💣 40</span>
+                        <span id="mines-left-label">10/10</span>
+                        <span id="mines-flags-label">🚩 0</span>
+                    </div>
+                    <button type="button" id="btn-mines-new" class="btn btn-primary btn-sm">Заново</button>
                 </div>
-                <div class="mines-meta">
-                    <span id="mines-left-label">Попытки: —</span>
-                    <span id="mines-flags-label">🚩 0</span>
-                    <span>Награда: 10 ✦</span>
-                </div>
-                <div id="mines-board" class="mines-board"></div>
-                <div class="mines-actions">
-                    <button type="button" id="btn-mines-new" class="btn btn-primary full">Новая игра</button>
-                </div>
-                <p class="mines-hint">16×16 · 3 тапа по логотипу · 10 игр в день</p>
+                <div id="mines-board" class="mines-board" role="grid"></div>
+                <p class="mines-hint">16×16 · удержание = флаг · победа +10 ✦ · 10 игр/день</p>
             </div>
         </div>
-
-        
         <div id="modal-theme" class="modal hidden">
             <div class="modal-content" style="max-width:360px;max-height:85vh;overflow-y:auto">
                 <h3><i class="fa-solid fa-palette"></i> Оформление</h3>
@@ -654,6 +647,6 @@ window.SKLEWS_BUILD = '20260807-buildJ';
             </div>
         </div>
     </div>
-    <script src="/static/js/script.js?v=20260807j"></script>
+    <script src="/static/js/script.js?v=20260807k"></script>
 </body>
 </html>
