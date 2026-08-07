@@ -101,6 +101,55 @@ function bindMentions(root) {
 }
 
 
+
+let homeSearchTimer = null;
+document.getElementById('home-search')?.addEventListener('input', e => {
+    const q = e.target.value.trim();
+    const clearBtn = document.getElementById('btn-clear-home-search');
+    const box = document.getElementById('home-search-results');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !q);
+    clearTimeout(homeSearchTimer);
+    if (q.length < 1) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+    }
+    homeSearchTimer = setTimeout(async () => {
+        const res = await fetch('/api/channels?q=' + encodeURIComponent(q));
+        const channels = await res.json();
+        box.innerHTML = '';
+        if (!channels.length) {
+            box.innerHTML = '<div class="empty-state" style="padding:16px">Ничего не найдено</div>';
+        } else {
+            channels.forEach(ch => {
+                const card = document.createElement('div');
+                card.className = 'channel-card';
+                card.innerHTML = avatarHtml(ch.name, ch.avatar) +
+                    '<div class="channel-info"><h3>' + escapeHtml(ch.name) + '</h3><p>' + (ch.subscribers || 0) + ' участников</p></div>';
+                card.onclick = () => {
+                    box.classList.add('hidden');
+                    document.getElementById('home-search').value = '';
+                    clearBtn?.classList.add('hidden');
+                    openChannel(ch.id);
+                };
+                box.appendChild(card);
+            });
+        }
+        box.classList.remove('hidden');
+    }, 250);
+});
+document.getElementById('btn-clear-home-search')?.addEventListener('click', () => {
+    document.getElementById('home-search').value = '';
+    document.getElementById('btn-clear-home-search').classList.add('hidden');
+    document.getElementById('home-search-results').classList.add('hidden');
+    document.getElementById('home-search-results').innerHTML = '';
+});
+document.getElementById('home-search')?.addEventListener('focus', () => {
+    if (document.getElementById('home-search').value.trim()) {
+        document.getElementById('home-search-results').classList.remove('hidden');
+    }
+});
+
 function loadHome() { loadChannels(); loadActivity(); }
 
 async function loadActivity() {
@@ -401,24 +450,39 @@ async function loadPosts(channelId) {
         }
         const reacts = p.reactions || {};
         const reactStr = Object.entries(reacts).map(([e, n]) => e + ' ' + n).join(' ');
-        card.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong>' + pin + escapeHtml(p.author) + '</strong><span style="font-size:12px;color:var(--muted)">' + p.created_at + '</span></div>' +
+        const authorHtml = '<span class="post-author-link" data-author-id="' + (p.author_id || '') + '">' + pin + '@' + escapeHtml(p.author) + '</span>';
+        card.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' + authorHtml + '<span style="font-size:12px;color:var(--muted)">' + p.created_at + '</span></div>' +
             media +
             '<div style="margin-bottom:10px;white-space:pre-wrap" class="post-text">' + linkifyMentions(p.content) + '</div>' +
             '<div style="display:flex;gap:16px;font-size:13px;color:var(--muted);align-items:center;flex-wrap:wrap">' +
             '<span class="like-btn" data-id="' + p.id + '" style="cursor:pointer;' + (p.liked ? 'color:var(--accent)' : '') + '"><i class="fa-solid fa-heart"></i> ' + p.likes + '</span>' +
             '<span class="comment-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-comment"></i> ' + (p.comments || 0) + '</span>' +
+            '<span class="react-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-regular fa-face-smile"></i></span>' +
             '<span><i class="fa-solid fa-eye"></i> ' + p.views + '</span>' +
             '<span class="pin-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-thumbtack"></i></span></div>' +
             (reactStr ? '<div style="font-size:12px;color:var(--muted);margin-top:6px">' + reactStr + '</div>' : '');
-        let lt;
-        const startLP = () => { lt = setTimeout(() => openReactModal(p.id), 500); };
-        const cancelLP = () => clearTimeout(lt);
-        card.addEventListener('touchstart', startLP);
-        card.addEventListener('mousedown', startLP);
-        card.addEventListener('touchend', cancelLP);
-        card.addEventListener('mouseup', cancelLP);
-        card.addEventListener('touchmove', cancelLP);
+        card.querySelector('.post-author-link')?.addEventListener('click', e => {
+            e.stopPropagation();
+            if (p.author_id) openUserProfile(p.author_id);
+        });
+        if (p.can_delete) {
+            let lt;
+            const startLP = () => { lt = setTimeout(() => {
+                window._deletePostId = p.id;
+                document.getElementById('modal-delete-post').classList.remove('hidden');
+            }, 550); };
+            const cancelLP = () => clearTimeout(lt);
+            card.addEventListener('touchstart', startLP, { passive: true });
+            card.addEventListener('mousedown', startLP);
+            card.addEventListener('touchend', cancelLP);
+            card.addEventListener('mouseup', cancelLP);
+            card.addEventListener('touchmove', cancelLP);
+            card.addEventListener('mouseleave', cancelLP);
+        }
         feed.appendChild(card);
+    });
+    document.querySelectorAll('.react-btn').forEach(btn => {
+        btn.onclick = e => { e.stopPropagation(); openReactModal(btn.dataset.id); };
     });
     document.querySelectorAll('.like-btn').forEach(btn => {
         btn.onclick = async e => {
@@ -444,6 +508,21 @@ async function loadPosts(channelId) {
         el.onclick = e => { e.stopPropagation(); openLightbox(el.dataset.type, el.dataset.src); };
     });
 }
+
+
+document.getElementById('btn-cancel-delete-post')?.addEventListener('click', () => {
+    document.getElementById('modal-delete-post').classList.add('hidden');
+    window._deletePostId = null;
+});
+document.getElementById('btn-confirm-delete-post')?.addEventListener('click', async () => {
+    const id = window._deletePostId;
+    document.getElementById('modal-delete-post').classList.add('hidden');
+    if (!id) return;
+    await fetch('/api/post/' + id + '/delete', { method: 'POST' });
+    window._deletePostId = null;
+    if (currentChannelId) loadPosts(currentChannelId);
+    showToast('Пост', 'Удалён', '✓');
+});
 
 function openReactModal(postId) {
     reactPostId = postId;
@@ -1091,7 +1170,7 @@ async function openComments(postId) {
         row.dataset.cid = c.id;
         row.innerHTML = av +
             '<div class="comment-body">' +
-            '<div class="comment-nick" data-uid="' + c.user_id + '">' + escapeHtml(c.username) + '</div>' +
+            '<div class="comment-nick" data-uid="' + c.user_id + '">@' + escapeHtml(c.username) + '</div>' +
             text + media +
             '<div class="comment-time">' + c.created_at + '</div></div>';
         row.querySelector('.comment-nick').onclick = () => openUserProfile(c.user_id);

@@ -22,6 +22,14 @@
 
         <div id="screen-home" class="screen active">
             <header class="header"><div class="header-logo">Sklews</div></header>
+            <div class="home-search-wrap">
+                <div class="home-search-box">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="home-search" placeholder="Поиск сообществ..." autocomplete="off">
+                    <button type="button" id="btn-clear-home-search" class="home-search-clear hidden"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="home-search-results" class="home-search-results hidden"></div>
+            </div>
             <div class="filters">
                 <span class="filters-label">Сортировка</span>
                 <div class="filter-buttons">
@@ -437,6 +445,14 @@
                 <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Все посты и подписки будут удалены безвозвратно</p>
                 <button id="btn-confirm-delete-channel" class="btn btn-primary full" style="background:#ef4444;border:none;margin-bottom:10px"><i class="fa-solid fa-trash"></i> Удалить</button>
                 <button id="btn-cancel-delete-channel" class="btn btn-secondary full">Отмена</button>
+            </div>
+        </div>
+
+        <div id="modal-delete-post" class="modal hidden">
+            <div class="modal-content" style="text-align:center;max-width:280px;padding:20px">
+                <h3 style="font-size:16px;margin-bottom:14px">Пост</h3>
+                <button id="btn-confirm-delete-post" class="btn btn-primary full" style="background:#ef4444;border:none;margin-bottom:8px;font-size:13px"><i class="fa-solid fa-trash"></i> Удалить</button>
+                <button id="btn-cancel-delete-post" class="btn btn-secondary full" style="font-size:13px">Отмена</button>
             </div>
         </div>
 

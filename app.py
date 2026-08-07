@@ -235,7 +235,20 @@ def api_channels():
     db.session.commit()
 
     me = current_user()
+    q = (request.args.get('q') or '').strip()
     sub_ids = {s.channel_id for s in Subscription.query.filter_by(user_id=me.id).all()}
+    if q:
+        channels = Channel.query.filter(Channel.name.ilike(f'%{q}%')).limit(30).all()
+        result = []
+        for ch in channels:
+            result.append({
+                'id': ch.id, 'name': ch.name, 'description': ch.description, 'avatar': ch.avatar,
+                'subscribers': ch.subscribers_count, 'views': ch.views,
+                'created_at': ch.created_at.strftime('%d.%m.%Y'),
+                'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '', 'label': '',
+                'accent': ch.accent_color or '#8b5cf6'
+            })
+        return jsonify(result)
     channels = Channel.query.all()
     scored = []
     for ch in channels:
@@ -437,12 +450,17 @@ def channel_posts(channel_id):
         if not viewed:
             db.session.add(PostView(post_id=p.id, user_id=me.id))
             p.views += 1
+        ch = Channel.query.get(channel_id)
+        can_del = (p.author_id == me.id) or (ch and ch.owner_id == me.id) or can_moderate(me, ch)
         result.append({
-            'id': p.id, 'content': p.content, 'author': author.username if author else '?',
+            'id': p.id, 'content': p.content,
+            'author': author.username if author else '?',
+            'author_id': p.author_id,
             'likes': p.likes, 'comments': p.comments_count, 'views': p.views, 'is_pinned': p.is_pinned,
             'media_type': p.media_type, 'media_url': p.media_url,
             'liked': liked, 'reactions': reacts, 'my_reaction': my_react.emoji if my_react else None,
-            'created_at': p.created_at.strftime('%H:%M')
+            'created_at': p.created_at.strftime('%H:%M'),
+            'can_delete': can_del
         })
     db.session.commit()
     return jsonify(result)
@@ -501,6 +519,22 @@ def pin_post(post_id):
     post.is_pinned = True
     db.session.commit()
     return jsonify({'status': 'pinned'})
+
+@app.route('/api/post/<int:post_id>/delete', methods=['POST'])
+@login_required
+def delete_post(post_id):
+    user = current_user()
+    post = Post.query.get_or_404(post_id)
+    ch = Channel.query.get(post.channel_id)
+    if post.author_id != user.id and not (ch and (ch.owner_id == user.id or can_moderate(user, ch))):
+        return jsonify({'error': 'Нет прав'}), 403
+    PostLike.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+    PostReaction.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+    PostView.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+    Comment.query.filter_by(post_id=post_id).delete(synchronize_session=False)
+    db.session.delete(post)
+    db.session.commit()
+    return jsonify({'status': 'deleted'})
 
 # ==================== ROLES ====================
 
