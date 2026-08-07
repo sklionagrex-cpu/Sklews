@@ -289,7 +289,7 @@ def create_channel():
     description = data.get('description', '').strip()
     if not name:
         return jsonify({'error': 'Название обязательно'}), 400
-    ch = Channel(name=name, description=description, owner_id=user.id, subscribers_count=1)
+    ch = Channel(name=name, description=description, owner_id=user.id, subscribers_count=1, avatar=(data.get('avatar') or '')[:256])
     db.session.add(ch)
     db.session.flush()
     db.session.add(Subscription(user_id=user.id, channel_id=ch.id))
@@ -306,7 +306,7 @@ def channel_posts(channel_id):
         author = User.query.get(p.author_id)
         result.append({
             'id': p.id, 'content': p.content, 'author': author.username if author else '?',
-            'likes': p.likes, 'views': p.views, 'is_pinned': p.is_pinned,
+            'likes': p.likes, 'comments': p.comments_count, 'views': p.views, 'is_pinned': p.is_pinned,
             'media_type': p.media_type, 'media_url': p.media_url,
             'created_at': p.created_at.strftime('%d.%m %H:%M')
         })
@@ -657,6 +657,69 @@ def handle_message(data):
 
 with app.app_context():
     db.create_all()
+
+
+
+@app.route('/api/channel/<int:channel_id>/update', methods=['POST'])
+@login_required
+def update_channel(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    data = request.json or {}
+    if 'description' in data:
+        ch.description = str(data['description'])[:500]
+    if 'avatar' in data:
+        ch.avatar = str(data['avatar'])[:256]
+    if 'name' in data and data['name'].strip() and data['name'].strip() != ch.name:
+        if user.crystals < 50:
+            return jsonify({'error': 'Смена названия стоит 50 ✦'}), 400
+        user.crystals -= 50
+        ch.name = data['name'].strip()[:100]
+    if 'accent_color' in data:
+        ch.accent_color = data['accent_color']
+    db.session.commit()
+    return jsonify({'status': 'ok', 'crystals': user.crystals, 'name': ch.name})
+
+@app.route('/api/post/<int:post_id>/comments')
+@login_required
+def get_comments(post_id):
+    comments = Comment.query.filter_by(post_id=post_id).order_by(Comment.created_at.asc()).limit(100).all()
+    result = []
+    for c in comments:
+        u = User.query.get(c.user_id)
+        result.append({
+            'id': c.id, 'content': c.content,
+            'username': u.username if u else '?',
+            'created_at': c.created_at.strftime('%d.%m %H:%M')
+        })
+    return jsonify(result)
+
+@app.route('/api/post/<int:post_id>/comments', methods=['POST'])
+@login_required
+def add_comment(post_id):
+    user = current_user()
+    post = Post.query.get_or_404(post_id)
+    content = (request.json or {}).get('content', '').strip()
+    if not content:
+        return jsonify({'error': 'Пустой комментарий'}), 400
+    c = Comment(post_id=post_id, user_id=user.id, content=content)
+    post.comments_count += 1
+    db.session.add(c)
+    if post.comments_count == 20:
+        author = User.query.get(post.author_id)
+        if author:
+            author.crystals += 3
+    db.session.commit()
+    return jsonify({'id': c.id, 'status': 'ok', 'comments': post.comments_count})
+
+@app.route('/api/activity')
+@login_required
+def platform_activity():
+    since = datetime.utcnow() - timedelta(hours=24)
+    posts = Post.query.filter(Post.created_at >= since).count()
+    return jsonify({'today': posts})
 
 
 import uuid

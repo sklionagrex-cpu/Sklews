@@ -30,6 +30,7 @@
                     <button class="filter-btn" data-sort="all">Всё время</button>
                 </div>
             </div>
+            <p id="activity-line" style="padding:0 16px 10px;font-size:12px;color:var(--muted)">Активность: —</p>
             <div id="channels-feed" class="feed"></div>
             <div class="section-title">Мои подписки</div>
             <div id="my-subs" class="feed"></div>
@@ -96,9 +97,11 @@
                 <h2 id="channel-name" style="font-size:22px;margin-bottom:4px"></h2>
                 <p id="channel-subs" class="muted"></p>
                 <p id="channel-desc" class="desc"></p>
-                <div class="channel-actions">
+                <div class="channel-actions" id="channel-actions">
                     <button id="btn-join" class="btn btn-primary">Вступить</button>
+                    <button id="btn-watch" class="btn btn-secondary">Смотреть без вступления</button>
                     <button id="btn-analytics" class="btn btn-secondary hidden">Аналитика</button>
+                    <button id="btn-edit-channel" class="btn btn-secondary hidden">Редактор</button>
                 </div>
             </div>
             <div id="posts-feed" class="feed"></div>
@@ -136,12 +139,42 @@
         <div id="modal-create" class="modal hidden">
             <div class="modal-content">
                 <h3>Новый канал</h3>
+                <div style="text-align:center;margin-bottom:14px">
+                    <div id="new-channel-avatar-preview" class="avatar-large" style="width:72px;height:72px;font-size:28px;margin:0 auto 8px;cursor:pointer">+</div>
+                    <input type="file" id="new-channel-avatar" accept="image/*" style="display:none">
+                    <p style="font-size:12px;color:var(--muted)">Нажми, чтобы выбрать аватар</p>
+                </div>
                 <input type="text" id="new-channel-name" placeholder="Название канала" maxlength="50">
                 <textarea id="new-channel-desc" placeholder="Описание" maxlength="300"></textarea>
                 <div class="modal-actions">
                     <button id="btn-cancel-create" class="btn btn-secondary">Отмена</button>
                     <button id="btn-confirm-create" class="btn btn-primary">Создать (+10✦)</button>
                 </div>
+            </div>
+        </div>
+
+        <div id="modal-edit-channel" class="modal hidden">
+            <div class="modal-content">
+                <h3>Редактор канала</h3>
+                <input type="text" id="edit-channel-name" placeholder="Название (50 ✦)" maxlength="50">
+                <p style="font-size:12px;color:var(--muted);margin:-6px 0 12px">Смена названия: 50 ✦</p>
+                <textarea id="edit-channel-desc" placeholder="Описание" maxlength="300"></textarea>
+                <div class="modal-actions">
+                    <button id="btn-cancel-edit-ch" class="btn btn-secondary">Отмена</button>
+                    <button id="btn-save-edit-ch" class="btn btn-primary">Сохранить</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="modal-comments" class="modal hidden">
+            <div class="modal-content" style="max-height:80vh;display:flex;flex-direction:column">
+                <h3>Комментарии</h3>
+                <div id="comments-list" style="flex:1;overflow-y:auto;margin-bottom:12px"></div>
+                <div style="display:flex;gap:8px">
+                    <input type="text" id="comment-input" placeholder="Комментарий..." style="flex:1;margin:0">
+                    <button id="btn-send-comment" class="btn btn-primary btn-sm">➤</button>
+                </div>
+                <button id="btn-close-comments" class="btn btn-secondary full" style="margin-top:12px">Закрыть</button>
             </div>
         </div>
 

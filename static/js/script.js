@@ -39,7 +39,15 @@ function showToast(title, text, icon) {
 }
 document.getElementById('btn-toast-ok').onclick = () => document.getElementById('modal-toast').classList.add('hidden');
 
-function loadHome() { loadChannels(); loadMySubs(); }
+function loadHome() { loadChannels(); loadMySubs(); loadActivity(); }
+async function loadActivity() {
+    try {
+        const res = await fetch('/api/activity');
+        const d = await res.json();
+        const el = document.getElementById('activity-line');
+        if (el) el.textContent = 'Активность: ' + (d.today || 0) + ' постов за сегодня';
+    } catch(e) {}
+}
 
 async function loadChannels() {
     try {
@@ -145,6 +153,15 @@ async function openChannel(id) {
         const canPost = ch.is_owner || ch.role === 'admin' || ch.role === 'coauthor';
         document.getElementById('btn-add-post').classList.toggle('hidden', !canPost);
         document.getElementById('btn-analytics').classList.toggle('hidden', !ch.is_owner);
+        document.getElementById('btn-edit-channel').classList.toggle('hidden', !ch.is_owner);
+        document.getElementById('btn-watch').style.display = ch.is_subscribed || ch.is_owner ? 'none' : '';
+        // wallpaper style header
+        const head = document.querySelector('.channel-header');
+        if (ch.avatar) {
+            head.style.background = `linear-gradient(to bottom, rgba(12,10,20,0.3), var(--bg)), url(${ch.avatar}) center/cover`;
+        } else {
+            head.style.background = '';
+        }
         loadPosts(id);
     } catch (e) { console.error(e); }
 }
@@ -213,6 +230,7 @@ async function loadPosts(channelId) {
                 <div style="margin-bottom:10px;white-space:pre-wrap">${escapeHtml(p.content)}</div>
                 <div style="display:flex;gap:16px;font-size:13px;color:var(--muted)">
                 <span class="like-btn" data-id="${p.id}" style="cursor:pointer">❤️ ${p.likes}</span>
+                <span class="comment-btn" data-id="${p.id}" style="cursor:pointer">💬 ${p.comments || 0}</span>
                 <span>👁 ${p.views}</span>
                 <span class="pin-btn" data-id="${p.id}" style="cursor:pointer">📌</span></div>`;
             feed.appendChild(card);
@@ -232,8 +250,45 @@ async function loadPosts(channelId) {
                 loadPosts(channelId);
             };
         });
+
+        document.querySelectorAll('.comment-btn').forEach(btn => {
+            btn.onclick = async e => {
+                e.stopPropagation();
+                openComments(btn.dataset.id);
+            };
+        });
+
     } catch (e) { console.error(e); }
 }
+
+let currentCommentPostId = null;
+async function openComments(postId) {
+    currentCommentPostId = postId;
+    document.getElementById('modal-comments').classList.remove('hidden');
+    const res = await fetch(`/api/post/${postId}/comments`);
+    const comments = await res.json();
+    const list = document.getElementById('comments-list');
+    list.innerHTML = comments.length ? '' : '<div class="empty-state">Пока нет комментариев</div>';
+    comments.forEach(c => {
+        list.innerHTML += `<div class="channel-card" style="margin-bottom:8px">
+            <div class="channel-info"><h3>${escapeHtml(c.username)}</h3>
+            <p style="white-space:normal">${escapeHtml(c.content)}</p>
+            <span style="font-size:11px;color:var(--muted)">${c.created_at}</span></div></div>`;
+    });
+}
+document.getElementById('btn-close-comments').onclick = () => document.getElementById('modal-comments').classList.add('hidden');
+document.getElementById('btn-send-comment').onclick = async () => {
+    const content = document.getElementById('comment-input').value.trim();
+    if (!content || !currentCommentPostId) return;
+    await fetch(`/api/post/${currentCommentPostId}/comments`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ content })
+    });
+    document.getElementById('comment-input').value = '';
+    openComments(currentCommentPostId);
+    if (currentChannelId) loadPosts(currentChannelId);
+};
+
 
 document.getElementById('btn-add-post').onclick = () => {
     document.getElementById('new-post-content').value = '';
@@ -279,17 +334,61 @@ document.getElementById('btn-create-channel').onclick = () => {
     document.getElementById('modal-create').classList.remove('hidden');
 };
 document.getElementById('btn-cancel-create').onclick = () => document.getElementById('modal-create').classList.add('hidden');
+let pendingChannelAvatar = null;
+document.getElementById('new-channel-avatar-preview')?.addEventListener('click', () => document.getElementById('new-channel-avatar').click());
+document.getElementById('new-channel-avatar')?.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    pendingChannelAvatar = f;
+    const prev = document.getElementById('new-channel-avatar-preview');
+    prev.style.backgroundImage = `url(${URL.createObjectURL(f)})`;
+    prev.style.backgroundSize = 'cover';
+    prev.textContent = '';
+});
 document.getElementById('btn-confirm-create').onclick = async () => {
     const name = document.getElementById('new-channel-name').value.trim();
     const description = document.getElementById('new-channel-desc').value.trim();
     if (!name) return showToast('Ошибка', 'Введите название', '!');
+    let avatar = '';
+    if (pendingChannelAvatar) {
+        const fd = new FormData();
+        fd.append('file', pendingChannelAvatar);
+        const up = await fetch('/api/upload', { method: 'POST', body: fd });
+        const ud = await up.json();
+        if (ud.url) avatar = ud.url;
+    }
     const res = await fetch('/api/channel/create', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ name, description, avatar })
+    });
+    const data = await res.json();
+    document.getElementById('modal-create').classList.add('hidden');
+    pendingChannelAvatar = null;
+    if (data.id) { openChannel(data.id); loadProfile(); }
+};
+document.getElementById('btn-edit-channel').onclick = async () => {
+    const res = await fetch(`/api/channel/${currentChannelId}`);
+    const ch = await res.json();
+    document.getElementById('edit-channel-name').value = ch.name;
+    document.getElementById('edit-channel-desc').value = ch.description || '';
+    document.getElementById('modal-edit-channel').classList.remove('hidden');
+};
+document.getElementById('btn-cancel-edit-ch').onclick = () => document.getElementById('modal-edit-channel').classList.add('hidden');
+document.getElementById('btn-save-edit-ch').onclick = async () => {
+    const name = document.getElementById('edit-channel-name').value.trim();
+    const description = document.getElementById('edit-channel-desc').value.trim();
+    const res = await fetch(`/api/channel/${currentChannelId}/update`, {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ name, description })
     });
     const data = await res.json();
-    document.getElementById('modal-create').classList.add('hidden');
-    if (data.id) { openChannel(data.id); loadProfile(); }
+    if (data.error) showToast('Ошибка', data.error, '!');
+    else {
+        document.getElementById('modal-edit-channel').classList.add('hidden');
+        showToast('Сохранено', 'Канал обновлён', '✓');
+        openChannel(currentChannelId);
+        loadProfile();
+    }
 };
 
 async function loadMyChannels() {
