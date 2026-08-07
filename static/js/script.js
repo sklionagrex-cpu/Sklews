@@ -64,21 +64,59 @@ function applyPlusToProfileHero(p, opts) {
         if (p.plus_avatar_frame) av.classList.add('av-ring-' + p.plus_avatar_frame);
     }
 
-    // Banner stays as photo/cover — no FX classes on it
+    // Banner overlay FX (on top of photo/video, under gradient)
+    const fxKeys = ['glare','aurora','neon','stardust','holo','rain','shutter','spark','trail','radar'];
     if (banner) {
-        banner.classList.remove('banner-fx-rays','banner-fx-particles','banner-fx-silk','banner-fx-aurora','banner-fx-embers');
-    }
-
-    // Effects strip UNDER the banner
-    if (under) {
-        under.className = 'plus-under-banner';
-        if (p.plus_banner_fx) {
-            under.classList.add('under-fx-' + p.plus_banner_fx);
-            under.style.display = '';
-        } else {
-            under.style.display = 'none';
+        banner.classList.remove(...fxKeys.map(k => 'bfx-' + k));
+        let layer = banner.querySelector('.banner-fx-layer');
+        if (!layer) {
+            layer = document.createElement('div');
+            layer.className = 'banner-fx-layer';
+            banner.appendChild(layer);
+        }
+        layer.className = 'banner-fx-layer';
+        layer.innerHTML = '';
+        if (p.plus_banner_fx && fxKeys.includes(p.plus_banner_fx)) {
+            banner.classList.add('bfx-' + p.plus_banner_fx);
+            layer.classList.add('bfx-' + p.plus_banner_fx);
+            // particles need many dots
+            if (p.plus_banner_fx === 'stardust') {
+                for (let i = 0; i < 24; i++) {
+                    const d = document.createElement('span');
+                    d.className = 'stardust-dot';
+                    d.style.setProperty('--i', i);
+                    d.style.setProperty('--x', (Math.random() * 100).toFixed(1) + '%');
+                    d.style.setProperty('--delay', (Math.random() * 8).toFixed(2) + 's');
+                    d.style.setProperty('--dur', (5 + Math.random() * 6).toFixed(2) + 's');
+                    layer.appendChild(d);
+                }
+            }
+            if (p.plus_banner_fx === 'spark') {
+                for (let i = 0; i < 8; i++) {
+                    const s = document.createElement('span');
+                    s.className = 'spark-star';
+                    s.style.setProperty('--i', i);
+                    s.style.setProperty('--x', (8 + Math.random() * 84).toFixed(1) + '%');
+                    s.style.setProperty('--y', (10 + Math.random() * 70).toFixed(1) + '%');
+                    s.style.setProperty('--delay', (Math.random() * 2).toFixed(2) + 's');
+                    layer.appendChild(s);
+                }
+            }
+            if (p.plus_banner_fx === 'rain') {
+                for (let i = 0; i < 18; i++) {
+                    const r = document.createElement('span');
+                    r.className = 'rain-streak';
+                    r.style.setProperty('--i', i);
+                    r.style.setProperty('--x', (Math.random() * 100).toFixed(1) + '%');
+                    r.style.setProperty('--delay', (Math.random() * 3).toFixed(2) + 's');
+                    r.style.setProperty('--dur', (1.2 + Math.random() * 2.2).toFixed(2) + 's');
+                    layer.appendChild(r);
+                }
+            }
         }
     }
+    // hide legacy under strip if present
+    if (under) under.style.display = 'none';
 
     if (hero) {
         hero.classList.remove('plus-card-glass','plus-card-velvet','plus-card-metal','plus-card-royal','has-aura');
@@ -1603,7 +1641,7 @@ async function openUserProfile(userId) {
         bannerId: 'user-banner',
         nameId: 'user-username',
         badgeId: 'user-plus-badge',
-        underId: 'user-plus-under'
+        underId: 'user-banner-fx'
     });
 
     document.getElementById('user-status').textContent = u.status || '';
@@ -3304,7 +3342,52 @@ function updatePlusPreview() {
     const prev = document.getElementById('plus-preview-profile');
     if (nameEl) nameEl.innerHTML = premiumNickHtml(window.__meUsername || 'you', true, nameFx);
     if (wrap) wrap.className = 'plus-prev-avatar-wrap' + (frame ? ' frame-' + frame : '');
-    if (ban) ban.className = 'plus-prev-banner' + (bannerFx ? ' fx-' + bannerFx : '');
+    if (ban) {
+        ban.className = 'plus-prev-banner';
+        let layer = ban.querySelector('.banner-fx-layer') || document.getElementById('plus-prev-banner-fx');
+        if (!layer) {
+            layer = document.createElement('div');
+            layer.className = 'banner-fx-layer';
+            ban.appendChild(layer);
+        }
+        layer.className = 'banner-fx-layer';
+        layer.innerHTML = '';
+        const fxKeys = ['glare','aurora','neon','stardust','holo','rain','shutter','spark','trail','radar'];
+        if (bannerFx && fxKeys.includes(bannerFx)) {
+            ban.classList.add('bfx-' + bannerFx);
+            layer.classList.add('bfx-' + bannerFx);
+            if (bannerFx === 'stardust') {
+                for (let i = 0; i < 16; i++) {
+                    const d = document.createElement('span');
+                    d.className = 'stardust-dot';
+                    d.style.setProperty('--x', (Math.random()*100).toFixed(1)+'%');
+                    d.style.setProperty('--delay', (Math.random()*6).toFixed(2)+'s');
+                    d.style.setProperty('--dur', (4+Math.random()*5).toFixed(2)+'s');
+                    layer.appendChild(d);
+                }
+            }
+            if (bannerFx === 'spark') {
+                for (let i = 0; i < 6; i++) {
+                    const s = document.createElement('span');
+                    s.className = 'spark-star';
+                    s.style.setProperty('--x', (10+Math.random()*80).toFixed(1)+'%');
+                    s.style.setProperty('--y', (15+Math.random()*60).toFixed(1)+'%');
+                    s.style.setProperty('--delay', (Math.random()*2).toFixed(2)+'s');
+                    layer.appendChild(s);
+                }
+            }
+            if (bannerFx === 'rain') {
+                for (let i = 0; i < 12; i++) {
+                    const r = document.createElement('span');
+                    r.className = 'rain-streak';
+                    r.style.setProperty('--x', (Math.random()*100).toFixed(1)+'%');
+                    r.style.setProperty('--delay', (Math.random()*2).toFixed(2)+'s');
+                    r.style.setProperty('--dur', (1+Math.random()*2).toFixed(2)+'s');
+                    layer.appendChild(r);
+                }
+            }
+        }
+    }
     if (badgeEl) badgeEl.textContent = badge;
     if (prev) {
         prev.style.boxShadow = aura ? ('0 0 28px ' + aura + '66') : '';

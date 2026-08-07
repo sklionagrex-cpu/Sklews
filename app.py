@@ -1189,7 +1189,7 @@ def save_plus_profile():
     accent = str(data.get('plus_accent') or '')[:20]
     allowed_fx = {'', 'gold', 'aurora', 'crystal', 'soft', 'liquid', 'fire', 'matrix'}
     allowed_frame = {'', 'gold', 'diamond', 'aurora', 'rose', 'obsidian', 'prism', 'royal'}
-    allowed_banner = {'', 'none', 'rays', 'particles', 'silk', 'aurora', 'embers'}
+    allowed_banner = {'', 'none', 'glare', 'aurora', 'neon', 'stardust', 'holo', 'rain', 'shutter', 'spark', 'trail', 'radar'}
     allowed_msg = {'', 'glow', 'gradient', 'neon', 'glass'}
     allowed_card = {'', 'glass', 'velvet', 'metal', 'royal'}
     if name_fx not in allowed_fx:

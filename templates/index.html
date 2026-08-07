@@ -269,8 +269,8 @@ window.SKLEWS_BUILD = '20260807m';
             <div class="profile-hero" id="profile-hero">
                 <div class="profile-banner" id="profile-banner">
                     <video id="profile-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
+                    <div class="banner-fx-layer" id="profile-banner-fx"></div>
                 </div>
-                <div class="plus-under-banner" id="profile-plus-under"></div>
                 <div class="avatar-hero" id="profile-avatar">?</div>
                 <button id="btn-settings" class="btn-icon profile-gear"><i class="fa-solid fa-gear"></i></button>
                 <div class="profile-hero-info">
@@ -323,8 +323,8 @@ window.SKLEWS_BUILD = '20260807m';
             <div class="profile-hero" id="user-hero">
                 <div class="profile-banner" id="user-banner">
                     <video id="user-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
+                    <div class="banner-fx-layer" id="user-banner-fx"></div>
                 </div>
-                <div class="plus-under-banner" id="user-plus-under"></div>
                 <div class="avatar-hero" id="user-avatar">?</div>
                 <div class="profile-hero-info">
                     <h2 id="user-username">—</h2>
@@ -448,7 +448,7 @@ window.SKLEWS_BUILD = '20260807m';
                 </div>
                 <div id="plus-studio-profile" class="plus-studio-page">
                     <div class="plus-preview" id="plus-preview-profile">
-                        <div class="plus-prev-banner" id="plus-prev-banner"><div class="plus-prev-banner-fx"></div></div>
+                        <div class="plus-prev-banner" id="plus-prev-banner"><div class="banner-fx-layer" id="plus-prev-banner-fx"></div></div>
                         <div class="plus-prev-avatar-wrap" id="plus-prev-avatar-wrap"><div class="plus-prev-avatar">✦</div></div>
                         <div class="plus-prev-name" id="plus-prev-name">@you</div>
                         <div class="plus-prev-badge" id="plus-prev-badge"></div>
@@ -490,11 +490,16 @@ window.SKLEWS_BUILD = '20260807m';
                     <label class="plus-label">Эффект шапки</label>
                     <div class="plus-chip-row" id="plus-banner-fx">
                         <button type="button" class="plus-chip active" data-v="">Нет</button>
-                        <button type="button" class="plus-chip" data-v="rays">Лучи</button>
-                        <button type="button" class="plus-chip" data-v="particles">Частицы</button>
-                        <button type="button" class="plus-chip" data-v="silk">Шёлк</button>
+                        <button type="button" class="plus-chip" data-v="glare">Glare</button>
                         <button type="button" class="plus-chip" data-v="aurora">Aurora</button>
-                        <button type="button" class="plus-chip" data-v="embers">Угли</button>
+                        <button type="button" class="plus-chip" data-v="neon">Neon</button>
+                        <button type="button" class="plus-chip" data-v="stardust">Stardust</button>
+                        <button type="button" class="plus-chip" data-v="holo">Holo</button>
+                        <button type="button" class="plus-chip" data-v="rain">Rain</button>
+                        <button type="button" class="plus-chip" data-v="shutter">Shutter</button>
+                        <button type="button" class="plus-chip" data-v="spark">Spark</button>
+                        <button type="button" class="plus-chip" data-v="trail">Trail</button>
+                        <button type="button" class="plus-chip" data-v="radar">Radar</button>
                     </div>
                     <label class="plus-label">Стиль сообщений в чатах</label>
                     <div class="plus-chip-row" id="plus-msg-style">
