@@ -1651,9 +1651,10 @@ document.addEventListener('click', async e => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ theme })
         });
-        const d = await res.json();
-        if (d.error) {
-            showToast('Магазин', d.error, '!');
+        let d = {};
+        try { d = await res.json(); } catch (e) { d = { error: 'Сервер вернул не JSON (' + res.status + ')' }; }
+        if (!res.ok || d.error) {
+            showToast('Магазин', d.error || ('Ошибка ' + res.status), '!');
             btn.disabled = false;
             return;
         }
@@ -1669,7 +1670,7 @@ document.addEventListener('click', async e => {
             _themeDraft = theme;
         }
     } catch (err) {
-        showToast('Ошибка', 'Не удалось купить', '!');
+        showToast('Ошибка', 'Сеть: ' + (err && err.message ? err.message : 'не удалось купить'), '!');
         btn.disabled = false;
     }
 });
@@ -3380,9 +3381,10 @@ document.getElementById('btn-buy-premium-plus')?.addEventListener('click', async
     if (btn) btn.disabled = true;
     try {
         const res = await fetch('/api/shop/premium-plus', { method: 'POST' });
-        const d = await res.json();
-        if (d.error) {
-            showToast('Premium+', d.error, '!');
+        let d = {};
+        try { d = await res.json(); } catch (e) { d = { error: 'Сервер вернул не JSON (' + res.status + ')' }; }
+        if (!res.ok || d.error) {
+            showToast('Premium+', d.error || ('Ошибка ' + res.status), '!');
             if (btn) btn.disabled = false;
             return;
         }
@@ -3390,12 +3392,13 @@ document.getElementById('btn-buy-premium-plus')?.addEventListener('click', async
         meHasPremium = true;
         const bal = document.getElementById('shop-balance');
         if (bal && d.crystals != null) bal.textContent = d.crystals;
-        if (btn) { btn.textContent = 'Активен'; btn.classList.add('owned'); }
+        if (btn) { btn.textContent = 'Активен'; btn.classList.add('owned'); btn.disabled = true; }
         showToast('Premium+', 'Активирован навсегда!', '✦');
         updatePremiumNav();
-        loadProfile();
+        if (typeof loadProfile === 'function') loadProfile();
+        if (typeof loadShop === 'function') loadShop();
     } catch (e) {
-        showToast('Ошибка', 'Не удалось купить', '!');
+        showToast('Ошибка', 'Сеть: ' + (e && e.message ? e.message : 'не удалось купить'), '!');
         if (btn) btn.disabled = false;
     }
 });

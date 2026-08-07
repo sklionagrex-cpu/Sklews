@@ -1124,26 +1124,40 @@ def buy_premium():
 @app.route('/api/shop/premium-plus', methods=['POST'])
 @login_required
 def buy_premium_plus():
-    """Permanent Premium+: all Premium features + profile/channel studio."""
-    user = current_user()
-    if getattr(user, 'is_premium_plus', False):
-        return jsonify({'error': 'Premium+ уже активен', 'is_premium_plus': True}), 400
-    if user.crystals < 10000:
-        return jsonify({'error': 'Нужно 10000 ✦'}), 400
-    user.crystals -= 10000
-    user.is_premium_plus = True
-    user.is_premium = True
-    # generous premium window on top
-    base = user.premium_until if user.premium_until and user.premium_until > datetime.utcnow() else datetime.utcnow()
-    user.premium_until = base + timedelta(days=90)
-    db.session.commit()
-    return jsonify({
-        'status': 'ok',
-        'crystals': user.crystals,
-        'is_premium_plus': True,
-        'is_premium': True,
-        **user_plus_payload(user),
-    })
+    """Permanent Premium+: all Premium features + profile/channel studio.
+    Works even if the user already has regular Premium.
+    """
+    try:
+        try:
+            ensure_db_schema()
+        except Exception:
+            pass
+        user = current_user()
+        # refresh from DB
+        db.session.refresh(user)
+        if bool(getattr(user, 'is_premium_plus', False)):
+            return jsonify({'error': 'Premium+ уже активен', 'is_premium_plus': True, 'crystals': user.crystals}), 400
+        if (user.crystals or 0) < 10000:
+            return jsonify({'error': f'Нужно 10000 ✦ (у вас {user.crystals or 0})', 'crystals': user.crystals or 0}), 400
+        user.crystals = (user.crystals or 0) - 10000
+        user.is_premium_plus = True
+        user.is_premium = True
+        # stack on top of existing premium time if any
+        now = datetime.utcnow()
+        base = user.premium_until if user.premium_until and user.premium_until > now else now
+        user.premium_until = base + timedelta(days=90)
+        db.session.commit()
+        return jsonify({
+            'status': 'ok',
+            'crystals': user.crystals,
+            'is_premium_plus': True,
+            'is_premium': True,
+            **user_plus_payload(user),
+        })
+    except Exception as e:
+        db.session.rollback()
+        print('buy_premium_plus error:', e, flush=True)
+        return jsonify({'error': 'Ошибка сервера: ' + str(e)[:120]}), 500
 
 @app.route('/api/plus/profile', methods=['POST'])
 @login_required
@@ -1218,23 +1232,33 @@ EXCLUSIVE_THEMES = {
 @app.route('/api/shop/exclusive-theme', methods=['POST'])
 @login_required
 def buy_exclusive_theme():
-    user = current_user()
-    data = request.json or {}
-    key = (data.get('theme') or '').strip()
-    info = EXCLUSIVE_THEMES.get(key)
-    if not info:
-        return jsonify({'error': 'Неизвестная тема'}), 400
-    owned = [t for t in (user.owned_themes or '').split(',') if t]
-    if key in owned:
-        return jsonify({'error': 'Уже куплено', 'owned_themes': owned}), 400
-    price = info['price']
-    if user.crystals < price:
-        return jsonify({'error': f'Нужно {price} ✦'}), 400
-    user.crystals -= price
-    owned.append(key)
-    user.owned_themes = ','.join(owned)
-    db.session.commit()
-    return jsonify({'status': 'ok', 'crystals': user.crystals, 'owned_themes': owned, 'theme': key})
+    try:
+        try:
+            ensure_db_schema()
+        except Exception:
+            pass
+        user = current_user()
+        data = request.json or {}
+        key = (data.get('theme') or '').strip()
+        info = EXCLUSIVE_THEMES.get(key)
+        if not info:
+            return jsonify({'error': 'Неизвестная тема'}), 400
+        owned_raw = getattr(user, 'owned_themes', None) or ''
+        owned = [t for t in owned_raw.split(',') if t]
+        if key in owned:
+            return jsonify({'error': 'Уже куплено', 'owned_themes': owned}), 400
+        price = info['price']
+        if (user.crystals or 0) < price:
+            return jsonify({'error': f'Нужно {price} ✦ (у вас {user.crystals or 0})'}), 400
+        user.crystals = (user.crystals or 0) - price
+        owned.append(key)
+        user.owned_themes = ','.join(owned)
+        db.session.commit()
+        return jsonify({'status': 'ok', 'crystals': user.crystals, 'owned_themes': owned, 'theme': key})
+    except Exception as e:
+        db.session.rollback()
+        print('buy_exclusive_theme error:', e, flush=True)
+        return jsonify({'error': 'Ошибка сервера: ' + str(e)[:120]}), 500
 
 @app.route('/api/shop/exclusive-themes')
 @login_required
@@ -2130,6 +2154,97 @@ def analytics_overview():
             'created_at': ch.created_at.strftime('%d.%m.%Y')
         })
     return jsonify(result)
+
+
+def ensure_db_schema():
+    """Create tables and add missing columns (safe to call multiple times)."""
+    from sqlalchemy import text, inspect
+    db.create_all()
+    dialect = db.engine.dialect.name
+    user_table = '"user"' if dialect == 'postgresql' else 'user'
+
+    def _existing_columns(table_name):
+        try:
+            insp = inspect(db.engine)
+            return {c['name'] for c in insp.get_columns(table_name.strip('"'))}
+        except Exception as e:
+            print('inspect error:', e, flush=True)
+            return set()
+
+    def _add_col(table_sql_name, table_raw, col, typ):
+        existing = _existing_columns(table_raw)
+        if col in existing:
+            return
+        try:
+            sql = f'ALTER TABLE {table_sql_name} ADD COLUMN {col} {typ}'
+            print('Migrating:', sql, flush=True)
+            db.session.execute(text(sql))
+            db.session.commit()
+            print(f'Added {table_raw}.{col}', flush=True)
+        except Exception as e:
+            db.session.rollback()
+            print(f'ALTER {table_raw}.{col} failed:', e, flush=True)
+
+    if dialect == 'postgresql':
+        user_cols = [
+            ('banner', "VARCHAR(256) DEFAULT ''"),
+            ('last_seen', 'TIMESTAMP'),
+            ('is_admin', 'BOOLEAN DEFAULT FALSE'),
+            ('muted_until', 'TIMESTAMP'),
+            ('mines_day', 'VARCHAR(10)'),
+            ('mines_left', 'INTEGER'),
+            ('owned_themes', "VARCHAR(500) DEFAULT ''"),
+            ('is_premium_plus', 'BOOLEAN DEFAULT FALSE'),
+            ('plus_name_fx', "VARCHAR(32) DEFAULT ''"),
+            ('plus_avatar_frame', "VARCHAR(32) DEFAULT ''"),
+            ('plus_aura', "VARCHAR(20) DEFAULT ''"),
+            ('plus_badge', "VARCHAR(24) DEFAULT ''"),
+            ('plus_banner_fx', "VARCHAR(32) DEFAULT ''"),
+        ]
+        comment_cols = [
+            ('media_url', "VARCHAR(500) DEFAULT ''"),
+            ('media_type', "VARCHAR(20) DEFAULT ''"),
+        ]
+    else:
+        user_cols = [
+            ('banner', "VARCHAR(256) DEFAULT ''"),
+            ('last_seen', 'DATETIME'),
+            ('is_admin', 'BOOLEAN DEFAULT 0'),
+            ('muted_until', 'DATETIME'),
+            ('mines_day', 'VARCHAR(10)'),
+            ('mines_left', 'INTEGER'),
+            ('owned_themes', "VARCHAR(500) DEFAULT ''"),
+            ('is_premium_plus', 'BOOLEAN DEFAULT 0'),
+            ('plus_name_fx', "VARCHAR(32) DEFAULT ''"),
+            ('plus_avatar_frame', "VARCHAR(32) DEFAULT ''"),
+            ('plus_aura', "VARCHAR(20) DEFAULT ''"),
+            ('plus_badge', "VARCHAR(24) DEFAULT ''"),
+            ('plus_banner_fx', "VARCHAR(32) DEFAULT ''"),
+        ]
+        comment_cols = [
+            ('media_url', "VARCHAR(500) DEFAULT ''"),
+            ('media_type', "VARCHAR(20) DEFAULT ''"),
+        ]
+
+    for col, typ in user_cols:
+        _add_col(user_table, 'user', col, typ)
+    for col, typ in comment_cols:
+        _add_col('comment', 'comment', col, typ)
+    for col, typ in [
+        ('plus_frame', "VARCHAR(32) DEFAULT ''"),
+        ('plus_header_fx', "VARCHAR(32) DEFAULT ''"),
+        ('plus_badge', "VARCHAR(24) DEFAULT ''"),
+        ('plus_glow', "VARCHAR(20) DEFAULT ''"),
+    ]:
+        _add_col('channel', 'channel', col, typ)
+
+
+# Run schema ensure on import so columns exist even before first request
+try:
+    with app.app_context():
+        ensure_db_schema()
+except Exception as e:
+    print('ensure_db_schema on import failed:', e, flush=True)
 
 if __name__ == '__main__':
     import sys
