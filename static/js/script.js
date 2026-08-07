@@ -2622,8 +2622,16 @@ document.getElementById('btn-pf-post')?.addEventListener('click', async () => {
 });
 
 
-// ===== Minesweeper (clean, delegated events) =====
-const MS = { size: 16, bombs: 40, token: null, alive: false, flags: 0, grid: null };
+// ===== Minesweeper Premium UI =====
+const MS = {
+    size: 12,
+    bombs: 25,
+    token: null,
+    alive: false,
+    flags: 0,
+    grid: null,
+    mode: 'open' // 'open' | 'flag'
+};
 
 function msNewGrid() {
     const n = MS.size, g = [];
@@ -2664,18 +2672,25 @@ function msPaint() {
             btn.dataset.c = c;
             if (cell.o) {
                 btn.classList.add('open');
-                if (cell.m) { btn.classList.add('boom'); btn.textContent = '💣'; }
-                else if (cell.a) { btn.textContent = String(cell.a); btn.dataset.n = cell.a; }
+                if (cell.m) {
+                    btn.classList.add('boom');
+                    btn.innerHTML = '<i class="fa-solid fa-bomb"></i>';
+                } else if (cell.a) {
+                    btn.textContent = String(cell.a);
+                    btn.dataset.n = cell.a;
+                }
             } else if (cell.f) {
                 btn.classList.add('flag');
-                btn.textContent = '🚩';
+                btn.innerHTML = '<i class="fa-solid fa-flag"></i>';
             }
             frag.appendChild(btn);
         }
     }
     board.appendChild(frag);
     const fl = document.getElementById('mines-flags-label');
-    if (fl) fl.textContent = '🚩 ' + MS.flags;
+    if (fl) fl.textContent = String(MS.flags);
+    const bm = document.getElementById('mines-bombs');
+    if (bm) bm.textContent = String(MS.bombs);
 }
 
 function msFlood(r, c) {
@@ -2748,6 +2763,12 @@ function msFlag(r, c) {
     msPaint();
 }
 
+function msSetMode(mode) {
+    MS.mode = mode;
+    document.getElementById('btn-mines-mode-open')?.classList.toggle('active', mode === 'open');
+    document.getElementById('btn-mines-mode-flag')?.classList.toggle('active', mode === 'flag');
+}
+
 async function msStart() {
     const st = await fetch('/api/mines/status').then(r => r.json()).catch(() => ({ left: 0, max: 10 }));
     const lab = document.getElementById('mines-left-label');
@@ -2762,6 +2783,8 @@ async function msStart() {
     MS.grid = msNewGrid();
     MS.alive = true;
     MS.flags = 0;
+    MS.mode = 'open';
+    msSetMode('open');
     if (lab) lab.textContent = d.left + '/10';
     msPaint();
 }
@@ -2773,9 +2796,11 @@ async function openMinesModal() {
     const st = await fetch('/api/mines/status').then(r => r.json()).catch(() => ({ left: '—', max: 10 }));
     const lab = document.getElementById('mines-left-label');
     if (lab) lab.textContent = (st.left ?? '—') + '/' + (st.max || 10);
+    const bm = document.getElementById('mines-bombs');
+    if (bm) bm.textContent = String(MS.bombs);
     if (!MS.alive) {
         const board = document.getElementById('mines-board');
-        if (board) board.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:28px;color:var(--muted);font-size:13px">Нажми «Заново»</div>';
+        if (board) board.innerHTML = '<div class="mines-empty"><i class="fa-solid fa-bomb"></i><span>Нажми «Новая» чтобы начать</span></div>';
     }
 }
 
@@ -2786,39 +2811,38 @@ async function openMinesModal() {
         board.dataset.bound = '1';
         board.addEventListener('click', e => {
             const btn = e.target.closest('.mines-cell');
-            if (!btn) return;
-            msOpen(+btn.dataset.r, +btn.dataset.c);
+            if (!btn || !MS.alive) return;
+            const r = +btn.dataset.r, c = +btn.dataset.c;
+            if (MS.mode === 'flag') msFlag(r, c);
+            else msOpen(r, c);
         });
         board.addEventListener('contextmenu', e => {
             e.preventDefault();
             const btn = e.target.closest('.mines-cell');
-            if (!btn) return;
+            if (!btn || !MS.alive) return;
             msFlag(+btn.dataset.r, +btn.dataset.c);
         });
-        let holdT = null, holdBtn = null;
+        // long-press still works as quick flag
+        let holdT = null;
         board.addEventListener('touchstart', e => {
             const btn = e.target.closest('.mines-cell');
-            if (!btn) return;
-            holdBtn = btn;
+            if (!btn || !MS.alive) return;
             holdT = setTimeout(() => {
                 msFlag(+btn.dataset.r, +btn.dataset.c);
                 holdT = null;
-                holdBtn = null;
-            }, 420);
+            }, 450);
         }, { passive: true });
-        board.addEventListener('touchend', () => {
-            if (holdT) clearTimeout(holdT);
-            holdT = null;
-        });
-        board.addEventListener('touchmove', () => {
-            if (holdT) clearTimeout(holdT);
-            holdT = null;
-        }, { passive: true });
+        board.addEventListener('touchend', () => { if (holdT) clearTimeout(holdT); holdT = null; });
+        board.addEventListener('touchmove', () => { if (holdT) clearTimeout(holdT); holdT = null; }, { passive: true });
     }
+
     document.getElementById('btn-mines-close')?.addEventListener('click', () => {
         document.getElementById('modal-mines')?.classList.add('hidden');
     });
     document.getElementById('btn-mines-new')?.addEventListener('click', () => msStart());
+
+    document.getElementById('btn-mines-mode-open')?.addEventListener('click', () => msSetMode('open'));
+    document.getElementById('btn-mines-mode-flag')?.addEventListener('click', () => msSetMode('flag'));
 
     // 3 taps on home logo
     let taps = 0, tmr = null;
@@ -2835,3 +2859,4 @@ async function openMinesModal() {
         }
     });
 })();
+

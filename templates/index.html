@@ -320,17 +320,37 @@ window.SKLEWS_BUILD = '20260807m';
 
                 <div id="modal-mines" class="modal hidden">
             <div class="modal-content mines-sheet">
-                <div class="mines-toolbar">
-                    <button type="button" id="btn-mines-close" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
-                    <div class="mines-stats">
-                        <span id="mines-bombs">💣 40</span>
-                        <span id="mines-left-label">10/10</span>
-                        <span id="mines-flags-label">🚩 0</span>
+                <div class="mines-header">
+                    <button type="button" id="btn-mines-close" class="mines-btn-icon" aria-label="Закрыть"><i class="fa-solid fa-xmark"></i></button>
+                    <div class="mines-title"><i class="fa-solid fa-bomb"></i> Сапёр</div>
+                    <button type="button" id="btn-mines-new" class="mines-btn-new"><i class="fa-solid fa-rotate-right"></i> Новая</button>
+                </div>
+                <div class="mines-stats-bar">
+                    <div class="mines-stat" title="Мины">
+                        <i class="fa-solid fa-land-mine-on"></i>
+                        <span id="mines-bombs">25</span>
                     </div>
-                    <button type="button" id="btn-mines-new" class="btn btn-primary btn-sm">Заново</button>
+                    <div class="mines-stat" title="Игры сегодня">
+                        <i class="fa-solid fa-gamepad"></i>
+                        <span id="mines-left-label">10/10</span>
+                    </div>
+                    <div class="mines-stat" title="Флаги">
+                        <i class="fa-solid fa-flag"></i>
+                        <span id="mines-flags-label">0</span>
+                    </div>
+                </div>
+                <div class="mines-mode-toggle" role="group" aria-label="Режим">
+                    <button type="button" id="btn-mines-mode-open" class="mines-mode active" data-mode="open">
+                        <i class="fa-solid fa-hand-pointer"></i>
+                        <span>Открыть</span>
+                    </button>
+                    <button type="button" id="btn-mines-mode-flag" class="mines-mode" data-mode="flag">
+                        <i class="fa-solid fa-flag"></i>
+                        <span>Флаг</span>
+                    </button>
                 </div>
                 <div id="mines-board" class="mines-board" role="grid"></div>
-                <p class="mines-hint">16×16 · удержание = флаг · победа +10 ✦ · 10 игр/день</p>
+                <p class="mines-hint">12×12 · 25 мин · победа +10 ✦ · 10 игр/день</p>
             </div>
         </div>
         <div id="modal-theme" class="modal hidden">

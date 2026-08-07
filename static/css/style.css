@@ -2396,3 +2396,229 @@ body:has(#screen-chat.active) .bottom-nav {
 #screen-chat.screen.active { display: flex !important; flex-direction: column !important; }
 .modal.hidden { display: none !important; }
 .modal:not(.hidden) { display: flex !important; }
+
+/* ===== Minesweeper Premium UI (2026 redesign) ===== */
+#modal-mines.modal:not(.hidden) {
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+#modal-mines .mines-sheet {
+    width: 100%;
+    max-width: min(100vw, 480px);
+    margin: 0;
+    border-radius: 22px 22px 0 0;
+    padding: 16px 14px 20px !important;
+    background: linear-gradient(180deg, #1a1625 0%, #12101a 100%);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-bottom: none;
+    box-shadow: 0 -12px 40px rgba(0,0,0,0.55);
+    max-height: 96vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.mines-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    gap: 10px;
+}
+.mines-title {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #e9e4ff;
+}
+.mines-title i { color: #a78bfa; font-size: 15px; }
+.mines-btn-icon {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    border: none;
+    background: rgba(255,255,255,0.06);
+    color: #c4b5fd;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+}
+.mines-btn-icon:active { transform: scale(0.92); background: rgba(255,255,255,0.12); }
+.mines-btn-new {
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 12px;
+    border: none;
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 6px;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+    transition: transform 0.1s, box-shadow 0.15s;
+}
+.mines-btn-new:active { transform: scale(0.96); }
+.mines-stats-bar {
+    display: flex;
+    justify-content: space-around;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 10px 6px;
+    background: rgba(0,0,0,0.28);
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+.mines-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #e2e8f0;
+}
+.mines-stat i {
+    font-size: 13px;
+    opacity: 0.85;
+}
+.mines-stat:nth-child(1) i { color: #f87171; }
+.mines-stat:nth-child(2) i { color: #a78bfa; }
+.mines-stat:nth-child(3) i { color: #fbbf24; }
+
+.mines-mode-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.mines-mode {
+    flex: 1;
+    height: 46px;
+    border-radius: 14px;
+    border: 1.5px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    color: #94a3b8;
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+.mines-mode i { font-size: 15px; }
+.mines-mode.active {
+    background: linear-gradient(135deg, rgba(139,92,246,0.35), rgba(109,40,217,0.25));
+    border-color: rgba(167,139,250,0.55);
+    color: #f5f3ff;
+    box-shadow: 0 0 0 1px rgba(139,92,246,0.2), 0 4px 16px rgba(139,92,246,0.2);
+}
+.mines-mode:active { transform: scale(0.97); }
+
+#modal-mines .mines-board {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 4px;
+    width: 100%;
+    aspect-ratio: 1;
+    max-height: min(78vw, 460px);
+    margin: 0 auto;
+    background: #0b0912;
+    padding: 6px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.06);
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    box-shadow: inset 0 2px 12px rgba(0,0,0,0.45);
+}
+#modal-mines .mines-cell {
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(160deg, #2f2940 0%, #231e33 100%);
+    color: #e2e8f0;
+    font-size: clamp(13px, 3.6vw, 18px);
+    font-weight: 800;
+    padding: 0;
+    aspect-ratio: 1;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 0 #1a1625, inset 0 1px 0 rgba(255,255,255,0.08);
+    transition: transform 0.08s, background 0.12s, box-shadow 0.12s;
+    -webkit-tap-highlight-color: transparent;
+}
+#modal-mines .mines-cell:active:not(.open) {
+    transform: scale(0.92);
+    box-shadow: 0 0 0 #1a1625;
+}
+#modal-mines .mines-cell.open {
+    background: #161222;
+    box-shadow: none;
+    font-weight: 700;
+}
+#modal-mines .mines-cell.flag {
+    background: linear-gradient(160deg, #3d3420 0%, #2a2418 100%);
+    box-shadow: 0 2px 0 #1a1625, inset 0 0 0 1.5px rgba(251,191,36,0.35);
+}
+#modal-mines .mines-cell.flag i { color: #fbbf24; font-size: 0.9em; }
+#modal-mines .mines-cell.boom {
+    background: linear-gradient(160deg, #7f1d1d 0%, #450a0a 100%);
+    box-shadow: 0 0 12px rgba(239,68,68,0.45);
+}
+#modal-mines .mines-cell.boom i { color: #fecaca; animation: msBoom 0.35s ease; }
+@keyframes msBoom {
+    0% { transform: scale(0.4); opacity: 0; }
+    60% { transform: scale(1.25); }
+    100% { transform: scale(1); opacity: 1; }
+}
+#modal-mines .mines-cell[data-n="1"] { color: #60a5fa; }
+#modal-mines .mines-cell[data-n="2"] { color: #34d399; }
+#modal-mines .mines-cell[data-n="3"] { color: #f87171; }
+#modal-mines .mines-cell[data-n="4"] { color: #a78bfa; }
+#modal-mines .mines-cell[data-n="5"] { color: #fbbf24; }
+#modal-mines .mines-cell[data-n="6"] { color: #22d3ee; }
+#modal-mines .mines-cell[data-n="7"] { color: #e2e8f0; }
+#modal-mines .mines-cell[data-n="8"] { color: #94a3b8; }
+
+#modal-mines .mines-hint {
+    text-align: center;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 12px;
+    margin-bottom: 0;
+    letter-spacing: 0.01em;
+}
+#modal-mines .mines-board .mines-empty {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #64748b;
+    font-size: 14px;
+    padding: 32px 16px;
+}
+#modal-mines .mines-board .mines-empty i {
+    font-size: 28px;
+    color: #a78bfa;
+    opacity: 0.7;
+}
+
+@media (min-width: 480px) {
+    #modal-mines.modal:not(.hidden) { align-items: center; }
+    #modal-mines .mines-sheet {
+        border-radius: 22px;
+        border-bottom: 1px solid rgba(139, 92, 246, 0.25);
+        max-height: 90vh;
+    }
+}
