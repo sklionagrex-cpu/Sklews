@@ -3495,3 +3495,144 @@ body.xtheme-cashmere_haze .nav-btn.active {
 }
 .channel-header.fx-aurora { box-shadow: inset 0 -30px 40px rgba(34,211,238,0.08); }
 .channel-header.fx-ember { box-shadow: inset 0 -30px 40px rgba(232,165,75,0.1); }
+
+/* Premium+ expanded cosmetics */
+.nick-fx-liquid {
+    background: linear-gradient(90deg, #67e8f9, #a78bfa, #f0abfc, #67e8f9);
+    background-size: 300% auto;
+    -webkit-background-clip: text; background-clip: text; color: transparent !important;
+    animation: nickGold 5s linear infinite;
+}
+.nick-fx-fire {
+    background: linear-gradient(90deg, #fbbf24, #f97316, #ef4444, #fbbf24);
+    background-size: 200% auto;
+    -webkit-background-clip: text; background-clip: text; color: transparent !important;
+    animation: nickGold 2.5s linear infinite;
+    filter: drop-shadow(0 0 6px rgba(249,115,22,0.45));
+}
+.nick-fx-matrix {
+    color: #4ade80 !important;
+    text-shadow: 0 0 8px rgba(74,222,128,0.7), 0 0 16px rgba(34,197,94,0.4);
+    letter-spacing: 0.04em;
+}
+
+.avatar-frame.frame-prism::before,
+.plus-prev-avatar-wrap.frame-prism::before,
+.avatar-hero-wrap.frame-prism::before {
+    content: ''; position: absolute; inset: -4px; border-radius: 50%;
+    background: conic-gradient(from 0deg, #f43f5e, #fbbf24, #22d3ee, #a78bfa, #f43f5e);
+    animation: spinSlow 3s linear infinite; z-index: 0;
+}
+.avatar-frame.frame-royal::before,
+.plus-prev-avatar-wrap.frame-royal::before,
+.avatar-hero-wrap.frame-royal::before {
+    content: ''; position: absolute; inset: -4px; border-radius: 50%;
+    background: conic-gradient(from 0deg, #fbbf24, #fef3c7, #b45309, #fbbf24);
+    box-shadow: 0 0 16px rgba(251,191,36,0.45); z-index: 0;
+    animation: spinSlow 8s linear infinite;
+}
+.avatar-hero-wrap {
+    width: 92px; height: 92px; margin: -46px auto 10px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; position: relative; z-index: 3;
+}
+.avatar-hero-wrap .avatar-hero,
+.avatar-hero-wrap #profile-avatar,
+.avatar-hero-wrap #user-avatar {
+    width: 80px !important; height: 80px !important;
+    border-radius: 50%; position: relative; z-index: 1;
+}
+
+.banner-fx-aurora::after,
+.plus-prev-banner.fx-aurora .plus-prev-banner-fx {
+    background:
+        radial-gradient(ellipse at 20% 80%, rgba(34,211,238,0.35) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 30%, rgba(167,139,250,0.35) 0%, transparent 45%);
+    animation: particlesFloat 5s ease-in-out infinite alternate;
+}
+.banner-fx-embers::after,
+.plus-prev-banner.fx-embers .plus-prev-banner-fx {
+    background-image:
+        radial-gradient(2px 2px at 15% 70%, rgba(251,191,36,0.7), transparent),
+        radial-gradient(2px 2px at 45% 40%, rgba(249,115,22,0.55), transparent),
+        radial-gradient(1.5px 1.5px at 75% 60%, rgba(239,68,68,0.5), transparent);
+    animation: particlesFloat 4s ease-in-out infinite alternate;
+}
+
+.profile-hero.plus-card-glass,
+.plus-preview.plus-card-glass {
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02)) !important;
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(12px);
+}
+.profile-hero.plus-card-velvet,
+.plus-preview.plus-card-velvet {
+    background: linear-gradient(180deg, #1a1020, #120c18) !important;
+    box-shadow: inset 0 0 40px rgba(139,92,246,0.15);
+}
+.profile-hero.plus-card-metal,
+.plus-preview.plus-card-metal {
+    background: linear-gradient(180deg, #1c1c22, #121216) !important;
+    border-color: rgba(200,200,220,0.2) !important;
+}
+.profile-hero.plus-card-royal,
+.plus-preview.plus-card-royal {
+    background: linear-gradient(180deg, #1a1408, #0e0c06) !important;
+    border: 1px solid rgba(251,191,36,0.3) !important;
+    box-shadow: 0 0 30px rgba(251,191,36,0.12);
+}
+.profile-hero.has-aura {
+    box-shadow: 0 0 48px var(--plus-aura, transparent), 0 0 80px var(--plus-aura, transparent) !important;
+}
+
+/* Message styles for Premium+ */
+.message.mine.plus-msg-glow .msg-bubble {
+    box-shadow: 0 0 16px rgba(167,139,250,0.35);
+}
+.message.mine.plus-msg-gradient .msg-bubble {
+    background: linear-gradient(135deg, rgba(139,92,246,0.55), rgba(236,72,153,0.35)) !important;
+}
+.message.mine.plus-msg-neon .msg-bubble {
+    border: 1px solid rgba(34,211,238,0.45);
+    box-shadow: 0 0 12px rgba(34,211,238,0.35), inset 0 0 12px rgba(34,211,238,0.08);
+}
+.message.mine.plus-msg-glass .msg-bubble {
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.15);
+    backdrop-filter: blur(8px);
+}
+
+.channel-card.plus-frame-royal {
+    border-color: rgba(251,191,36,0.5) !important;
+    box-shadow: 0 0 0 1px rgba(251,191,36,0.2), 0 8px 28px rgba(251,191,36,0.12);
+}
+.channel-card.plus-frame-prism {
+    border-image: linear-gradient(135deg, #f43f5e, #22d3ee, #a78bfa) 1;
+    border-width: 1.5px;
+    border-style: solid;
+}
+.channel-card.plus-anim-pulse { animation: plusPulse 2.8s ease-in-out infinite; }
+.channel-card.plus-anim-float { animation: plusFloat 3.5s ease-in-out infinite; }
+.channel-card.plus-anim-border { animation: plusBorder 3s linear infinite; }
+@keyframes plusPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.015); }
+}
+@keyframes plusFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
+@keyframes plusBorder {
+    0% { box-shadow: 0 0 0 1px rgba(167,139,250,0.3); }
+    50% { box-shadow: 0 0 0 2px rgba(251,191,36,0.45); }
+    100% { box-shadow: 0 0 0 1px rgba(34,211,238,0.3); }
+}
+.channel-header.fx-wave { position: relative; overflow: hidden; }
+.channel-header.fx-wave::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(100deg, transparent 30%, rgba(125,211,252,0.12) 50%, transparent 70%);
+    animation: xtShine 2.8s ease-in-out infinite;
+}
+.profile-hero { overflow: visible !important; }
+.profile-banner { overflow: hidden; position: relative; }
+.profile-banner::after { pointer-events: none; }

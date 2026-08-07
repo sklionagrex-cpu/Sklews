@@ -29,17 +29,25 @@ function setMePlusFromProfile(p) {
         plus_aura: p.plus_aura || '',
         plus_badge: p.plus_badge || '',
         plus_banner_fx: p.plus_banner_fx || '',
+        plus_msg_style: p.plus_msg_style || '',
+        plus_card_style: p.plus_card_style || '',
+        plus_accent: p.plus_accent || '',
     };
     if (Array.isArray(p.owned_themes)) meOwnedThemes = p.owned_themes;
 }
 
-function applyPlusToProfileHero(p) {
-    const hero = document.getElementById('profile-hero');
-    const av = document.getElementById('profile-avatar');
-    const banner = document.getElementById('profile-banner');
-    const pun = document.getElementById('profile-username');
+function applyPlusToProfileHero(p, opts) {
+    opts = opts || {};
+    const heroId = opts.heroId || 'profile-hero';
+    const avId = opts.avId || 'profile-avatar';
+    const bannerId = opts.bannerId || 'profile-banner';
+    const nameId = opts.nameId || 'profile-username';
+    const badgeId = opts.badgeId || 'profile-plus-badge';
+    const hero = document.getElementById(heroId);
+    const av = document.getElementById(avId);
+    const banner = document.getElementById(bannerId);
+    const pun = document.getElementById(nameId);
     if (!p) return;
-    // wrap avatar
     if (av && av.parentElement) {
         let wrap = av.parentElement.classList.contains('avatar-hero-wrap') ? av.parentElement : null;
         if (!wrap) {
@@ -51,25 +59,28 @@ function applyPlusToProfileHero(p) {
         wrap.className = 'avatar-hero-wrap' + (p.plus_avatar_frame ? ' frame-' + p.plus_avatar_frame : '');
     }
     if (hero) {
+        hero.classList.remove('plus-card-glass', 'plus-card-velvet', 'plus-card-metal', 'plus-card-royal', 'has-aura');
+        if (p.plus_card_style) hero.classList.add('plus-card-' + p.plus_card_style);
         if (p.plus_aura) {
             hero.classList.add('has-aura');
-            hero.style.setProperty('--plus-aura', p.plus_aura + '66');
+            hero.style.setProperty('--plus-aura', p.plus_aura + '88');
         } else {
-            hero.classList.remove('has-aura');
             hero.style.removeProperty('--plus-aura');
         }
+        if (p.plus_accent) hero.style.setProperty('--plus-accent', p.plus_accent);
+        else hero.style.removeProperty('--plus-accent');
     }
     if (banner) {
-        banner.classList.remove('banner-fx-rays', 'banner-fx-particles', 'banner-fx-silk');
+        banner.classList.remove('banner-fx-rays', 'banner-fx-particles', 'banner-fx-silk', 'banner-fx-aurora', 'banner-fx-embers');
         if (p.plus_banner_fx) banner.classList.add('banner-fx-' + p.plus_banner_fx);
     }
     if (pun) {
         pun.innerHTML = premiumNickHtml(p.username, p.is_premium || p.is_premium_plus, p.plus_name_fx);
-        let badge = document.getElementById('profile-plus-badge');
+        let badge = document.getElementById(badgeId);
         if (p.plus_badge) {
             if (!badge) {
                 badge = document.createElement('div');
-                badge.id = 'profile-plus-badge';
+                badge.id = badgeId;
                 badge.className = 'profile-plus-badge';
                 pun.after(badge);
             }
@@ -464,7 +475,7 @@ async function loadChannels() {
         }
         channels.forEach(ch => {
             const card = document.createElement('div');
-            card.className = 'channel-card' + (ch.is_boosted ? ' boosted boosted-' + (ch.boost_level || 'bronze') : '') + (ch.plus_frame ? ' plus-frame-' + ch.plus_frame : '');
+            card.className = 'channel-card' + (ch.is_boosted ? ' boosted boosted-' + (ch.boost_level || 'bronze') : '') + (ch.plus_frame ? ' plus-frame-' + ch.plus_frame : '') + (ch.plus_anim ? ' plus-anim-' + ch.plus_anim : '');
             card.dataset.channelId = ch.id;
             if (adminSelectMode && adminSelectedChannels.has(ch.id)) card.classList.add('admin-selected');
             if (ch.plus_glow) card.style.boxShadow = '0 0 22px ' + ch.plus_glow + '44';
@@ -1505,7 +1516,9 @@ async function openUserProfile(userId) {
     const res = await fetch('/api/user/' + userId);
     const u = await res.json();
     window._viewUserId = u.id;
-    document.getElementById('user-username').innerHTML = premiumNickHtml(u.username, u.is_premium || u.is_premium_plus, u.plus_name_fx);
+    applyPlusToProfileHero(u, { heroId: 'user-hero', avId: 'user-avatar', bannerId: 'user-banner', nameId: 'user-username', badgeId: 'user-plus-badge' });
+    // legacy nick line kept via apply
+    if (!document.getElementById('user-username').innerHTML) document.getElementById('user-username').innerHTML = premiumNickHtml(u.username, u.is_premium || u.is_premium_plus, u.plus_name_fx);
     // plus badge on user profile
     let ub = document.getElementById('user-plus-badge');
     const un = document.getElementById('user-username');
@@ -2137,7 +2150,7 @@ async function loadMessages(userId) {
     box.innerHTML = '';
     messages.forEach(m => {
         const div = document.createElement('div');
-        div.className = 'message ' + (m.is_mine ? 'mine' : 'theirs') + (m.is_super ? ' super' : '');
+        div.className = 'message ' + (m.is_mine ? 'mine' : 'theirs') + (m.is_super ? ' super' : '') + (m.is_mine && mePlus.plus_msg_style ? ' plus-msg-' + mePlus.plus_msg_style : '');
         div.dataset.msgId = m.id;
         div.innerHTML = '<div class="msg-bubble">' + formatMessage(m.content, m.is_super) +
             '<div class="msg-time">' + (m.created_at || '') + (m.is_mine && m.is_read ? ' ✓✓' : (m.is_mine ? ' ✓' : '')) + '</div></div>';
@@ -2493,7 +2506,7 @@ socket.on('new_message', data => {
     if (inChat && (data.sender_id === currentChatUserId || data.is_mine)) {
         const box = document.getElementById('messages');
         const div = document.createElement('div');
-        div.className = 'message ' + (data.is_mine ? 'mine' : 'theirs') + (data.is_super ? ' super' : '');
+        div.className = 'message ' + (data.is_mine ? 'mine' : 'theirs') + (data.is_super ? ' super' : '') + (data.is_mine && mePlus.plus_msg_style ? ' plus-msg-' + mePlus.plus_msg_style : '');
         div.innerHTML = '<div class="msg-bubble">' + formatMessage(data.content, data.is_super) +
             '<div class="msg-time">' + (data.created_at || '') + '</div></div>';
         if (data.id) {
@@ -3217,48 +3230,74 @@ socket.on('premium_chat_joined', () => { premiumChatJoined = true; });
 function plusSelectChip(rowId, value) {
     const row = document.getElementById(rowId);
     if (!row) return;
-    row.querySelectorAll('.plus-chip').forEach(c => c.classList.toggle('active', c.dataset.v === value));
+    const v = value == null ? '' : String(value);
+    row.querySelectorAll('.plus-chip').forEach(c => {
+        c.classList.toggle('active', (c.dataset.v || '') === v);
+    });
 }
 function plusSelectedChip(rowId) {
-    return document.getElementById(rowId)?.querySelector('.plus-chip.active')?.dataset.v || '';
+    const row = document.getElementById(rowId);
+    if (!row) return '';
+    const active = row.querySelector('.plus-chip.active');
+    return active ? (active.dataset.v || '') : '';
 }
 function updatePlusPreview() {
     const nameFx = plusSelectedChip('plus-name-fx');
     const frame = plusSelectedChip('plus-avatar-frame');
     const bannerFx = plusSelectedChip('plus-banner-fx');
     const badge = (document.getElementById('plus-badge')?.value || '').trim();
-    const aura = document.getElementById('plus-aura')?.value || '';
+    const auraEl = document.getElementById('plus-aura');
+    const aura = (auraEl && auraEl.dataset.cleared !== '1') ? (auraEl.value || '') : '';
     const nameEl = document.getElementById('plus-prev-name');
     const wrap = document.getElementById('plus-prev-avatar-wrap');
     const ban = document.getElementById('plus-prev-banner');
     const badgeEl = document.getElementById('plus-prev-badge');
+    const prev = document.getElementById('plus-preview-profile');
     if (nameEl) nameEl.innerHTML = premiumNickHtml(window.__meUsername || 'you', true, nameFx);
     if (wrap) wrap.className = 'plus-prev-avatar-wrap' + (frame ? ' frame-' + frame : '');
-    if (ban) {
-        ban.className = 'plus-prev-banner' + (bannerFx ? ' fx-' + bannerFx : '');
-    }
+    if (ban) ban.className = 'plus-prev-banner' + (bannerFx ? ' fx-' + bannerFx : '');
     if (badgeEl) badgeEl.textContent = badge;
-    const prev = document.getElementById('plus-preview-profile');
-    if (prev && aura) prev.style.boxShadow = '0 0 28px ' + aura + '55';
-    else if (prev) prev.style.boxShadow = '';
+    if (prev) {
+        prev.style.boxShadow = aura ? ('0 0 28px ' + aura + '66') : '';
+        const card = plusSelectedChip('plus-card-style');
+        prev.className = 'plus-preview' + (card ? ' plus-card-' + card : '');
+    }
 }
 async function openPlusStudio() {
+    // always refresh from server
+    try {
+        const res = await fetch('/api/profile');
+        if (res.ok) {
+            const p = await res.json();
+            setMePlusFromProfile(p);
+            if (p.username) window.__meUsername = p.username;
+        }
+    } catch (e) {}
     if (!meHasPremiumPlus) {
         showToast('Premium+', 'Купи в магазине за 10000 ✦', '✦');
         return;
     }
     document.getElementById('modal-settings')?.classList.add('hidden');
     const m = document.getElementById('modal-plus-studio');
-    if (!m) return;
+    if (!m) return showToast('Ошибка', 'Студия не найдена', '!');
     plusSelectChip('plus-name-fx', mePlus.plus_name_fx || '');
     plusSelectChip('plus-avatar-frame', mePlus.plus_avatar_frame || '');
     plusSelectChip('plus-banner-fx', mePlus.plus_banner_fx || '');
+    plusSelectChip('plus-msg-style', mePlus.plus_msg_style || '');
+    plusSelectChip('plus-card-style', mePlus.plus_card_style || '');
     const badge = document.getElementById('plus-badge');
     if (badge) badge.value = mePlus.plus_badge || '';
     const aura = document.getElementById('plus-aura');
-    if (aura) aura.value = mePlus.plus_aura || '#fbbf24';
+    if (aura) {
+        aura.dataset.cleared = mePlus.plus_aura ? '' : '1';
+        aura.value = mePlus.plus_aura || '#fbbf24';
+    }
+    const accent = document.getElementById('plus-accent');
+    if (accent) {
+        accent.dataset.cleared = mePlus.plus_accent ? '' : '1';
+        accent.value = mePlus.plus_accent || '#8b5cf6';
+    }
     updatePlusPreview();
-    // channels for studio
     try {
         const res = await fetch('/api/my_channels');
         const list = await res.json();
@@ -3291,90 +3330,153 @@ async function loadPlusChannelForm(id) {
         const ch = await res.json();
         plusSelectChip('plus-ch-frame', ch.plus_frame || '');
         plusSelectChip('plus-ch-header-fx', ch.plus_header_fx || '');
+        plusSelectChip('plus-ch-anim', ch.plus_anim || '');
         const b = document.getElementById('plus-ch-badge');
         if (b) b.value = ch.plus_badge || '';
         const g = document.getElementById('plus-ch-glow');
-        if (g) g.value = ch.plus_glow || '#8b5cf6';
+        if (g) {
+            g.dataset.cleared = ch.plus_glow ? '' : '1';
+            g.value = ch.plus_glow || '#8b5cf6';
+        }
     } catch (e) {}
 }
-document.getElementById('btn-open-plus-studio')?.addEventListener('click', openPlusStudio);
-document.getElementById('btn-plus-studio-close')?.addEventListener('click', () => {
-    const m = document.getElementById('modal-plus-studio');
-    if (m) { m.classList.add('hidden'); m.style.display = ''; }
-});
-document.querySelectorAll('.plus-studio-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.plus-studio-tab').forEach(b => b.classList.toggle('active', b === btn));
-        const tab = btn.dataset.stab;
+
+// Event delegation — works even if nodes re-rendered
+document.addEventListener('click', async e => {
+    if (e.target.closest('#btn-open-plus-studio')) {
+        e.preventDefault();
+        openPlusStudio();
+        return;
+    }
+    if (e.target.closest('#btn-plus-studio-close')) {
+        const m = document.getElementById('modal-plus-studio');
+        if (m) { m.classList.add('hidden'); m.style.display = ''; }
+        return;
+    }
+    const stab = e.target.closest('.plus-studio-tab');
+    if (stab) {
+        document.querySelectorAll('.plus-studio-tab').forEach(b => b.classList.toggle('active', b === stab));
+        const tab = stab.dataset.stab;
         document.getElementById('plus-studio-profile')?.classList.toggle('hidden', tab !== 'profile');
         document.getElementById('plus-studio-channel')?.classList.toggle('hidden', tab !== 'channel');
-    });
-});
-document.querySelectorAll('.plus-chip-row').forEach(row => {
-    row.addEventListener('click', e => {
-        const chip = e.target.closest('.plus-chip');
-        if (!chip) return;
+        return;
+    }
+    const chip = e.target.closest('.plus-chip-row .plus-chip');
+    if (chip) {
+        const row = chip.closest('.plus-chip-row');
         row.querySelectorAll('.plus-chip').forEach(c => c.classList.remove('active'));
         chip.classList.add('active');
-        if (row.id && row.id.startsWith('plus-') && !row.id.startsWith('plus-ch')) updatePlusPreview();
-    });
+        if (row.id && !row.id.startsWith('plus-ch')) updatePlusPreview();
+        return;
+    }
+    if (e.target.closest('#plus-aura-clear')) {
+        const a = document.getElementById('plus-aura');
+        if (a) { a.value = '#000000'; a.dataset.cleared = '1'; }
+        updatePlusPreview();
+        return;
+    }
+    if (e.target.closest('#plus-accent-clear')) {
+        const a = document.getElementById('plus-accent');
+        if (a) { a.value = '#000000'; a.dataset.cleared = '1'; }
+        return;
+    }
+    if (e.target.closest('#plus-ch-glow-clear')) {
+        const g = document.getElementById('plus-ch-glow');
+        if (g) { g.value = '#000000'; g.dataset.cleared = '1'; }
+        return;
+    }
+    if (e.target.closest('#btn-plus-save-profile')) {
+        e.preventDefault();
+        const btn = e.target.closest('#btn-plus-save-profile');
+        btn.disabled = true;
+        const auraEl = document.getElementById('plus-aura');
+        const accentEl = document.getElementById('plus-accent');
+        let aura = auraEl?.value || '';
+        if (auraEl?.dataset.cleared === '1' || aura === '#000000') aura = '';
+        let accent = accentEl?.value || '';
+        if (accentEl?.dataset.cleared === '1' || accent === '#000000') accent = '';
+        const body = {
+            plus_name_fx: plusSelectedChip('plus-name-fx'),
+            plus_avatar_frame: plusSelectedChip('plus-avatar-frame'),
+            plus_banner_fx: plusSelectedChip('plus-banner-fx'),
+            plus_msg_style: plusSelectedChip('plus-msg-style'),
+            plus_card_style: plusSelectedChip('plus-card-style'),
+            plus_badge: (document.getElementById('plus-badge')?.value || '').trim(),
+            plus_aura: aura,
+            plus_accent: accent,
+        };
+        try {
+            const res = await fetch('/api/plus/profile', {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+            });
+            let d = {};
+            try { d = await res.json(); } catch (err) { d = { error: 'Не JSON (' + res.status + ')' }; }
+            if (!res.ok || d.error) {
+                showToast('Premium+', d.error || ('Ошибка ' + res.status), '!');
+                btn.disabled = false;
+                return;
+            }
+            setMePlusFromProfile({ ...d, is_premium: true, is_premium_plus: true, username: window.__meUsername });
+            if (auraEl) auraEl.dataset.cleared = body.plus_aura ? '' : '1';
+            if (accentEl) accentEl.dataset.cleared = body.plus_accent ? '' : '1';
+            applyPlusToProfileHero({
+                username: window.__meUsername || 'you',
+                is_premium: true,
+                is_premium_plus: true,
+                ...body,
+            });
+            showToast('Premium+', 'Профиль сохранён', '✓');
+            if (typeof loadProfile === 'function') loadProfile();
+        } catch (err) {
+            showToast('Ошибка', err.message || 'Сеть', '!');
+        }
+        btn.disabled = false;
+        return;
+    }
+    if (e.target.closest('#btn-plus-save-channel')) {
+        e.preventDefault();
+        const btn = e.target.closest('#btn-plus-save-channel');
+        const id = document.getElementById('plus-channel-select')?.value;
+        if (!id) return showToast('Канал', 'Нет канала', '!');
+        btn.disabled = true;
+        const glowEl = document.getElementById('plus-ch-glow');
+        let glow = glowEl?.value || '';
+        if (glowEl?.dataset.cleared === '1' || glow === '#000000') glow = '';
+        const body = {
+            plus_frame: plusSelectedChip('plus-ch-frame'),
+            plus_header_fx: plusSelectedChip('plus-ch-header-fx'),
+            plus_anim: plusSelectedChip('plus-ch-anim'),
+            plus_badge: (document.getElementById('plus-ch-badge')?.value || '').trim(),
+            plus_glow: glow,
+        };
+        try {
+            const res = await fetch('/api/plus/channel/' + id, {
+                method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+            });
+            let d = {};
+            try { d = await res.json(); } catch (err) { d = { error: 'Не JSON (' + res.status + ')' }; }
+            if (!res.ok || d.error) {
+                showToast('Premium+', d.error || ('Ошибка ' + res.status), '!');
+                btn.disabled = false;
+                return;
+            }
+            if (glowEl) glowEl.dataset.cleared = body.plus_glow ? '' : '1';
+            showToast('Premium+', 'Канал сохранён', '✓');
+            if (typeof loadHome === 'function') loadHome();
+        } catch (err) {
+            showToast('Ошибка', err.message || 'Сеть', '!');
+        }
+        btn.disabled = false;
+        return;
+    }
 });
 document.getElementById('plus-badge')?.addEventListener('input', updatePlusPreview);
-document.getElementById('plus-aura')?.addEventListener('input', updatePlusPreview);
-document.getElementById('plus-aura-clear')?.addEventListener('click', () => {
+document.getElementById('plus-aura')?.addEventListener('input', () => {
     const a = document.getElementById('plus-aura');
-    if (a) a.value = '#000000';
-    // treat black as clear on save if user clears - use empty by clear btn
-    a.dataset.cleared = '1';
+    if (a) a.dataset.cleared = '';
     updatePlusPreview();
 });
-document.getElementById('plus-ch-glow-clear')?.addEventListener('click', () => {
-    const g = document.getElementById('plus-ch-glow');
-    if (g) { g.value = '#000000'; g.dataset.cleared = '1'; }
-});
 document.getElementById('plus-channel-select')?.addEventListener('change', e => loadPlusChannelForm(e.target.value));
-
-document.getElementById('btn-plus-save-profile')?.addEventListener('click', async () => {
-    const auraEl = document.getElementById('plus-aura');
-    let aura = auraEl?.value || '';
-    if (auraEl?.dataset.cleared === '1' || aura === '#000000') aura = '';
-    const body = {
-        plus_name_fx: plusSelectedChip('plus-name-fx'),
-        plus_avatar_frame: plusSelectedChip('plus-avatar-frame'),
-        plus_banner_fx: plusSelectedChip('plus-banner-fx'),
-        plus_badge: (document.getElementById('plus-badge')?.value || '').trim(),
-        plus_aura: aura,
-    };
-    const res = await fetch('/api/plus/profile', {
-        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
-    });
-    const d = await res.json();
-    if (d.error) return showToast('Premium+', d.error, '!');
-    mePlus = { ...mePlus, ...body };
-    if (auraEl) auraEl.dataset.cleared = '';
-    showToast('Premium+', 'Профиль обновлён', '✓');
-    loadProfile();
-});
-document.getElementById('btn-plus-save-channel')?.addEventListener('click', async () => {
-    const id = document.getElementById('plus-channel-select')?.value;
-    if (!id) return showToast('Канал', 'Нет канала', '!');
-    const glowEl = document.getElementById('plus-ch-glow');
-    let glow = glowEl?.value || '';
-    if (glowEl?.dataset.cleared === '1' || glow === '#000000') glow = '';
-    const body = {
-        plus_frame: plusSelectedChip('plus-ch-frame'),
-        plus_header_fx: plusSelectedChip('plus-ch-header-fx'),
-        plus_badge: (document.getElementById('plus-ch-badge')?.value || '').trim(),
-        plus_glow: glow,
-    };
-    const res = await fetch('/api/plus/channel/' + id, {
-        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
-    });
-    const d = await res.json();
-    if (d.error) return showToast('Premium+', d.error, '!');
-    if (glowEl) glowEl.dataset.cleared = '';
-    showToast('Premium+', 'Канал обновлён', '✓');
-});
 
 document.getElementById('btn-buy-premium-plus')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-buy-premium-plus');
@@ -3390,6 +3492,7 @@ document.getElementById('btn-buy-premium-plus')?.addEventListener('click', async
         }
         meHasPremiumPlus = true;
         meHasPremium = true;
+        setMePlusFromProfile({ ...d, is_premium: true, is_premium_plus: true });
         const bal = document.getElementById('shop-balance');
         if (bal && d.crystals != null) bal.textContent = d.crystals;
         if (btn) { btn.textContent = 'Активен'; btn.classList.add('owned'); btn.disabled = true; }
@@ -3402,7 +3505,6 @@ document.getElementById('btn-buy-premium-plus')?.addEventListener('click', async
         if (btn) btn.disabled = false;
     }
 });
-
 
 // ===== Minesweeper Premium UI =====
 const MS = {

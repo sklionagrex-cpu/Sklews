@@ -84,6 +84,9 @@ class User(db.Model):
     plus_aura = db.Column(db.String(20), default='')         # hex glow color
     plus_badge = db.Column(db.String(24), default='')        # custom title under name
     plus_banner_fx = db.Column(db.String(32), default='')    # rays | particles | silk | none
+    plus_msg_style = db.Column(db.String(32), default='')    # glow | gradient | neon | glass
+    plus_card_style = db.Column(db.String(32), default='')   # glass | velvet | metal | royal
+    plus_accent = db.Column(db.String(20), default='')       # personal accent hex
 
 class ChatHide(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -113,6 +116,7 @@ class Channel(db.Model):
     plus_header_fx = db.Column(db.String(32), default='')  # shimmer | aurora | ember | none
     plus_badge = db.Column(db.String(24), default='')      # channel title badge
     plus_glow = db.Column(db.String(20), default='')       # hex
+    plus_anim = db.Column(db.String(32), default='')       # pulse | float | border
 
 class Subscription(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -302,6 +306,9 @@ def user_plus_payload(u):
         'plus_aura': getattr(u, 'plus_aura', '') or '',
         'plus_badge': getattr(u, 'plus_badge', '') or '',
         'plus_banner_fx': getattr(u, 'plus_banner_fx', '') or '',
+        'plus_msg_style': getattr(u, 'plus_msg_style', '') or '',
+        'plus_card_style': getattr(u, 'plus_card_style', '') or '',
+        'plus_accent': getattr(u, 'plus_accent', '') or '',
     }
 
 def channel_plus_payload(ch):
@@ -312,6 +319,7 @@ def channel_plus_payload(ch):
         'plus_header_fx': getattr(ch, 'plus_header_fx', '') or '',
         'plus_badge': getattr(ch, 'plus_badge', '') or '',
         'plus_glow': getattr(ch, 'plus_glow', '') or '',
+        'plus_anim': getattr(ch, 'plus_anim', '') or '',
     }
 
 
@@ -1162,62 +1170,102 @@ def buy_premium_plus():
 @app.route('/api/plus/profile', methods=['POST'])
 @login_required
 def save_plus_profile():
-    user = current_user()
-    if not premium_plus_active(user):
-        return jsonify({'error': 'Нужен Premium+'}), 403
-    data = request.json or {}
-    name_fx = str(data.get('plus_name_fx') or '')[:32]
-    frame = str(data.get('plus_avatar_frame') or '')[:32]
-    aura = str(data.get('plus_aura') or '')[:20]
-    badge = str(data.get('plus_badge') or '')[:24]
-    banner_fx = str(data.get('plus_banner_fx') or '')[:32]
-    allowed_fx = {'', 'gold', 'aurora', 'crystal', 'soft'}
-    allowed_frame = {'', 'gold', 'diamond', 'aurora', 'rose', 'obsidian'}
-    allowed_banner = {'', 'none', 'rays', 'particles', 'silk'}
-    if name_fx not in allowed_fx:
-        return jsonify({'error': 'Неверный эффект ника'}), 400
-    if frame not in allowed_frame:
-        return jsonify({'error': 'Неверная рамка'}), 400
-    if banner_fx not in allowed_banner:
-        return jsonify({'error': 'Неверный эффект шапки'}), 400
-    if aura and not re.match(r'^#[0-9A-Fa-f]{6}$', aura):
-        return jsonify({'error': 'Цвет ауры: #RRGGBB'}), 400
-    user.plus_name_fx = name_fx
-    user.plus_avatar_frame = frame
-    user.plus_aura = aura
-    user.plus_badge = badge
-    user.plus_banner_fx = banner_fx if banner_fx != 'none' else ''
-    db.session.commit()
-    return jsonify({'status': 'ok', **user_plus_payload(user)})
+    try:
+        try:
+            ensure_db_schema()
+        except Exception:
+            pass
+        user = current_user()
+        if not premium_plus_active(user):
+            return jsonify({'error': 'Нужен Premium+. Купи в магазине.'}), 403
+        data = request.json or {}
+        name_fx = str(data.get('plus_name_fx') or '')[:32]
+        frame = str(data.get('plus_avatar_frame') or '')[:32]
+        aura = str(data.get('plus_aura') or '')[:20]
+        badge = str(data.get('plus_badge') or '')[:24]
+        banner_fx = str(data.get('plus_banner_fx') or '')[:32]
+        msg_style = str(data.get('plus_msg_style') or '')[:32]
+        card_style = str(data.get('plus_card_style') or '')[:32]
+        accent = str(data.get('plus_accent') or '')[:20]
+        allowed_fx = {'', 'gold', 'aurora', 'crystal', 'soft', 'liquid', 'fire', 'matrix'}
+        allowed_frame = {'', 'gold', 'diamond', 'aurora', 'rose', 'obsidian', 'prism', 'royal'}
+        allowed_banner = {'', 'none', 'rays', 'particles', 'silk', 'aurora', 'embers'}
+        allowed_msg = {'', 'glow', 'gradient', 'neon', 'glass'}
+        allowed_card = {'', 'glass', 'velvet', 'metal', 'royal'}
+        if name_fx not in allowed_fx:
+            return jsonify({'error': 'Неверный эффект ника'}), 400
+        if frame not in allowed_frame:
+            return jsonify({'error': 'Неверная рамка'}), 400
+        if banner_fx not in allowed_banner:
+            return jsonify({'error': 'Неверный эффект шапки'}), 400
+        if msg_style not in allowed_msg:
+            return jsonify({'error': 'Неверный стиль сообщений'}), 400
+        if card_style not in allowed_card:
+            return jsonify({'error': 'Неверный стиль карточки'}), 400
+        if aura and not re.match(r'^#[0-9A-Fa-f]{6}$', aura):
+            return jsonify({'error': 'Цвет ауры: #RRGGBB'}), 400
+        if accent and not re.match(r'^#[0-9A-Fa-f]{6}$', accent):
+            return jsonify({'error': 'Акцент: #RRGGBB'}), 400
+        user.plus_name_fx = name_fx
+        user.plus_avatar_frame = frame
+        user.plus_aura = aura
+        user.plus_badge = badge
+        user.plus_banner_fx = '' if banner_fx in ('', 'none') else banner_fx
+        user.plus_msg_style = msg_style
+        user.plus_card_style = card_style
+        user.plus_accent = accent
+        db.session.commit()
+        db.session.refresh(user)
+        return jsonify({'status': 'ok', **user_plus_payload(user)})
+    except Exception as e:
+        db.session.rollback()
+        print('save_plus_profile error:', e, flush=True)
+        return jsonify({'error': 'Ошибка сохранения: ' + str(e)[:140]}), 500
+
 
 @app.route('/api/plus/channel/<int:channel_id>', methods=['POST'])
 @login_required
 def save_plus_channel(channel_id):
-    user = current_user()
-    if not premium_plus_active(user):
-        return jsonify({'error': 'Нужен Premium+'}), 403
-    ch = Channel.query.get_or_404(channel_id)
-    if ch.owner_id != user.id:
-        return jsonify({'error': 'Только владелец'}), 403
-    data = request.json or {}
-    frame = str(data.get('plus_frame') or '')[:32]
-    header_fx = str(data.get('plus_header_fx') or '')[:32]
-    badge = str(data.get('plus_badge') or '')[:24]
-    glow = str(data.get('plus_glow') or '')[:20]
-    allowed_frame = {'', 'gold', 'crystal', 'neon', 'silk'}
-    allowed_fx = {'', 'none', 'shimmer', 'aurora', 'ember'}
-    if frame not in allowed_frame:
-        return jsonify({'error': 'Неверная рамка канала'}), 400
-    if header_fx not in allowed_fx:
-        return jsonify({'error': 'Неверный эффект шапки'}), 400
-    if glow and not re.match(r'^#[0-9A-Fa-f]{6}$', glow):
-        return jsonify({'error': 'Цвет свечения: #RRGGBB'}), 400
-    ch.plus_frame = frame
-    ch.plus_header_fx = header_fx if header_fx != 'none' else ''
-    ch.plus_badge = badge
-    ch.plus_glow = glow
-    db.session.commit()
-    return jsonify({'status': 'ok', **channel_plus_payload(ch)})
+    try:
+        try:
+            ensure_db_schema()
+        except Exception:
+            pass
+        user = current_user()
+        if not premium_plus_active(user):
+            return jsonify({'error': 'Нужен Premium+'}), 403
+        ch = Channel.query.get_or_404(channel_id)
+        if ch.owner_id != user.id:
+            return jsonify({'error': 'Только владелец'}), 403
+        data = request.json or {}
+        frame = str(data.get('plus_frame') or '')[:32]
+        header_fx = str(data.get('plus_header_fx') or '')[:32]
+        badge = str(data.get('plus_badge') or '')[:24]
+        glow = str(data.get('plus_glow') or '')[:20]
+        anim = str(data.get('plus_anim') or '')[:32]
+        allowed_frame = {'', 'gold', 'crystal', 'neon', 'silk', 'royal', 'prism'}
+        allowed_fx = {'', 'none', 'shimmer', 'aurora', 'ember', 'wave'}
+        allowed_anim = {'', 'pulse', 'float', 'border'}
+        if frame not in allowed_frame:
+            return jsonify({'error': 'Неверная рамка канала'}), 400
+        if header_fx not in allowed_fx:
+            return jsonify({'error': 'Неверный эффект шапки'}), 400
+        if anim not in allowed_anim:
+            return jsonify({'error': 'Неверная анимация'}), 400
+        if glow and not re.match(r'^#[0-9A-Fa-f]{6}$', glow):
+            return jsonify({'error': 'Цвет свечения: #RRGGBB'}), 400
+        ch.plus_frame = frame
+        ch.plus_header_fx = '' if header_fx in ('', 'none') else header_fx
+        ch.plus_badge = badge
+        ch.plus_glow = glow
+        ch.plus_anim = anim
+        db.session.commit()
+        return jsonify({'status': 'ok', **channel_plus_payload(ch)})
+    except Exception as e:
+        db.session.rollback()
+        print('save_plus_channel error:', e, flush=True)
+        return jsonify({'error': 'Ошибка сохранения: ' + str(e)[:140]}), 500
+
 
 
 EXCLUSIVE_THEMES = {
@@ -2200,6 +2248,9 @@ def ensure_db_schema():
             ('plus_aura', "VARCHAR(20) DEFAULT ''"),
             ('plus_badge', "VARCHAR(24) DEFAULT ''"),
             ('plus_banner_fx', "VARCHAR(32) DEFAULT ''"),
+            ('plus_msg_style', "VARCHAR(32) DEFAULT ''"),
+            ('plus_card_style', "VARCHAR(32) DEFAULT ''"),
+            ('plus_accent', "VARCHAR(20) DEFAULT ''"),
         ]
         comment_cols = [
             ('media_url', "VARCHAR(500) DEFAULT ''"),
@@ -2220,6 +2271,9 @@ def ensure_db_schema():
             ('plus_aura', "VARCHAR(20) DEFAULT ''"),
             ('plus_badge', "VARCHAR(24) DEFAULT ''"),
             ('plus_banner_fx', "VARCHAR(32) DEFAULT ''"),
+            ('plus_msg_style', "VARCHAR(32) DEFAULT ''"),
+            ('plus_card_style', "VARCHAR(32) DEFAULT ''"),
+            ('plus_accent', "VARCHAR(20) DEFAULT ''"),
         ]
         comment_cols = [
             ('media_url', "VARCHAR(500) DEFAULT ''"),
@@ -2235,6 +2289,7 @@ def ensure_db_schema():
         ('plus_header_fx', "VARCHAR(32) DEFAULT ''"),
         ('plus_badge', "VARCHAR(24) DEFAULT ''"),
         ('plus_glow', "VARCHAR(20) DEFAULT ''"),
+        ('plus_anim', "VARCHAR(32) DEFAULT ''"),
     ]:
         _add_col('channel', 'channel', col, typ)
 
@@ -2330,6 +2385,9 @@ if __name__ == '__main__':
             ('plus_aura', "VARCHAR(20) DEFAULT ''"),
             ('plus_badge', "VARCHAR(24) DEFAULT ''"),
             ('plus_banner_fx', "VARCHAR(32) DEFAULT ''"),
+            ('plus_msg_style', "VARCHAR(32) DEFAULT ''"),
+            ('plus_card_style', "VARCHAR(32) DEFAULT ''"),
+            ('plus_accent', "VARCHAR(20) DEFAULT ''"),
         ]:
             # re-inspect in case previous adds changed set
             existing_user = _existing_columns('user')
