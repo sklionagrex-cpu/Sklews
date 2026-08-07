@@ -1195,10 +1195,39 @@ body:has(#screen-chat.active) .bottom-nav {
 
 /* Video circle in chat */
 .circle-video {
-    box-shadow: none;
+    width: 240px !important;
+    height: 240px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    background: #111 !important;
     border: none !important;
-    outline: none;
+    outline: none !important;
+    box-shadow: none !important;
+    display: block;
 }
+.message.mine .circle-video,
+.message.theirs .circle-video {
+    /* no bubble padding look for pure circle */
+}
+.message:has(.circle-video) .msg-bubble {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+}
+.mention-link {
+    color: var(--accent2);
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+}
+.mention-link:hover { text-decoration: underline; }
+.post-circle-wrap {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0;
+}
+
 #btn-circle.active {
     background: #ef4444 !important;
     color: #fff !important;

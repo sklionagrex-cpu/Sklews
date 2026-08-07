@@ -322,6 +322,11 @@
                 <div style="display:flex;gap:8px;margin-bottom:12px">
                     <button type="button" id="btn-add-photo" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-image"></i> Фото</button>
                     <button type="button" id="btn-add-video" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-video"></i> Видео</button>
+                    <button type="button" id="btn-add-circle" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-circle-play"></i> Кружок</button>
+                </div>
+                <div id="post-circle-preview" style="display:none;text-align:center;margin-bottom:12px">
+                    <video id="post-circle-vid" playsinline muted loop style="width:160px;height:160px;border-radius:50%;object-fit:cover;background:#111"></video>
+                    <button type="button" id="btn-clear-post-circle" class="btn btn-secondary btn-sm" style="margin-top:8px">Убрать</button>
                 </div>
                 <div class="modal-actions">
                     <button id="btn-cancel-post" class="btn btn-secondary">Отмена</button>
@@ -405,10 +410,13 @@
         
         <div id="circle-recorder" class="modal hidden" style="align-items:center;background:rgba(0,0,0,0.92)">
             <div style="text-align:center;padding:20px;width:100%">
-                <video id="circle-preview" autoplay muted playsinline style="width:240px;height:240px;border-radius:50%;object-fit:cover;background:#111;border:none;box-shadow:0 0 0 2px rgba(255,255,255,0.2)"></video>
+                <video id="circle-preview" autoplay muted playsinline style="width:260px;height:260px;border-radius:50%;object-fit:cover;background:#111;border:none"></video>
                 <p id="circle-timer" style="margin:16px 0 8px;font-size:18px;font-weight:600">0:00</p>
-                <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Удерживай до 60 сек · отпусти чтобы отправить</p>
-                <button id="btn-circle-cancel" class="btn btn-secondary">Отмена</button>
+                <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Тап по кругу — отправить · до 60 сек</p>
+                <div style="display:flex;gap:10px;justify-content:center">
+                    <button id="btn-circle-flip" class="btn btn-secondary"><i class="fa-solid fa-camera-rotate"></i> Камера</button>
+                    <button id="btn-circle-cancel" class="btn btn-secondary">Отмена</button>
+                </div>
             </div>
         </div>
 

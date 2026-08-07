@@ -80,6 +80,27 @@ function escapeHtml(t) {
     return d.innerHTML;
 }
 
+function linkifyMentions(text) {
+    const esc = escapeHtml(text || '');
+    return esc.replace(/@([a-zA-Z0-9_]{2,32})/g, '<span class="mention-link" data-username="$1">@$1</span>');
+}
+function bindMentions(root) {
+    if (!root) return;
+    root.querySelectorAll('.mention-link').forEach(el => {
+        el.onclick = async e => {
+            e.stopPropagation();
+            const uname = el.dataset.username;
+            if (!uname) return;
+            const res = await fetch('/api/users/search?q=' + encodeURIComponent(uname));
+            const users = await res.json();
+            const u = users.find(x => x.username.toLowerCase() === uname.toLowerCase());
+            if (u) openUserProfile(u.id);
+            else showToast('Не найден', '@' + uname, '!');
+        };
+    });
+}
+
+
 function loadHome() { loadChannels(); loadActivity(); }
 
 async function loadActivity() {
@@ -372,6 +393,9 @@ async function loadPosts(channelId) {
         if (p.media_type === 'photo' && p.media_url) {
             media = '<img class="media-clickable" data-type="photo" data-src="' + p.media_url + '" src="' + p.media_url + '" style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;object-fit:cover">';
         }
+        if (p.media_type === 'circle' && p.media_url) {
+            media = '<div class="post-circle-wrap"><video class="circle-video" src="' + p.media_url + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()"></video></div>';
+        }
         if (p.media_type === 'video' && p.media_url) {
             media = '<video class="media-clickable" data-type="video" data-src="' + p.media_url + '" src="' + p.media_url + '" controls playsinline style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;background:#000"></video>';
         }
@@ -379,7 +403,7 @@ async function loadPosts(channelId) {
         const reactStr = Object.entries(reacts).map(([e, n]) => e + ' ' + n).join(' ');
         card.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px"><strong>' + pin + escapeHtml(p.author) + '</strong><span style="font-size:12px;color:var(--muted)">' + p.created_at + '</span></div>' +
             media +
-            '<div style="margin-bottom:10px;white-space:pre-wrap">' + escapeHtml(p.content) + '</div>' +
+            '<div style="margin-bottom:10px;white-space:pre-wrap" class="post-text">' + linkifyMentions(p.content) + '</div>' +
             '<div style="display:flex;gap:16px;font-size:13px;color:var(--muted);align-items:center;flex-wrap:wrap">' +
             '<span class="like-btn" data-id="' + p.id + '" style="cursor:pointer;' + (p.liked ? 'color:var(--accent)' : '') + '"><i class="fa-solid fa-heart"></i> ' + p.likes + '</span>' +
             '<span class="comment-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-comment"></i> ' + (p.comments || 0) + '</span>' +
@@ -408,6 +432,7 @@ async function loadPosts(channelId) {
     document.querySelectorAll('.comment-btn').forEach(btn => {
         btn.onclick = e => { e.stopPropagation(); openComments(btn.dataset.id); };
     });
+    bindMentions(feed);
     document.querySelectorAll('.pin-btn').forEach(btn => {
         btn.onclick = async e => {
             e.stopPropagation();
@@ -479,14 +504,27 @@ document.getElementById('btn-close-lightbox').onclick = () => {
 };
 
 document.getElementById('btn-add-post').onclick = () => {
+    pendingPostCircleUrl = null;
+    const pcv = document.getElementById('post-circle-preview');
+    if (pcv) pcv.style.display = 'none';
     document.getElementById('new-post-content').value = '';
     document.getElementById('post-photo-preview').style.display = 'none';
     pendingPostPhoto = null;
     document.getElementById('modal-post').classList.remove('hidden');
 };
 document.getElementById('btn-cancel-post').onclick = () => document.getElementById('modal-post').classList.add('hidden');
-document.getElementById('btn-add-photo').onclick = () => document.getElementById('post-photo-input').click();
-document.getElementById('btn-add-video').onclick = () => document.getElementById('post-video-input').click();
+document.getElementById('btn-add-photo').onclick = () => {
+    pendingPostCircleUrl = null;
+    const pcv = document.getElementById('post-circle-preview');
+    if (pcv) pcv.style.display = 'none';
+    document.getElementById('post-photo-input').click();
+};
+document.getElementById('btn-add-video').onclick = () => {
+    pendingPostCircleUrl = null;
+    const pcv = document.getElementById('post-circle-preview');
+    if (pcv) pcv.style.display = 'none';
+    document.getElementById('post-video-input').click();
+};
 document.getElementById('post-photo-input').onchange = e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -504,9 +542,12 @@ document.getElementById('post-video-input').onchange = e => {
 };
 document.getElementById('btn-confirm-post').onclick = async () => {
     const content = document.getElementById('new-post-content').value.trim();
-    if (!content && !pendingPostPhoto) return;
+    if (!content && !pendingPostPhoto && !pendingPostCircleUrl) return;
     let media_url = '', media_type = 'text';
-    if (pendingPostPhoto) {
+    if (pendingPostCircleUrl) {
+        media_url = pendingPostCircleUrl;
+        media_type = 'circle';
+    } else if (pendingPostPhoto) {
         const fd = new FormData();
         fd.append('file', pendingPostPhoto);
         const up = await fetch('/api/upload', { method: 'POST', body: fd });
@@ -517,10 +558,13 @@ document.getElementById('btn-confirm-post').onclick = async () => {
     }
     await fetch('/api/channel/' + currentChannelId + '/post', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ content: content || '📷', media_type: media_type, media_url: media_url })
+        body: JSON.stringify({ content: content || (media_type === 'circle' ? '⭕' : '📷'), media_type: media_type, media_url: media_url })
     });
     document.getElementById('modal-post').classList.add('hidden');
     pendingPostPhoto = null;
+    pendingPostCircleUrl = null;
+    const pcv = document.getElementById('post-circle-preview');
+    if (pcv) pcv.style.display = 'none';
     loadPosts(currentChannelId);
 };
 
@@ -634,7 +678,7 @@ document.getElementById('btn-confirm-delete-channel')?.addEventListener('click',
 async function loadProfile() {
     const res = await fetch('/api/profile');
     const p = await res.json();
-    document.getElementById('profile-username').textContent = p.username + (p.is_premium ? ' 💎' : '');
+    document.getElementById('profile-username').textContent = '@' + p.username + (p.is_premium ? ' 💎' : '');
     document.getElementById('profile-status').textContent = p.status || 'Статус не указан';
     document.getElementById('profile-crystals').textContent = p.crystals;
     document.getElementById('profile-friends').textContent = p.hide_friends ? '•' : p.friends;
@@ -817,7 +861,7 @@ async function openUserProfile(userId) {
     const res = await fetch('/api/user/' + userId);
     const u = await res.json();
     window._viewUserId = u.id;
-    document.getElementById('user-username').textContent = u.username + (u.is_premium ? ' 💎' : '');
+    document.getElementById('user-username').textContent = '@' + u.username + (u.is_premium ? ' 💎' : '');
     document.getElementById('user-status').textContent = u.status || '';
     document.getElementById('user-friends').textContent = u.friends_count === null ? '•' : (u.friends_count ?? 0);
     document.getElementById('user-channels').textContent = u.channels_count === null ? '•' : (u.channels_count ?? 0);
@@ -1041,7 +1085,7 @@ async function openComments(postId) {
         if (c.media_url && c.media_type === 'photo') {
             media = '<img class="comment-photo media-clickable" data-type="photo" data-src="' + c.media_url + '" src="' + c.media_url + '" style="max-width:160px;border-radius:10px;margin-top:6px;display:block">';
         }
-        const text = (c.content && c.content !== '📷') ? '<div class="comment-text">' + escapeHtml(c.content) + '</div>' : '';
+        const text = (c.content && c.content !== '📷') ? '<div class="comment-text">' + linkifyMentions(c.content) + '</div>' : '';
         const row = document.createElement('div');
         row.className = 'comment-row';
         row.dataset.cid = c.id;
@@ -1322,10 +1366,10 @@ document.getElementById('btn-delete-chat-both')?.addEventListener('click', () =>
 function formatMessage(content, isSuper) {
     let body = content || '';
     if (body.startsWith('[photo]')) body = '<img class="media-clickable" data-type="photo" data-src="' + body.slice(7) + '" src="' + body.slice(7) + '" style="max-width:220px;border-radius:12px">';
-    else if (body.startsWith('[circle]')) body = '<video class="circle-video" src="' + body.slice(8) + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()" style="width:180px;height:180px;border-radius:50%;object-fit:cover;background:#111;display:block;border:none"></video>';
+    else if (body.startsWith('[circle]')) body = '<video class="circle-video" src="' + body.slice(8) + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()"></video>';
     else if (body.startsWith('[video]')) body = '<video src="' + body.slice(7) + '" controls playsinline style="max-width:220px;border-radius:12px"></video>';
     else if (body.startsWith('[voice]')) body = '<audio src="' + body.slice(7) + '" controls style="max-width:220px"></audio>';
-    else body = escapeHtml(body);
+    else body = linkifyMentions(body);
     return (isSuper ? '<span style="font-size:11px;opacity:.85"><i class="fa-solid fa-bolt"></i> SUPER</span><br>' : '') + body;
 }
 
@@ -1344,6 +1388,7 @@ async function loadMessages(userId) {
     box.querySelectorAll('.media-clickable').forEach(el => {
         el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
     });
+    bindMentions(box);
     box.scrollTop = box.scrollHeight;
 }
 
@@ -1406,12 +1451,17 @@ document.getElementById('btn-voice').onclick = async () => {
 
 // ===== Video circles =====
 let circleRecorder = null, circleChunks = [], circleStream = null, circleTimer = null, circleSecs = 0;
+let circleFacing = 'user';
+let circleMode = 'chat'; // chat | post
+let pendingPostCircleUrl = null;
 
-document.getElementById('btn-circle')?.addEventListener('click', async () => {
-    if (!currentChatUserId) return;
+async function startCircleRecording(mode) {
+    circleMode = mode || 'chat';
+    if (circleMode === 'chat' && !currentChatUserId) return;
     try {
+        if (circleStream) circleStream.getTracks().forEach(t => t.stop());
         circleStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: 480, height: 480 },
+            video: { facingMode: circleFacing, width: { ideal: 720 }, height: { ideal: 720 } },
             audio: true
         });
         const preview = document.getElementById('circle-preview');
@@ -1427,6 +1477,7 @@ document.getElementById('btn-circle')?.addEventListener('click', async () => {
         circleRecorder.onstop = async () => {
             clearInterval(circleTimer);
             if (circleStream) circleStream.getTracks().forEach(t => t.stop());
+            circleStream = null;
             document.getElementById('circle-recorder').classList.add('hidden');
             preview.srcObject = null;
             if (!circleChunks.length || circleSecs < 1) return;
@@ -1435,11 +1486,24 @@ document.getElementById('btn-circle')?.addEventListener('click', async () => {
             fd.append('file', blob, 'circle.webm');
             const up = await fetch('/api/upload', { method: 'POST', body: fd });
             const ud = await up.json();
-            if (ud.url && currentChatUserId) {
+            if (!ud.url) return showToast('Ошибка', ud.error || 'Загрузка', '!');
+            if (circleMode === 'chat' && currentChatUserId) {
                 socket.emit('send_message', { receiver_id: currentChatUserId, content: '[circle]' + ud.url, is_super: false });
+            } else if (circleMode === 'post') {
+                pendingPostCircleUrl = ud.url;
+                pendingPostPhoto = null;
+                const pv = document.getElementById('post-circle-preview');
+                const vid = document.getElementById('post-circle-vid');
+                if (pv && vid) {
+                    vid.src = ud.url;
+                    vid.play().catch(() => {});
+                    pv.style.display = 'block';
+                }
+                document.getElementById('post-photo-preview').style.display = 'none';
             }
         };
         circleRecorder.start(200);
+        clearInterval(circleTimer);
         circleTimer = setInterval(() => {
             circleSecs++;
             const m = Math.floor(circleSecs / 60);
@@ -1450,7 +1514,10 @@ document.getElementById('btn-circle')?.addEventListener('click', async () => {
     } catch (err) {
         showToast('Ошибка', 'Нет доступа к камере', '!');
     }
-});
+}
+
+document.getElementById('btn-circle')?.addEventListener('click', () => startCircleRecording('chat'));
+document.getElementById('btn-add-circle')?.addEventListener('click', () => startCircleRecording('post'));
 
 function stopCircle() {
     if (circleRecorder && circleRecorder.state === 'recording') circleRecorder.stop();
@@ -1459,16 +1526,51 @@ document.getElementById('btn-circle-cancel')?.addEventListener('click', () => {
     circleChunks = [];
     circleSecs = 0;
     if (circleRecorder && circleRecorder.state === 'recording') {
-        try { circleRecorder.stop(); } catch(e) {}
+        try { circleRecorder.onstop = null; circleRecorder.stop(); } catch(e) {}
     }
     if (circleStream) circleStream.getTracks().forEach(t => t.stop());
+    circleStream = null;
     document.getElementById('circle-recorder').classList.add('hidden');
     const preview = document.getElementById('circle-preview');
     if (preview) preview.srcObject = null;
 });
-// tap timer area or video to stop & send
+document.getElementById('btn-circle-flip')?.addEventListener('click', async () => {
+    circleFacing = circleFacing === 'user' ? 'environment' : 'user';
+    const wasRecording = circleRecorder && circleRecorder.state === 'recording';
+    const savedSecs = circleSecs;
+    // restart stream with new camera, keep recording if possible
+    try {
+        if (circleStream) circleStream.getTracks().forEach(t => t.stop());
+        circleStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: circleFacing, width: { ideal: 720 }, height: { ideal: 720 } },
+            audio: true
+        });
+        const preview = document.getElementById('circle-preview');
+        preview.srcObject = circleStream;
+        if (wasRecording) {
+            // new recorder continues accumulating - start fresh recorder on new stream
+            const mime = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+            const oldOnStop = circleRecorder.onstop;
+            try { circleRecorder.onstop = null; circleRecorder.stop(); } catch(e) {}
+            circleRecorder = new MediaRecorder(circleStream, mime ? { mimeType: mime } : undefined);
+            circleRecorder.ondataavailable = e => { if (e.data.size) circleChunks.push(e.data); };
+            circleRecorder.onstop = oldOnStop;
+            circleRecorder.start(200);
+            circleSecs = savedSecs;
+        }
+    } catch (err) {
+        showToast('Ошибка', 'Не удалось переключить камеру', '!');
+        circleFacing = circleFacing === 'user' ? 'environment' : 'user';
+    }
+});
 document.getElementById('circle-preview')?.addEventListener('click', stopCircle);
 document.getElementById('circle-timer')?.addEventListener('click', stopCircle);
+
+document.getElementById('btn-clear-post-circle')?.addEventListener('click', () => {
+    pendingPostCircleUrl = null;
+    const pv = document.getElementById('post-circle-preview');
+    if (pv) pv.style.display = 'none';
+});
 
 
 socket.on('new_message', data => {
@@ -1484,6 +1586,7 @@ socket.on('new_message', data => {
         box.querySelectorAll('.media-clickable').forEach(el => {
             el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
         });
+        bindMentions(box);
         if (!data.is_mine) notifyUser('message');
     } else if (!data.is_mine) {
         notifyUser('message');
