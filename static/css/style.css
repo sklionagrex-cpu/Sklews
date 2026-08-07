@@ -2388,3 +2388,11 @@ body:has(#screen-chat.active) .bottom-nav {
 .message { animation: none !important; }
 .pf-card { animation: none !important; }
 .screen.active { animation: none !important; }
+
+
+/* === FINAL screen visibility (do not override) === */
+.screen { display: none !important; opacity: 1 !important; transform: none !important; pointer-events: auto !important; }
+.screen.active { display: block !important; opacity: 1 !important; visibility: visible !important; }
+#screen-chat.screen.active { display: flex !important; flex-direction: column !important; }
+.modal.hidden { display: none !important; }
+.modal:not(.hidden) { display: flex !important; }

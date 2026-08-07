@@ -13,7 +13,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/apple-touch-icon.png?v=20260807m">
 
     <title>Sklews</title>
-    <link rel="stylesheet" href="/static/css/style.css?v=20260807m">
+    <link rel="stylesheet" href="/static/css/style.css?v={{ cache_bust|default('1') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -647,6 +647,26 @@ window.SKLEWS_BUILD = '20260807m';
             </div>
         </div>
     </div>
-    <script src="/static/js/script.js?v=20260807m"></script>
+    
+<script>
+window.SKLEWS_BOOT = 1;
+// Emergency handlers if main script partially fails
+document.addEventListener('DOMContentLoaded', function() {
+  // settings
+  document.body.addEventListener('click', function(e) {
+    var t = e.target.closest('#btn-settings');
+    if (t) {
+      var m = document.getElementById('modal-settings');
+      if (m) m.classList.remove('hidden');
+    }
+    if (e.target.closest('#btn-close-settings')) {
+      var m2 = document.getElementById('modal-settings');
+      if (m2) m2.classList.add('hidden');
+    }
+  });
+});
+</script>
+
+    <script src="/static/js/script.js?v={{ cache_bust|default('1') }}"></script>
 </body>
 </html>

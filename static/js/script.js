@@ -1,4 +1,10 @@
-const socket = io();
+/* Sklews client */
+window.SKLEWS_JS_OK = true;
+const socket = (typeof io === 'function')
+  ? io({ transports: ['websocket', 'polling'] })
+  : { on: function(){}, emit: function(){}, off: function(){} };
+
+
 let currentChannelId = null;
 let currentChatUserId = null;
 let currentSort = 'today';
@@ -182,6 +188,7 @@ document.getElementById('home-search')?.addEventListener('input', e => {
     const box = document.getElementById('home-search-results');
     if (clearBtn) clearBtn.classList.toggle('hidden', !q);
     clearTimeout(homeSearchTimer);
+    if (!box) return;
     if (q.length < 1) {
         box.classList.add('hidden');
         box.innerHTML = '';
@@ -240,6 +247,7 @@ async function loadChannels() {
         const channels = await res.json();
         _lastChannelsCache = channels;
         const feed = document.getElementById('channels-feed');
+        if (!feed) return;
         feed.innerHTML = '';
         updateAdminSelectBar();
         if (!channels.length) {
@@ -2219,7 +2227,7 @@ socket.on('friend_request', data => {
 });
 socket.on('error', d => showToast('Ошибка', d.msg || 'Ошибка', '!'));
 
-loadHome();
+try { loadHome(); } catch (e) { console.error('loadHome', e); }
 
 
 if ('serviceWorker' in navigator) {
@@ -2296,11 +2304,13 @@ console.log('Sklews build', window.SKLEWS_BUILD || 'unknown');
         }
     }
 
-    document.getElementById('btn-close-admin').onclick = () => {
-        document.getElementById('modal-admin').classList.add('hidden');
+    const btnCloseAdmin = document.getElementById('btn-close-admin');
+    if (btnCloseAdmin) btnCloseAdmin.onclick = () => {
+        document.getElementById('modal-admin')?.classList.add('hidden');
     };
 
-    document.getElementById('btn-admin-give').onclick = async () => {
+    const btnAdminGive = document.getElementById('btn-admin-give');
+    if (btnAdminGive) btnAdminGive.onclick = async () => {
         const username = document.getElementById('admin-crystal-user').value.trim();
         const amount = parseInt(document.getElementById('admin-crystal-amount').value, 10);
         if (!username || isNaN(amount) || amount === 0) {

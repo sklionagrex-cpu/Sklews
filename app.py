@@ -314,7 +314,7 @@ def index():
     user = current_user()
     if not user:
         return redirect(url_for('auth'))
-    return render_template('index.html', user=user)
+    return render_template('index.html', user=user, cache_bust=int(__import__('time').time()))
 
 @app.route('/auth', methods=['GET', 'POST'])
 def auth():
@@ -325,14 +325,14 @@ def auth():
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         if not username or not password:
-            return render_template('auth.html', error='Заполните все поля')
+            return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Заполните все поля')
         if action == 'register':
             if has_emoji(username):
-                return render_template('auth.html', error='В нике нельзя использовать эмодзи')
+                return render_template('auth.html', cache_bust=int(__import__('time').time()), error='В нике нельзя использовать эмодзи')
             if len(username) < 3 or len(username) > 24:
-                return render_template('auth.html', error='Ник от 3 до 24 символов')
+                return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Ник от 3 до 24 символов')
             if User.query.filter_by(username=username).first():
-                return render_template('auth.html', error='Логин уже занят')
+                return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Логин уже занят')
             user = User(username=username, password_hash=generate_password_hash(password),
                         referral_code=secrets.token_hex(4),
                         is_admin=(username.lower() in ADMIN_USERNAMES))
@@ -345,8 +345,8 @@ def auth():
             if user and check_password_hash(user.password_hash, password):
                 session['user_id'] = user.id
                 return redirect(url_for('index'))
-            return render_template('auth.html', error='Неверный логин или пароль')
-    return render_template('auth.html')
+            return render_template('auth.html', cache_bust=int(__import__('time').time()), error='Неверный логин или пароль')
+    return render_template('auth.html', cache_bust=int(__import__('time').time()))
 
 @app.route('/logout')
 def logout():
