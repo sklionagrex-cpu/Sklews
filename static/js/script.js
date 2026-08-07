@@ -64,58 +64,7 @@ function applyPlusToProfileHero(p, opts) {
         if (p.plus_avatar_frame) av.classList.add('av-ring-' + p.plus_avatar_frame);
     }
 
-    // Banner overlay FX (on top of photo/video, under gradient)
-    const fxKeys = ['glare','aurora','neon','stardust','holo','rain','shutter','spark','trail','radar'];
-    if (banner) {
-        banner.classList.remove(...fxKeys.map(k => 'bfx-' + k));
-        let layer = banner.querySelector('.banner-fx-layer');
-        if (!layer) {
-            layer = document.createElement('div');
-            layer.className = 'banner-fx-layer';
-            banner.appendChild(layer);
-        }
-        layer.className = 'banner-fx-layer';
-        layer.innerHTML = '';
-        if (p.plus_banner_fx && fxKeys.includes(p.plus_banner_fx)) {
-            banner.classList.add('bfx-' + p.plus_banner_fx);
-            layer.classList.add('bfx-' + p.plus_banner_fx);
-            // particles need many dots
-            if (p.plus_banner_fx === 'stardust') {
-                for (let i = 0; i < 24; i++) {
-                    const d = document.createElement('span');
-                    d.className = 'stardust-dot';
-                    d.style.setProperty('--i', i);
-                    d.style.setProperty('--x', (Math.random() * 100).toFixed(1) + '%');
-                    d.style.setProperty('--delay', (Math.random() * 8).toFixed(2) + 's');
-                    d.style.setProperty('--dur', (5 + Math.random() * 6).toFixed(2) + 's');
-                    layer.appendChild(d);
-                }
-            }
-            if (p.plus_banner_fx === 'spark') {
-                for (let i = 0; i < 8; i++) {
-                    const s = document.createElement('span');
-                    s.className = 'spark-star';
-                    s.style.setProperty('--i', i);
-                    s.style.setProperty('--x', (8 + Math.random() * 84).toFixed(1) + '%');
-                    s.style.setProperty('--y', (10 + Math.random() * 70).toFixed(1) + '%');
-                    s.style.setProperty('--delay', (Math.random() * 2).toFixed(2) + 's');
-                    layer.appendChild(s);
-                }
-            }
-            if (p.plus_banner_fx === 'rain') {
-                for (let i = 0; i < 18; i++) {
-                    const r = document.createElement('span');
-                    r.className = 'rain-streak';
-                    r.style.setProperty('--i', i);
-                    r.style.setProperty('--x', (Math.random() * 100).toFixed(1) + '%');
-                    r.style.setProperty('--delay', (Math.random() * 3).toFixed(2) + 's');
-                    r.style.setProperty('--dur', (1.2 + Math.random() * 2.2).toFixed(2) + 's');
-                    layer.appendChild(r);
-                }
-            }
-        }
-    }
-    // hide legacy under strip if present
+    // Profile banner FX removed — effects only on channels
     if (under) under.style.display = 'none';
 
     if (hero) {
@@ -757,14 +706,13 @@ async function openChannel(id) {
                 }
             }
         }
-        const head = document.querySelector('#screen-channel .channel-header') || document.querySelector('.channel-header') || document.getElementById('channel-header');
+        applyChannelHeaderFx(ch);
+        const head = document.querySelector('#screen-channel .channel-header') || document.querySelector('.channel-header');
         if (head) {
-            head.classList.remove('fx-shimmer','fx-aurora','fx-ember');
-            if (ch.plus_header_fx) head.classList.add('fx-' + ch.plus_header_fx);
-            if (ch.plus_glow) head.style.boxShadow = '0 0 30px ' + ch.plus_glow + '33';
+            if (ch.plus_glow) head.style.boxShadow = '0 0 28px ' + ch.plus_glow + '33';
             else head.style.boxShadow = '';
             if (ch.avatar) {
-                head.style.background = 'linear-gradient(to bottom, rgba(12,10,20,0.4), var(--bg)), url(' + ch.avatar + ') center/cover';
+                head.style.background = 'linear-gradient(to bottom, rgba(12,10,20,0.55), var(--bg)), url(' + ch.avatar + ') center/cover';
             } else head.style.background = '';
         }
         const btnJoin = document.getElementById('btn-join');
@@ -824,15 +772,67 @@ safeOn('btn-join', 'click', async () => {
     loadMySubs();
 });
 
+
+function applyChannelHeaderFx(ch) {
+    const head = document.getElementById('channel-card-view');
+    if (!head) return;
+    const keys = ['glare','aurora','neon','stardust','holo','rain','shutter','spark','trail','radar','shimmer','ember','wave'];
+    keys.forEach(k => head.classList.remove('chfx-' + k));
+    let layer = document.getElementById('channel-header-fx') || head.querySelector('.ch-fx-layer');
+    if (!layer) {
+        layer = document.createElement('div');
+        layer.className = 'ch-fx-layer';
+        layer.id = 'channel-header-fx';
+        head.insertBefore(layer, head.firstChild);
+    }
+    layer.className = 'ch-fx-layer';
+    layer.innerHTML = '';
+    const fx = (ch && (ch.plus_header_fx || ch.plus_frame)) || '';
+    // map legacy names
+    const map = { shimmer: 'glare', ember: 'aurora', wave: 'aurora' };
+    const key = map[fx] || fx;
+    if (!key || !['glare','aurora','neon','stardust','holo','rain','shutter','spark','trail','radar'].includes(key)) return;
+    head.classList.add('chfx-' + key);
+    layer.classList.add('chfx-' + key);
+    if (key === 'stardust') {
+        for (let i = 0; i < 18; i++) {
+            const d = document.createElement('span');
+            d.className = 'ch-stardust';
+            d.style.setProperty('--x', (Math.random() * 100).toFixed(1) + '%');
+            d.style.setProperty('--delay', (Math.random() * 7).toFixed(2) + 's');
+            d.style.setProperty('--dur', (6 + Math.random() * 5).toFixed(2) + 's');
+            layer.appendChild(d);
+        }
+    }
+}
+
 async function openPostsPage(id) {
     currentChannelId = id;
     viewingPosts = true;
     showScreen('screen-posts');
-    const res = await fetch('/api/channel/' + id);
-    const ch = await res.json();
-    document.getElementById('posts-page-title').textContent = ch.name;
-    const canPost = ch.is_owner || ch.role === 'admin' || ch.role === 'coauthor';
-    document.getElementById('btn-add-post').classList.toggle('hidden', !canPost);
+    try {
+        const res = await fetch('/api/channel/' + id);
+        const ch = await res.json();
+        const title = document.getElementById('posts-page-title');
+        if (title) title.textContent = ch.name || 'Канал';
+        const sub = document.getElementById('tg-ch-top-sub');
+        if (sub) sub.textContent = (ch.subscribers != null ? ch.subscribers : '—') + ' подписчиков';
+        const av = document.getElementById('tg-ch-top-av');
+        if (av) {
+            if (typeof setAvatarEl === 'function') setAvatarEl(av, ch.avatar, ch.name);
+            else {
+                av.textContent = (ch.name || '?')[0].toUpperCase();
+                if (ch.avatar) {
+                    av.style.backgroundImage = 'url(' + ch.avatar + ')';
+                    av.style.backgroundSize = 'cover';
+                }
+            }
+        }
+        const fab = document.getElementById('btn-add-post');
+        if (fab) fab.classList.toggle('hidden', !(ch.is_owner || ch.role === 'admin' || ch.role === 'editor'));
+        // smooth channel header FX on the info card if present
+        applyChannelHeaderFx(ch);
+    } catch (e) {}
     loadPosts(id);
 }
 document.getElementById('btn-back-posts').onclick = () => { if (NAV_STACK.length) navGoBack(); else openChannel(currentChannelId); };
@@ -957,8 +957,7 @@ async function loadPosts(channelId) {
     if (!posts.length) { feed.innerHTML = '<div class="empty-state">Пока нет постов</div>'; return; }
     posts.forEach(p => {
         const card = document.createElement('div');
-        card.className = 'channel-card';
-        card.style.cssText = 'flex-direction:column;align-items:stretch';
+        card.className = 'tg-post' + (p.is_pinned ? ' is-pinned' : '');
         const pin = p.is_pinned ? '<i class="fa-solid fa-thumbtack" style="color:var(--accent);font-size:12px"></i> ' : '';
         let media = '';
         if (p.media_type === 'photo' && p.media_url) {
@@ -986,17 +985,21 @@ async function loadPosts(channelId) {
         const stripHtml = '<div class="react-strip" data-post-id="' + p.id + '">' +
             stripEmojis.map(e => '<button type="button" class="react-strip-item" data-emoji="' + e + '">' + e + '</button>').join('') +
             '</div>';
-        card.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' + authorHtml + '<span style="font-size:12px;color:var(--muted)">' + p.created_at + '</span></div>' +
-            media +
+        const pinBadge = p.is_pinned ? '<div class="tg-post-pin"><i class="fa-solid fa-thumbtack"></i> Закреплено</div>' : '';
+        card.innerHTML = pinBadge +
+            '<div class="tg-post-body">' +
+            (media ? '<div class="tg-post-media">' + media + '</div>' : '') +
             '<div class="post-text-wrap" data-post-id="' + p.id + '">' + stripHtml +
-            '<div style="margin-bottom:10px;white-space:pre-wrap" class="post-text">' + linkifyMentions(p.content) + '</div></div>' +
-            '<div style="display:flex;gap:16px;font-size:13px;color:var(--muted);align-items:center;flex-wrap:wrap">' +
-            '<span class="like-btn" data-id="' + p.id + '" style="cursor:pointer;' + (p.liked ? 'color:var(--accent)' : '') + '"><i class="fa-solid fa-heart"></i> ' + p.likes + '</span>' +
-            '<span class="comment-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-comment"></i> ' + (p.comments || 0) + '</span>' +
-            '<span class="react-open-btn" data-id="' + p.id + '" style="cursor:pointer;padding:2px 6px;border-radius:10px;background:rgba(139,92,246,0.12)" title="Реакция">😊</span>' +
-            '<span><i class="fa-solid fa-eye"></i> ' + p.views + '</span>' +
-            '<span class="pin-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-thumbtack"></i></span></div>' +
-            pillsHtml;
+            '<div class="post-text tg-post-text">' + linkifyMentions(p.content) + '</div></div>' +
+            pillsHtml +
+            '<div class="tg-post-foot">' +
+            '<span class="tg-post-views"><i class="fa-solid fa-eye"></i> ' + (p.views || 0) + '</span>' +
+            '<span class="comment-btn tg-post-comments" data-id="' + p.id + '"><i class="fa-solid fa-comment"></i> ' + (p.comments || 0) + '</span>' +
+            '<span class="react-open-btn" data-id="' + p.id + '" title="Реакция">😊</span>' +
+            '<span class="like-btn" data-id="' + p.id + '"' + (p.liked ? ' style="color:var(--accent)"' : '') + '><i class="fa-solid fa-heart"></i> ' + p.likes + '</span>' +
+            '<span class="pin-btn" data-id="' + p.id + '"><i class="fa-solid fa-thumbtack"></i></span>' +
+            '<span class="tg-post-time">' + (p.created_at || '') + '</span>' +
+            '</div></div>';
         card.querySelector('.post-author-link')?.addEventListener('click', e => {
             e.stopPropagation();
             if (p.author_id) openUserProfile(p.author_id);
@@ -3331,8 +3334,7 @@ function plusSelectedChip(rowId) {
 function updatePlusPreview() {
     const nameFx = plusSelectedChip('plus-name-fx');
     const frame = plusSelectedChip('plus-avatar-frame');
-    const bannerFx = plusSelectedChip('plus-banner-fx');
-    const badge = (document.getElementById('plus-badge')?.value || '').trim();
+        const badge = (document.getElementById('plus-badge')?.value || '').trim();
     const auraEl = document.getElementById('plus-aura');
     const aura = (auraEl && auraEl.dataset.cleared !== '1') ? (auraEl.value || '') : '';
     const nameEl = document.getElementById('plus-prev-name');
@@ -3342,52 +3344,7 @@ function updatePlusPreview() {
     const prev = document.getElementById('plus-preview-profile');
     if (nameEl) nameEl.innerHTML = premiumNickHtml(window.__meUsername || 'you', true, nameFx);
     if (wrap) wrap.className = 'plus-prev-avatar-wrap' + (frame ? ' frame-' + frame : '');
-    if (ban) {
-        ban.className = 'plus-prev-banner';
-        let layer = ban.querySelector('.banner-fx-layer') || document.getElementById('plus-prev-banner-fx');
-        if (!layer) {
-            layer = document.createElement('div');
-            layer.className = 'banner-fx-layer';
-            ban.appendChild(layer);
-        }
-        layer.className = 'banner-fx-layer';
-        layer.innerHTML = '';
-        const fxKeys = ['glare','aurora','neon','stardust','holo','rain','shutter','spark','trail','radar'];
-        if (bannerFx && fxKeys.includes(bannerFx)) {
-            ban.classList.add('bfx-' + bannerFx);
-            layer.classList.add('bfx-' + bannerFx);
-            if (bannerFx === 'stardust') {
-                for (let i = 0; i < 16; i++) {
-                    const d = document.createElement('span');
-                    d.className = 'stardust-dot';
-                    d.style.setProperty('--x', (Math.random()*100).toFixed(1)+'%');
-                    d.style.setProperty('--delay', (Math.random()*6).toFixed(2)+'s');
-                    d.style.setProperty('--dur', (4+Math.random()*5).toFixed(2)+'s');
-                    layer.appendChild(d);
-                }
-            }
-            if (bannerFx === 'spark') {
-                for (let i = 0; i < 6; i++) {
-                    const s = document.createElement('span');
-                    s.className = 'spark-star';
-                    s.style.setProperty('--x', (10+Math.random()*80).toFixed(1)+'%');
-                    s.style.setProperty('--y', (15+Math.random()*60).toFixed(1)+'%');
-                    s.style.setProperty('--delay', (Math.random()*2).toFixed(2)+'s');
-                    layer.appendChild(s);
-                }
-            }
-            if (bannerFx === 'rain') {
-                for (let i = 0; i < 12; i++) {
-                    const r = document.createElement('span');
-                    r.className = 'rain-streak';
-                    r.style.setProperty('--x', (Math.random()*100).toFixed(1)+'%');
-                    r.style.setProperty('--delay', (Math.random()*2).toFixed(2)+'s');
-                    r.style.setProperty('--dur', (1+Math.random()*2).toFixed(2)+'s');
-                    layer.appendChild(r);
-                }
-            }
-        }
-    }
+    if (ban) ban.className = 'plus-prev-banner';
     if (badgeEl) badgeEl.textContent = badge;
     if (prev) {
         prev.style.boxShadow = aura ? ('0 0 28px ' + aura + '66') : '';
@@ -3414,7 +3371,6 @@ async function openPlusStudio() {
     if (!m) return showToast('Ошибка', 'Студия не найдена', '!');
     plusSelectChip('plus-name-fx', mePlus.plus_name_fx || '');
     plusSelectChip('plus-avatar-frame', mePlus.plus_avatar_frame || '');
-    plusSelectChip('plus-banner-fx', mePlus.plus_banner_fx || '');
     plusSelectChip('plus-msg-style', mePlus.plus_msg_style || '');
     plusSelectChip('plus-card-style', mePlus.plus_card_style || '');
     const badge = document.getElementById('plus-badge');
@@ -3532,7 +3488,7 @@ document.addEventListener('click', async e => {
         const body = {
             plus_name_fx: plusSelectedChip('plus-name-fx'),
             plus_avatar_frame: plusSelectedChip('plus-avatar-frame'),
-            plus_banner_fx: plusSelectedChip('plus-banner-fx'),
+            plus_banner_fx: '',
             plus_msg_style: plusSelectedChip('plus-msg-style'),
             plus_card_style: plusSelectedChip('plus-card-style'),
             plus_badge: (document.getElementById('plus-badge')?.value || '').trim(),

@@ -3870,3 +3870,323 @@ body.xtheme-cashmere_haze .nav-btn.active {
 /* Studio preview inherits same layer styles */
 .plus-prev-banner { position: relative; overflow: hidden; }
 .plus-prev-banner .banner-fx-layer { z-index: 2; }
+
+/* ===== Telegram-like channel posts ===== */
+.tg-channel-screen {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+}
+.tg-ch-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+.tg-ch-top-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.tg-ch-top-av {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+    background-size: cover;
+    background-position: center;
+}
+.tg-ch-top-meta { min-width: 0; }
+.tg-ch-top-title {
+    font-size: 16px;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tg-ch-top-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 1px;
+}
+.tg-posts-feed {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 10px 100px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    -webkit-overflow-scrolling: touch;
+}
+.tg-post {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    animation: tgPostIn 0.28s ease-out both;
+}
+.tg-post.is-pinned {
+    border-color: rgba(251, 191, 36, 0.35);
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.12);
+}
+@keyframes tgPostIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+}
+.tg-post-pin {
+    font-size: 11px;
+    color: #fbbf24;
+    padding: 8px 12px 0;
+    font-weight: 600;
+}
+.tg-post-body { padding: 10px 12px 12px; }
+.tg-post-media { margin: -10px -12px 10px; }
+.tg-post-media img,
+.tg-post-media video {
+    width: 100% !important;
+    max-height: 360px !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    display: block;
+    object-fit: cover;
+}
+.tg-post-text {
+    white-space: pre-wrap;
+    font-size: 15px;
+    line-height: 1.45;
+    margin-bottom: 8px;
+}
+.tg-post-foot {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+}
+.tg-post-foot .like-btn,
+.tg-post-foot .comment-btn,
+.tg-post-foot .react-open-btn,
+.tg-post-foot .pin-btn {
+    cursor: pointer;
+}
+.tg-post-time {
+    margin-left: auto;
+    opacity: 0.85;
+}
+.tg-fab-post {
+    position: fixed;
+    right: 18px;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    color: #fff;
+    font-size: 18px;
+    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.45);
+    z-index: 30;
+    cursor: pointer;
+}
+.tg-fab-post.hidden { display: none !important; }
+
+/* ===== Smooth channel header FX (channels only) ===== */
+.channel-header {
+    position: relative;
+    overflow: hidden;
+}
+.ch-fx-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+.channel-header > *:not(.ch-fx-layer) {
+    position: relative;
+    z-index: 1;
+}
+/* Soft glare */
+.ch-fx-layer.chfx-glare::before {
+    content: '';
+    position: absolute;
+    top: -40%;
+    left: -50%;
+    width: 40%;
+    height: 180%;
+    background: linear-gradient(115deg, transparent, rgba(255,255,255,0.03) 40%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.03) 60%, transparent);
+    filter: blur(10px);
+    transform: skewX(-16deg);
+    animation: chGlare 5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@keyframes chGlare {
+    0% { left: -50%; opacity: 0; }
+    12% { opacity: 0.9; }
+    50% { left: 40%; opacity: 1; }
+    88% { opacity: 0.5; }
+    100% { left: 120%; opacity: 0; }
+}
+/* Aurora soft */
+.ch-fx-layer.chfx-aurora::before {
+    content: '';
+    position: absolute;
+    inset: -25%;
+    background:
+        radial-gradient(ellipse 50% 40% at 25% 75%, rgba(34,211,238,0.28), transparent 60%),
+        radial-gradient(ellipse 45% 45% at 75% 30%, rgba(167,139,250,0.25), transparent 55%);
+    filter: blur(22px);
+    animation: chAurora 12s ease-in-out infinite;
+}
+@keyframes chAurora {
+    0%, 100% { transform: translate(0,0) scale(1); opacity: 0.5; }
+    50% { transform: translate(3%, -2%) scale(1.05); opacity: 0.85; }
+}
+/* Neon border soft */
+.ch-fx-layer.chfx-neon::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 0 1.5px rgba(167,139,250,0.35), inset 0 0 24px rgba(139,92,246,0.12);
+    animation: chNeon 2.4s ease-in-out infinite;
+}
+@keyframes chNeon {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}
+/* Stardust */
+.ch-fx-layer.chfx-stardust .ch-stardust {
+    position: absolute;
+    bottom: 0;
+    left: var(--x, 50%);
+    width: 2px;
+    height: 2px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 5px rgba(255,255,255,0.8);
+    animation: chDust var(--dur, 7s) ease-in-out var(--delay, 0s) infinite;
+    opacity: 0;
+}
+@keyframes chDust {
+    0% { transform: translateY(0) scale(0.5); opacity: 0; }
+    20% { opacity: 0.9; }
+    100% { transform: translateY(-110%) translateX(10px) scale(1.2); opacity: 0; }
+}
+/* Holo */
+.ch-fx-layer.chfx-holo::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(110deg, transparent 30%, rgba(255,80,120,0.1) 42%, rgba(80,200,255,0.12) 50%, rgba(180,255,120,0.1) 58%, transparent 70%);
+    background-size: 200% 100%;
+    mix-blend-mode: soft-light;
+    animation: chHolo 7s ease-in-out infinite;
+}
+@keyframes chHolo {
+    0% { background-position: 100% 0; opacity: 0.4; }
+    50% { background-position: 0% 0; opacity: 0.9; }
+    100% { background-position: -100% 0; opacity: 0.4; }
+}
+/* Rain */
+.ch-fx-layer.chfx-rain::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+        15deg,
+        transparent,
+        transparent 12px,
+        rgba(200,220,255,0.06) 12px,
+        rgba(200,220,255,0.06) 13px
+    );
+    animation: chRain 1.8s linear infinite;
+}
+@keyframes chRain {
+    from { transform: translateY(-8%); }
+    to { transform: translateY(8%); }
+}
+/* Shutter */
+.ch-fx-layer.chfx-shutter::before,
+.ch-fx-layer.chfx-shutter::after {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    width: 38%;
+    animation: chShut 3.2s ease-in-out infinite;
+}
+.ch-fx-layer.chfx-shutter::before {
+    left: 0;
+    background: linear-gradient(to right, rgba(0,0,0,0.35), transparent);
+}
+.ch-fx-layer.chfx-shutter::after {
+    right: 0;
+    background: linear-gradient(to left, rgba(0,0,0,0.35), transparent);
+    animation-name: chShutR;
+}
+@keyframes chShut {
+    0%, 100% { opacity: 0.4; transform: scaleX(0.85); }
+    50% { opacity: 0.85; transform: scaleX(1); }
+}
+@keyframes chShutR {
+    0%, 100% { opacity: 0.4; transform: scaleX(0.85); }
+    50% { opacity: 0.85; transform: scaleX(1); }
+}
+/* Spark — soft */
+.ch-fx-layer.chfx-spark::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(circle at 20% 30%, rgba(255,255,255,0.5) 0 1px, transparent 2px),
+        radial-gradient(circle at 70% 55%, rgba(255,255,255,0.4) 0 1px, transparent 2px),
+        radial-gradient(circle at 45% 75%, rgba(255,255,255,0.35) 0 1px, transparent 2px);
+    animation: chSpark 2.5s ease-in-out infinite;
+}
+@keyframes chSpark {
+    0%, 100% { opacity: 0.15; }
+    40% { opacity: 0.7; }
+    55% { opacity: 0.2; }
+}
+/* Trail */
+.ch-fx-layer.chfx-trail::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 0 0 30px rgba(255,255,255,0.04);
+    animation: chTrail 3s ease-in-out infinite;
+}
+@keyframes chTrail {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+/* Radar */
+.ch-fx-layer.chfx-radar::before {
+    content: '';
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 16px; height: 16px;
+    border: 1.5px solid rgba(125,211,252,0.45);
+    border-radius: 50%;
+    transform: translate(-50%,-50%) scale(0.2);
+    animation: chRadar 3.6s ease-out infinite;
+}
+@keyframes chRadar {
+    0% { transform: translate(-50%,-50%) scale(0.2); opacity: 0.8; }
+    100% { transform: translate(-50%,-50%) scale(14); opacity: 0; }
+}

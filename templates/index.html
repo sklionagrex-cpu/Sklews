@@ -269,7 +269,6 @@ window.SKLEWS_BUILD = '20260807m';
             <div class="profile-hero" id="profile-hero">
                 <div class="profile-banner" id="profile-banner">
                     <video id="profile-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
-                    <div class="banner-fx-layer" id="profile-banner-fx"></div>
                 </div>
                 <div class="avatar-hero" id="profile-avatar">?</div>
                 <button id="btn-settings" class="btn-icon profile-gear"><i class="fa-solid fa-gear"></i></button>
@@ -305,16 +304,20 @@ window.SKLEWS_BUILD = '20260807m';
 
 
         <!-- POSTS PAGE (отдельный экран) -->
-        <div id="screen-posts" class="screen">
-            <header class="header">
-                <button class="btn-back" id="btn-back-posts"><i class="fa-solid fa-arrow-left"></i></button>
-                <h1 id="posts-page-title">Посты</h1>
-                <div style="width:40px"></div>
+        <div id="screen-posts" class="screen tg-channel-screen">
+            <header class="tg-ch-top" id="tg-ch-top">
+                <button class="btn-back" id="btn-back-posts" aria-label="Назад"><i class="fa-solid fa-arrow-left"></i></button>
+                <div class="tg-ch-top-main" id="tg-ch-top-main">
+                    <div class="tg-ch-top-av" id="tg-ch-top-av">?</div>
+                    <div class="tg-ch-top-meta">
+                        <div class="tg-ch-top-title" id="posts-page-title">Канал</div>
+                        <div class="tg-ch-top-sub" id="tg-ch-top-sub">—</div>
+                    </div>
+                </div>
+                <button class="btn-icon" id="btn-posts-menu" aria-label="Меню"><i class="fa-solid fa-ellipsis-vertical"></i></button>
             </header>
-            <div id="posts-feed" class="feed"></div>
-            <div style="padding:0 16px 80px">
-                <button id="btn-add-post" class="btn btn-primary full hidden"><i class="fa-solid fa-plus"></i> Добавить пост</button>
-            </div>
+            <div id="posts-feed" class="tg-posts-feed"></div>
+            <button id="btn-add-post" class="tg-fab-post hidden" title="Новый пост"><i class="fa-solid fa-pen"></i></button>
         </div>
 
         <!-- USER PROFILE -->
@@ -323,7 +326,6 @@ window.SKLEWS_BUILD = '20260807m';
             <div class="profile-hero" id="user-hero">
                 <div class="profile-banner" id="user-banner">
                     <video id="user-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
-                    <div class="banner-fx-layer" id="user-banner-fx"></div>
                 </div>
                 <div class="avatar-hero" id="user-avatar">?</div>
                 <div class="profile-hero-info">
@@ -382,7 +384,7 @@ window.SKLEWS_BUILD = '20260807m';
                     <button class="btn-icon" id="btn-channel-menu"><i class="fa-solid fa-ellipsis-vertical"></i></button>
                 </div>
             </header>
-            <div class="channel-header" id="channel-card-view">
+            <div class="channel-header" id="channel-card-view"><div class="ch-fx-layer" id="channel-header-fx"></div>
                 <div class="channel-avatar-big" id="channel-avatar">?</div>
                 <h2 id="channel-name" style="font-size:22px;margin-bottom:4px"></h2>
                 <p id="channel-subs" class="muted"></p>
@@ -448,7 +450,7 @@ window.SKLEWS_BUILD = '20260807m';
                 </div>
                 <div id="plus-studio-profile" class="plus-studio-page">
                     <div class="plus-preview" id="plus-preview-profile">
-                        <div class="plus-prev-banner" id="plus-prev-banner"><div class="banner-fx-layer" id="plus-prev-banner-fx"></div></div>
+                        <div class="plus-prev-banner" id="plus-prev-banner"></div>
                         <div class="plus-prev-avatar-wrap" id="plus-prev-avatar-wrap"><div class="plus-prev-avatar">✦</div></div>
                         <div class="plus-prev-name" id="plus-prev-name">@you</div>
                         <div class="plus-prev-badge" id="plus-prev-badge"></div>
@@ -487,20 +489,6 @@ window.SKLEWS_BUILD = '20260807m';
                     </div>
                     <label class="plus-label">Титул под ником</label>
                     <input type="text" id="plus-badge" maxlength="24" placeholder="Например: Architect of Sklews" class="plus-input">
-                    <label class="plus-label">Эффект шапки</label>
-                    <div class="plus-chip-row" id="plus-banner-fx">
-                        <button type="button" class="plus-chip active" data-v="">Нет</button>
-                        <button type="button" class="plus-chip" data-v="glare">Glare</button>
-                        <button type="button" class="plus-chip" data-v="aurora">Aurora</button>
-                        <button type="button" class="plus-chip" data-v="neon">Neon</button>
-                        <button type="button" class="plus-chip" data-v="stardust">Stardust</button>
-                        <button type="button" class="plus-chip" data-v="holo">Holo</button>
-                        <button type="button" class="plus-chip" data-v="rain">Rain</button>
-                        <button type="button" class="plus-chip" data-v="shutter">Shutter</button>
-                        <button type="button" class="plus-chip" data-v="spark">Spark</button>
-                        <button type="button" class="plus-chip" data-v="trail">Trail</button>
-                        <button type="button" class="plus-chip" data-v="radar">Radar</button>
-                    </div>
                     <label class="plus-label">Стиль сообщений в чатах</label>
                     <div class="plus-chip-row" id="plus-msg-style">
                         <button type="button" class="plus-chip active" data-v="">Обычный</button>
