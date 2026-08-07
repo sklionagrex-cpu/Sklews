@@ -3246,7 +3246,7 @@ function updatePlusPreview() {
 }
 async function openPlusStudio() {
     if (!meHasPremiumPlus) {
-        showToast('Premium+', 'Купи в магазине за 600 ✦', '✦');
+        showToast('Premium+', 'Купи в магазине за 10000 ✦', '✦');
         return;
     }
     document.getElementById('modal-settings')?.classList.add('hidden');

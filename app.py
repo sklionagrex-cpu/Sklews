@@ -1128,9 +1128,9 @@ def buy_premium_plus():
     user = current_user()
     if getattr(user, 'is_premium_plus', False):
         return jsonify({'error': 'Premium+ уже активен', 'is_premium_plus': True}), 400
-    if user.crystals < 600:
-        return jsonify({'error': 'Нужно 600 ✦'}), 400
-    user.crystals -= 600
+    if user.crystals < 10000:
+        return jsonify({'error': 'Нужно 10000 ✦'}), 400
+    user.crystals -= 10000
     user.is_premium_plus = True
     user.is_premium = True
     # generous premium window on top
