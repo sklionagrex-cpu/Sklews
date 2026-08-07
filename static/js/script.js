@@ -12,6 +12,16 @@ let anChannelId = null;
 let viewingPosts = false;
 let reactPostId = null;
 
+function premiumNickHtml(username, isPremium) {
+    if (isPremium) {
+        return '<span class="premium-nick">@' + escapeHtml(username) + '<span class="prem-gem">✦</span></span>';
+    }
+    return '@' + escapeHtml(username);
+}
+
+let meIsAdmin = false;
+
+
 // ===== Notifications: sound + vibration =====
 function notifyUser(type) {
     try {
@@ -449,8 +459,17 @@ async function loadPosts(channelId) {
             media = '<video class="media-clickable" data-type="video" data-src="' + p.media_url + '" src="' + p.media_url + '" controls playsinline style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;background:#000"></video>';
         }
         const reacts = p.reactions || {};
-        const reactStr = Object.entries(reacts).map(([e, n]) => e + ' ' + n).join(' ');
-        const authorHtml = '<span class="post-author-link" data-author-id="' + (p.author_id || '') + '">' + pin + '@' + escapeHtml(p.author) + '</span>';
+        const myReact = p.my_reaction || null;
+        let pillsHtml = '';
+        const entries = Object.entries(reacts);
+        if (entries.length) {
+            pillsHtml = '<div class="react-pills">' + entries.map(([e, n]) => {
+                const mine = (myReact === e) ? ' mine' : '';
+                return '<span class="react-pill' + mine + '" data-id="' + p.id + '" data-emoji="' + e + '"><span>' + e + '</span><span class="cnt">' + n + '</span></span>';
+            }).join('') + '</div>';
+        }
+        const authorNick = premiumNickHtml(p.author, p.author_premium);
+        const authorHtml = '<span class="post-author-link" data-author-id="' + (p.author_id || '') + '">' + pin + authorNick + '</span>';
         card.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' + authorHtml + '<span style="font-size:12px;color:var(--muted)">' + p.created_at + '</span></div>' +
             media +
             '<div style="margin-bottom:10px;white-space:pre-wrap" class="post-text">' + linkifyMentions(p.content) + '</div>' +
@@ -460,7 +479,7 @@ async function loadPosts(channelId) {
             '<span class="react-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-regular fa-face-smile"></i></span>' +
             '<span><i class="fa-solid fa-eye"></i> ' + p.views + '</span>' +
             '<span class="pin-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-thumbtack"></i></span></div>' +
-            (reactStr ? '<div style="font-size:12px;color:var(--muted);margin-top:6px">' + reactStr + '</div>' : '');
+            pillsHtml;
         card.querySelector('.post-author-link')?.addEventListener('click', e => {
             e.stopPropagation();
             if (p.author_id) openUserProfile(p.author_id);
@@ -483,6 +502,16 @@ async function loadPosts(channelId) {
     });
     document.querySelectorAll('.react-btn').forEach(btn => {
         btn.onclick = e => { e.stopPropagation(); openReactModal(btn.dataset.id); };
+    });
+    document.querySelectorAll('.react-pill').forEach(pill => {
+        pill.onclick = async e => {
+            e.stopPropagation();
+            await fetch('/api/post/' + pill.dataset.id + '/react', {
+                method: 'POST', headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({ emoji: pill.dataset.emoji })
+            });
+            if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
+        };
     });
     document.querySelectorAll('.like-btn').forEach(btn => {
         btn.onclick = async e => {
@@ -683,8 +712,16 @@ document.getElementById('btn-confirm-create').onclick = async () => {
         body: JSON.stringify({ name: name, description: description, avatar: avatar })
     });
     const data = await res.json();
+    if (!res.ok || data.error) {
+        showToast('Ошибка', data.error || 'Не удалось создать', '!');
+        return;
+    }
     document.getElementById('modal-create').classList.add('hidden');
-    if (data.id) { openPostsPage(data.id); loadProfile(); loadMyChannels(); }
+    if (data.id) {
+        if (data.cost) showToast('Сообщество', 'Создано за ' + data.cost + ' ✦', '✓');
+        else showToast('Сообщество', 'Создано (+3 ✦)', '✓');
+        openPostsPage(data.id); loadProfile(); loadMyChannels();
+    }
 };
 
 document.getElementById('btn-edit-channel').onclick = async () => {
@@ -757,7 +794,14 @@ document.getElementById('btn-confirm-delete-channel')?.addEventListener('click',
 async function loadProfile() {
     const res = await fetch('/api/profile');
     const p = await res.json();
-    document.getElementById('profile-username').textContent = '@' + p.username + (p.is_premium ? ' 💎' : '');
+    const pun = document.getElementById('profile-username');
+    pun.innerHTML = premiumNickHtml(p.username, p.is_premium);
+    meIsAdmin = !!p.is_admin;
+    const fab = document.getElementById('admin-fab');
+    if (fab) {
+        if (meIsAdmin) fab.classList.remove('hidden');
+        else fab.classList.add('hidden');
+    }
     document.getElementById('profile-status').textContent = p.status || 'Статус не указан';
     document.getElementById('profile-crystals').textContent = p.crystals;
     document.getElementById('profile-friends').textContent = p.hide_friends ? '•' : p.friends;
@@ -940,7 +984,7 @@ async function openUserProfile(userId) {
     const res = await fetch('/api/user/' + userId);
     const u = await res.json();
     window._viewUserId = u.id;
-    document.getElementById('user-username').textContent = '@' + u.username + (u.is_premium ? ' 💎' : '');
+    document.getElementById('user-username').innerHTML = premiumNickHtml(u.username, u.is_premium);
     document.getElementById('user-status').textContent = u.status || '';
     document.getElementById('user-friends').textContent = u.friends_count === null ? '•' : (u.friends_count ?? 0);
     document.getElementById('user-channels').textContent = u.channels_count === null ? '•' : (u.channels_count ?? 0);
@@ -1239,10 +1283,15 @@ document.getElementById('btn-send-comment').onclick = async () => {
         media_url = ud.url;
         media_type = 'photo';
     }
-    await fetch('/api/post/' + currentCommentPostId + '/comments', {
+    const cres = await fetch('/api/post/' + currentCommentPostId + '/comments', {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ content: content || '📷', media_url, media_type })
     });
+    const cdata = await cres.json().catch(() => ({}));
+    if (!cres.ok || cdata.error) {
+        showToast('Комментарий', cdata.error || 'Ошибка', '!');
+        return;
+    }
     document.getElementById('comment-input').value = '';
     pendingCommentPhoto = null;
     document.getElementById('comment-photo-preview').style.display = 'none';
@@ -1269,7 +1318,7 @@ async function searchUsers(q) {
         else if (u.friendship === 'pending') btn = '<span class="muted" style="font-size:12px">Запрос</span>';
         else btn = '<button class="btn btn-primary btn-sm"><i class="fa-solid fa-paper-plane"></i></button>';
         card.innerHTML = avatarHtml(u.username, u.avatar) +
-            '<div class="channel-info"><h3>' + escapeHtml(u.username) + (u.is_premium?' 💎':'') + '</h3>' +
+            '<div class="channel-info"><h3>' + premiumNickHtml(u.username, u.is_premium) + '</h3>' +
             '<p style="font-size:12px;color:var(--muted)">' + escapeHtml(u.status||'') + '</p></div>' + btn;
         card.querySelector('.channel-info').onclick = () => openUserProfile(u.id);
         const b = card.querySelector('button');
@@ -1739,3 +1788,100 @@ loadHome();
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/static/sw.js').catch(() => {});
 }
+
+// ===== Admin panel (draggable FAB) =====
+(function initAdminFab() {
+    const fab = document.getElementById('admin-fab');
+    if (!fab) return;
+
+    let dragging = false, moved = false, startX = 0, startY = 0, origX = 0, origY = 0;
+
+    function getPos(e) {
+        if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        return { x: e.clientX, y: e.clientY };
+    }
+
+    function onStart(e) {
+        if (fab.classList.contains('hidden')) return;
+        dragging = true;
+        moved = false;
+        const p = getPos(e);
+        startX = p.x; startY = p.y;
+        const rect = fab.getBoundingClientRect();
+        origX = rect.left; origY = rect.top;
+        fab.style.right = 'auto';
+        fab.style.bottom = 'auto';
+        fab.style.left = origX + 'px';
+        fab.style.top = origY + 'px';
+        e.preventDefault();
+    }
+    function onMove(e) {
+        if (!dragging) return;
+        const p = getPos(e);
+        const dx = p.x - startX, dy = p.y - startY;
+        if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+        let nx = origX + dx, ny = origY + dy;
+        nx = Math.max(8, Math.min(window.innerWidth - 60, nx));
+        ny = Math.max(8, Math.min(window.innerHeight - 60, ny));
+        fab.style.left = nx + 'px';
+        fab.style.top = ny + 'px';
+    }
+    function onEnd(e) {
+        if (!dragging) return;
+        dragging = false;
+        if (!moved) openAdminModal();
+    }
+
+    fab.addEventListener('mousedown', onStart);
+    fab.addEventListener('touchstart', onStart, { passive: false });
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchend', onEnd);
+
+    async function openAdminModal() {
+        document.getElementById('modal-admin').classList.remove('hidden');
+        try {
+            const res = await fetch('/api/admin/stats');
+            const d = await res.json();
+            if (d.error) { showToast('Админ', d.error, '!'); return; }
+            document.getElementById('admin-total-users').textContent = d.total_users;
+            document.getElementById('admin-online-users').textContent = d.online_users;
+            document.getElementById('admin-channels').textContent = d.channels;
+            document.getElementById('admin-posts').textContent = d.posts;
+        } catch (e) {
+            showToast('Админ', 'Ошибка загрузки', '!');
+        }
+    }
+
+    document.getElementById('btn-close-admin').onclick = () => {
+        document.getElementById('modal-admin').classList.add('hidden');
+    };
+
+    document.getElementById('btn-admin-give').onclick = async () => {
+        const username = document.getElementById('admin-crystal-user').value.trim();
+        const amount = parseInt(document.getElementById('admin-crystal-amount').value, 10);
+        if (!username || isNaN(amount) || amount === 0) {
+            return showToast('Админ', 'Укажите ник и количество', '!');
+        }
+        const res = await fetch('/api/admin/give_crystals', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ username, amount })
+        });
+        const d = await res.json();
+        if (d.error) return showToast('Админ', d.error, '!');
+        showToast('Кристаллы', '@' + d.username + ' → ' + d.crystals + ' ✦', '✓');
+        document.getElementById('admin-crystal-amount').value = '';
+    };
+})();
+
+// Refresh admin flag on load
+(async function() {
+    try {
+        const res = await fetch('/api/profile');
+        const p = await res.json();
+        meIsAdmin = !!p.is_admin;
+        const fab = document.getElementById('admin-fab');
+        if (fab && meIsAdmin) fab.classList.remove('hidden');
+    } catch (e) {}
+})();

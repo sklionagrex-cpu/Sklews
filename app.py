@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 import os
 import secrets
+import re
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
@@ -44,6 +45,8 @@ class User(db.Model):
     hide_friends = db.Column(db.Boolean, default=False)
     hide_channels = db.Column(db.Boolean, default=False)
     last_seen = db.Column(db.DateTime, nullable=True)
+    is_admin = db.Column(db.Boolean, default=False)
+    muted_until = db.Column(db.DateTime, nullable=True)
 
 class ChatHide(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -172,6 +175,48 @@ def format_last_seen(dt):
         return f'был(а) {d} дн. назад'
     return dt.strftime('был(а) %d.%m.%Y')
 
+
+ADMIN_USERNAMES = {'admin'}  # единственный аккаунт с админ-панелью
+
+EMOJI_RE = re.compile(
+    "["
+    "\U0001F600-\U0001F64F"
+    "\U0001F300-\U0001F5FF"
+    "\U0001F680-\U0001F6FF"
+    "\U0001F1E0-\U0001F1FF"
+    "\U00002702-\U000027B0"
+    "\U000024C2-\U0001F251"
+    "\U0001F900-\U0001F9FF"
+    "\U0001FA00-\U0001FA6F"
+    "\U0001FA70-\U0001FAFF"
+    "\U00002600-\U000026FF"
+    "]+",
+    flags=re.UNICODE
+)
+
+def has_emoji(s):
+    return bool(EMOJI_RE.search(s or ''))
+
+def is_admin_user(user):
+    if not user:
+        return False
+    if getattr(user, 'is_admin', False):
+        return True
+    return (user.username or '').lower() in ADMIN_USERNAMES
+
+def is_muted(user):
+    if not user or not getattr(user, 'muted_until', None):
+        return False
+    return user.muted_until > datetime.utcnow()
+
+def premium_active(user):
+    if not user:
+        return False
+    if user.premium_until and user.premium_until > datetime.utcnow():
+        return True
+    return bool(user.is_premium and user.premium_until is None)
+
+
 def login_required(f):
     from functools import wraps
     @wraps(f)
@@ -211,10 +256,15 @@ def auth():
         if not username or not password:
             return render_template('auth.html', error='Заполните все поля')
         if action == 'register':
+            if has_emoji(username):
+                return render_template('auth.html', error='В нике нельзя использовать эмодзи')
+            if len(username) < 3 or len(username) > 24:
+                return render_template('auth.html', error='Ник от 3 до 24 символов')
             if User.query.filter_by(username=username).first():
                 return render_template('auth.html', error='Логин уже занят')
             user = User(username=username, password_hash=generate_password_hash(password),
-                        referral_code=secrets.token_hex(4))
+                        referral_code=secrets.token_hex(4),
+                        is_admin=(username.lower() in ADMIN_USERNAMES))
             db.session.add(user)
             db.session.commit()
             session['user_id'] = user.id
@@ -432,18 +482,29 @@ def toggle_notifications(channel_id):
 @login_required
 def create_channel():
     user = current_user()
+    if is_muted(user):
+        return jsonify({'error': 'Вы в муте до ' + user.muted_until.strftime('%d.%m %H:%M')}), 403
     data = request.json or {}
     name = data.get('name', '').strip()
     description = data.get('description', '').strip()
     if not name:
         return jsonify({'error': 'Название обязательно'}), 400
+    owned = Channel.query.filter_by(owner_id=user.id).count()
+    cost = 0
+    if owned >= 2 and not is_admin_user(user):
+        cost = 100
+        if user.crystals < cost:
+            return jsonify({'error': f'Бесплатно можно создать только 2 сообщества. Следующее стоит 100 ✦ (у вас {user.crystals})'}), 400
     ch = Channel(name=name, description=description, owner_id=user.id, subscribers_count=1, avatar=(data.get('avatar') or '')[:256])
     db.session.add(ch)
     db.session.flush()
     db.session.add(Subscription(user_id=user.id, channel_id=ch.id))
-    user.crystals += 3
+    if cost:
+        user.crystals -= cost
+    else:
+        user.crystals += 3  # бонус только за бесплатные
     db.session.commit()
-    return jsonify({'id': ch.id, 'name': ch.name, 'crystals': user.crystals})
+    return jsonify({'id': ch.id, 'name': ch.name, 'crystals': user.crystals, 'cost': cost})
 
 @app.route('/api/channel/<int:channel_id>/posts')
 @login_required
@@ -464,11 +525,12 @@ def channel_posts(channel_id):
             db.session.add(PostView(post_id=p.id, user_id=me.id))
             p.views += 1
         ch = Channel.query.get(channel_id)
-        can_del = (p.author_id == me.id) or (ch and ch.owner_id == me.id) or can_moderate(me, ch)
+        can_del = (p.author_id == me.id) or (ch and ch.owner_id == me.id) or can_moderate(me, ch) or is_admin_user(me)
         result.append({
             'id': p.id, 'content': p.content,
             'author': author.username if author else '?',
             'author_id': p.author_id,
+            'author_premium': premium_active(author) if author else False,
             'likes': p.likes, 'comments': p.comments_count, 'views': p.views, 'is_pinned': p.is_pinned,
             'media_type': p.media_type, 'media_url': p.media_url,
             'liked': liked, 'reactions': reacts, 'my_reaction': my_react.emoji if my_react else None,
@@ -539,7 +601,7 @@ def delete_post(post_id):
     user = current_user()
     post = Post.query.get_or_404(post_id)
     ch = Channel.query.get(post.channel_id)
-    if post.author_id != user.id and not (ch and (ch.owner_id == user.id or can_moderate(user, ch))):
+    if post.author_id != user.id and not (ch and (ch.owner_id == user.id or can_moderate(user, ch))) and not is_admin_user(user):
         return jsonify({'error': 'Нет прав'}), 403
     PostLike.query.filter_by(post_id=post_id).delete(synchronize_session=False)
     PostReaction.query.filter_by(post_id=post_id).delete(synchronize_session=False)
@@ -606,15 +668,21 @@ def api_profile():
     ).count()
     unread_total = Message.query.filter_by(receiver_id=user.id, is_read=False).count()
     pending_requests = Friendship.query.filter_by(friend_id=user.id, status='pending').count()
+    # auto-expire premium
+    if user.premium_until and user.premium_until < datetime.utcnow() and user.is_premium:
+        user.is_premium = False
+        db.session.commit()
     return jsonify({
         'username': user.username, 'status': user.status, 'avatar': user.avatar,
         'banner': getattr(user, 'banner', '') or '',
         'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
-        'is_premium': user.is_premium, 'referral_code': user.referral_code or '',
+        'is_premium': premium_active(user), 'referral_code': user.referral_code or '',
         'hide_friends': bool(getattr(user, 'hide_friends', False)),
         'hide_channels': bool(getattr(user, 'hide_channels', False)),
         'unread_messages': unread_total,
-        'friend_requests': pending_requests
+        'friend_requests': pending_requests,
+        'is_admin': is_admin_user(user),
+        'muted_until': user.muted_until.isoformat() if getattr(user, 'muted_until', None) and is_muted(user) else None
     })
 
 @app.route('/api/profile/update', methods=['POST'])
@@ -971,7 +1039,7 @@ def get_comments(post_id):
     result = []
     for c in comments:
         u = User.query.get(c.user_id)
-        can_delete = (c.user_id == me.id) or (post.author_id == me.id) or (ch and ch.owner_id == me.id)
+        can_delete = (c.user_id == me.id) or (post.author_id == me.id) or (ch and ch.owner_id == me.id) or is_admin_user(me) or can_moderate(me, ch)
         result.append({
             'id': c.id, 'content': c.content,
             'user_id': c.user_id,
@@ -988,6 +1056,8 @@ def get_comments(post_id):
 @login_required
 def add_comment(post_id):
     user = current_user()
+    if is_muted(user):
+        return jsonify({'error': 'Вы в муте. Комментарии недоступны до ' + user.muted_until.strftime('%d.%m %H:%M UTC')}), 403
     post = Post.query.get_or_404(post_id)
     data = request.json or {}
     content = (data.get('content') or '').strip()
@@ -995,18 +1065,24 @@ def add_comment(post_id):
     media_type = (data.get('media_type') or '')[:20]
     if not content and not media_url:
         return jsonify({'error': 'Пустой комментарий'}), 400
-    if not content and media_url:
-        content = '📷'
-    c = Comment(post_id=post_id, user_id=user.id, content=content,
+    # Anti-spam: 10 comments in 30 seconds -> mute 30 minutes
+    since = datetime.utcnow() - timedelta(seconds=30)
+    recent = Comment.query.filter(Comment.user_id == user.id, Comment.created_at >= since).count()
+    if recent >= 10 and not is_admin_user(user):
+        user.muted_until = datetime.utcnow() + timedelta(minutes=30)
+        db.session.commit()
+        return jsonify({'error': 'Антиспам: слишком много комментариев. Мут на 30 минут.'}), 429
+    c = Comment(post_id=post_id, user_id=user.id, content=content or ('📷' if media_url else ''),
                 media_url=media_url, media_type=media_type)
-    post.comments_count += 1
     db.session.add(c)
+    post.comments_count = (post.comments_count or 0) + 1
     if post.comments_count in (50, 200):
         author = User.query.get(post.author_id)
         if author:
             author.crystals += 5 if post.comments_count == 50 else 12
     db.session.commit()
     return jsonify({'id': c.id, 'status': 'ok', 'comments': post.comments_count})
+
 
 @app.route('/api/post/<int:post_id>/comments/<int:comment_id>', methods=['DELETE'])
 @login_required
@@ -1015,7 +1091,7 @@ def delete_comment(post_id, comment_id):
     post = Post.query.get_or_404(post_id)
     c = Comment.query.filter_by(id=comment_id, post_id=post_id).first_or_404()
     ch = Channel.query.get(post.channel_id)
-    if c.user_id != me.id and post.author_id != me.id and (not ch or ch.owner_id != me.id):
+    if c.user_id != me.id and post.author_id != me.id and (not ch or ch.owner_id != me.id) and not is_admin_user(me) and not can_moderate(me, ch):
         return jsonify({'error': 'Нет прав'}), 403
     db.session.delete(c)
     post.comments_count = max(0, (post.comments_count or 1) - 1)
@@ -1131,7 +1207,7 @@ def user_public(user_id):
         'id': u.id, 'username': u.username, 'avatar': u.avatar,
         'banner': getattr(u, 'banner', '') or '',
         'status': u.status,
-        'is_premium': u.is_premium,
+        'is_premium': premium_active(u),
         'friends_count': friends_count if not u.hide_friends else None,
         'channels_count': channels_count if not u.hide_channels else None,
         'hide_friends': bool(u.hide_friends),
@@ -1247,6 +1323,102 @@ def update_banner():
     db.session.commit()
     return jsonify({'status': 'ok', 'banner': user.banner})
 
+
+# ==================== ADMIN ====================
+
+@app.route('/api/admin/stats')
+@login_required
+def admin_stats():
+    me = current_user()
+    if not is_admin_user(me):
+        return jsonify({'error': 'Нет доступа'}), 403
+    total = User.query.count()
+    online_since = datetime.utcnow() - timedelta(minutes=5)
+    online = User.query.filter(User.last_seen != None, User.last_seen >= online_since).count()
+    channels = Channel.query.count()
+    posts = Post.query.count()
+    return jsonify({
+        'total_users': total,
+        'online_users': online,
+        'channels': channels,
+        'posts': posts
+    })
+
+@app.route('/api/admin/give_crystals', methods=['POST'])
+@login_required
+def admin_give_crystals():
+    me = current_user()
+    if not is_admin_user(me):
+        return jsonify({'error': 'Нет доступа'}), 403
+    data = request.json or {}
+    username = (data.get('username') or '').strip()
+    try:
+        amount = int(data.get('amount') or 0)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Некорректное количество'}), 400
+    if not username or amount == 0:
+        return jsonify({'error': 'Укажите ник и количество'}), 400
+    if abs(amount) > 100000:
+        return jsonify({'error': 'Слишком большое значение'}), 400
+    target = User.query.filter_by(username=username).first()
+    if not target:
+        return jsonify({'error': 'Пользователь не найден'}), 404
+    target.crystals = max(0, (target.crystals or 0) + amount)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'username': target.username, 'crystals': target.crystals})
+
+@app.route('/api/admin/delete_channel/<int:channel_id>', methods=['POST'])
+@login_required
+def admin_delete_channel(channel_id):
+    me = current_user()
+    if not is_admin_user(me):
+        return jsonify({'error': 'Нет доступа'}), 403
+    ch = Channel.query.get_or_404(channel_id)
+    _purge_channel(ch)
+    return jsonify({'status': 'ok'})
+
+@app.route('/api/admin/delete_post/<int:post_id>', methods=['POST'])
+@login_required
+def admin_delete_post(post_id):
+    me = current_user()
+    if not is_admin_user(me):
+        return jsonify({'error': 'Нет доступа'}), 403
+    post = Post.query.get_or_404(post_id)
+    for model in (PostLike, PostReaction, PostView, Comment):
+        model.query.filter_by(post_id=post.id).delete()
+    db.session.delete(post)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+@app.route('/api/admin/delete_comment/<int:comment_id>', methods=['POST'])
+@login_required
+def admin_delete_comment(comment_id):
+    me = current_user()
+    if not is_admin_user(me):
+        return jsonify({'error': 'Нет доступа'}), 403
+    c = Comment.query.get_or_404(comment_id)
+    post = Post.query.get(c.post_id)
+    db.session.delete(c)
+    if post:
+        post.comments_count = max(0, (post.comments_count or 1) - 1)
+    db.session.commit()
+    return jsonify({'status': 'ok'})
+
+def _purge_channel(ch):
+    """Delete channel and all related data."""
+    posts = Post.query.filter_by(channel_id=ch.id).all()
+    for p in posts:
+        PostLike.query.filter_by(post_id=p.id).delete()
+        PostReaction.query.filter_by(post_id=p.id).delete()
+        PostView.query.filter_by(post_id=p.id).delete()
+        Comment.query.filter_by(post_id=p.id).delete()
+        db.session.delete(p)
+    Subscription.query.filter_by(channel_id=ch.id).delete()
+    ChannelRole.query.filter_by(channel_id=ch.id).delete()
+    db.session.delete(ch)
+    db.session.commit()
+
+
 @app.route('/api/analytics/overview')
 @login_required
 def analytics_overview():
@@ -1272,25 +1444,47 @@ if __name__ == '__main__':
     print("Init database...", flush=True)
     with app.app_context():
         db.create_all()
-        try:
-            from sqlalchemy import text
-            db.session.execute(text('ALTER TABLE user ADD COLUMN banner VARCHAR(256) DEFAULT ""'))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+        from sqlalchemy import text
+        for col, typ in [
+            ('banner', 'VARCHAR(256) DEFAULT ""'),
+            ('last_seen', 'DATETIME'),
+            ('is_admin', 'BOOLEAN DEFAULT 0'),
+            ('muted_until', 'DATETIME'),
+        ]:
+            try:
+                db.session.execute(text(f'ALTER TABLE user ADD COLUMN {col} {typ}'))
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
         for col, typ in [('media_url', 'VARCHAR(500) DEFAULT ""'), ('media_type', 'VARCHAR(20) DEFAULT ""')]:
             try:
-                from sqlalchemy import text
                 db.session.execute(text(f'ALTER TABLE comment ADD COLUMN {col} {typ}'))
                 db.session.commit()
             except Exception:
                 db.session.rollback()
+        # Ensure admin flag for reserved username
         try:
-            from sqlalchemy import text
-            db.session.execute(text('ALTER TABLE user ADD COLUMN last_seen DATETIME'))
+            for u in User.query.filter(User.username.in_(list(ADMIN_USERNAMES))).all():
+                if not u.is_admin:
+                    u.is_admin = True
             db.session.commit()
         except Exception:
             db.session.rollback()
+        # One-time cleanup of channels (only if CLEANUP_CHANNELS=1 in env)
+        if os.environ.get('CLEANUP_CHANNELS') == '1':
+            try:
+                keep_name = "Глава этой шляпы"
+                to_delete = Channel.query.filter(Channel.name != keep_name).all()
+                if to_delete:
+                    print(f"Cleanup: deleting {len(to_delete)} channels, keeping '{keep_name}'", flush=True)
+                    for ch in to_delete:
+                        _purge_channel(ch)
+                    print("Cleanup done", flush=True)
+                else:
+                    print("Cleanup: nothing to delete", flush=True)
+            except Exception as e:
+                print("Cleanup error:", e, flush=True)
+                db.session.rollback()
     print("Database ready", flush=True)
     port = int(os.environ.get('PORT', 5000))
     print(f"Starting server on 0.0.0.0:{port} ...", flush=True)
