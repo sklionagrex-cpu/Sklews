@@ -638,13 +638,6 @@ async function openChannel(id) {
         if (ch.plus_badge) {
             chNameEl.innerHTML = escapeHtml(ch.name) + ' <span class="channel-plus-badge">' + escapeHtml(ch.plus_badge) + '</span>';
         }
-        const head = document.querySelector('#screen-channel .channel-header') || document.getElementById('channel-header');
-        if (head) {
-            head.classList.remove('fx-shimmer','fx-aurora','fx-ember');
-            if (ch.plus_header_fx) head.classList.add('fx-' + ch.plus_header_fx);
-            if (ch.plus_glow) head.style.boxShadow = '0 0 30px ' + ch.plus_glow + '33';
-            else head.style.boxShadow = '';
-        }
         document.getElementById('channel-subs').textContent = ch.subscribers + ' участников';
         document.getElementById('channel-desc').textContent = ch.description || 'Нет описания';
         const av = document.getElementById('channel-avatar');
@@ -661,8 +654,12 @@ async function openChannel(id) {
                 }
             }
         }
-        const head = document.querySelector('.channel-header');
+        const head = document.querySelector('#screen-channel .channel-header') || document.querySelector('.channel-header') || document.getElementById('channel-header');
         if (head) {
+            head.classList.remove('fx-shimmer','fx-aurora','fx-ember');
+            if (ch.plus_header_fx) head.classList.add('fx-' + ch.plus_header_fx);
+            if (ch.plus_glow) head.style.boxShadow = '0 0 30px ' + ch.plus_glow + '33';
+            else head.style.boxShadow = '';
             if (ch.avatar) {
                 head.style.background = 'linear-gradient(to bottom, rgba(12,10,20,0.4), var(--bg)), url(' + ch.avatar + ') center/cover';
             } else head.style.background = '';
