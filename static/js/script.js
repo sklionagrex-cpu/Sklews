@@ -560,13 +560,17 @@ async function loadPosts(channelId) {
         }
         const authorNick = premiumNickHtml(p.author, p.author_premium);
         const authorHtml = '<span class="post-author-link" data-author-id="' + (p.author_id || '') + '">' + pin + authorNick + '</span>';
+        const stripEmojis = ['🔥','❤️','😂','😮','😢','👏','✨','💯','🚀','❤️‍🔥','👍','👎','🤯','🥰','💀'];
+        const stripHtml = '<div class="react-strip" data-post-id="' + p.id + '">' +
+            stripEmojis.map(e => '<button type="button" class="react-strip-item" data-emoji="' + e + '">' + e + '</button>').join('') +
+            '</div>';
         card.innerHTML = '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' + authorHtml + '<span style="font-size:12px;color:var(--muted)">' + p.created_at + '</span></div>' +
             media +
-            '<div style="margin-bottom:10px;white-space:pre-wrap" class="post-text">' + linkifyMentions(p.content) + '</div>' +
+            '<div class="post-text-wrap" data-post-id="' + p.id + '">' + stripHtml +
+            '<div style="margin-bottom:10px;white-space:pre-wrap" class="post-text">' + linkifyMentions(p.content) + '</div></div>' +
             '<div style="display:flex;gap:16px;font-size:13px;color:var(--muted);align-items:center;flex-wrap:wrap">' +
             '<span class="like-btn" data-id="' + p.id + '" style="cursor:pointer;' + (p.liked ? 'color:var(--accent)' : '') + '"><i class="fa-solid fa-heart"></i> ' + p.likes + '</span>' +
             '<span class="comment-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-comment"></i> ' + (p.comments || 0) + '</span>' +
-            '<span class="react-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-regular fa-face-smile"></i></span>' +
             '<span><i class="fa-solid fa-eye"></i> ' + p.views + '</span>' +
             '<span class="pin-btn" data-id="' + p.id + '" style="cursor:pointer"><i class="fa-solid fa-thumbtack"></i></span></div>' +
             pillsHtml;
@@ -590,9 +594,6 @@ async function loadPosts(channelId) {
         }
         feed.appendChild(card);
     });
-    document.querySelectorAll('.react-btn').forEach(btn => {
-        btn.onclick = e => { e.stopPropagation(); openReactModal(btn.dataset.id); };
-    });
     document.querySelectorAll('.react-pill').forEach(pill => {
         pill.onclick = async e => {
             e.stopPropagation();
@@ -603,6 +604,42 @@ async function loadPosts(channelId) {
             if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
         };
     });
+    document.querySelectorAll('.post-text-wrap').forEach(wrap => {
+        const strip = wrap.querySelector('.react-strip');
+        const text = wrap.querySelector('.post-text');
+        if (!text || !strip) return;
+        const openStrip = e => {
+            e.stopPropagation();
+            document.querySelectorAll('.react-strip.open').forEach(s => { if (s !== strip) s.classList.remove('open'); });
+            strip.classList.toggle('open');
+        };
+        text.addEventListener('click', openStrip);
+        // long-press support
+        let lt = null;
+        text.addEventListener('touchstart', () => { lt = setTimeout(() => { strip.classList.add('open'); }, 400); }, { passive: true });
+        text.addEventListener('touchend', () => clearTimeout(lt));
+        text.addEventListener('touchmove', () => clearTimeout(lt));
+        strip.querySelectorAll('.react-strip-item').forEach(btn => {
+            btn.onclick = async e => {
+                e.stopPropagation();
+                await fetch('/api/post/' + wrap.dataset.postId + '/react', {
+                    method: 'POST', headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({ emoji: btn.dataset.emoji })
+                });
+                strip.classList.remove('open');
+                if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
+            };
+        });
+    });
+    // close strips on outside tap
+    if (!window._reactStripDocBound) {
+        window._reactStripDocBound = true;
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.post-text-wrap')) {
+                document.querySelectorAll('.react-strip.open').forEach(s => s.classList.remove('open'));
+            }
+        });
+    }
     document.querySelectorAll('.like-btn').forEach(btn => {
         btn.onclick = async e => {
             e.stopPropagation();
@@ -1594,7 +1631,15 @@ function formatMessage(content, isSuper) {
     if (body.startsWith('[photo]')) body = '<img class="media-clickable" data-type="photo" data-src="' + body.slice(7) + '" src="' + body.slice(7) + '" style="max-width:220px;border-radius:12px">';
     else if (body.startsWith('[circle]')) body = '<video class="circle-video" src="' + body.slice(8) + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()"></video>';
     else if (body.startsWith('[video]')) body = '<video src="' + body.slice(7) + '" controls playsinline style="max-width:220px;border-radius:12px"></video>';
-    else if (body.startsWith('[voice]')) body = '<audio src="' + body.slice(7) + '" controls style="max-width:220px"></audio>';
+    else if (body.startsWith('[voice]')) {
+        const src = body.slice(7);
+        body = '<div class="voice-msg" data-src="' + src + '">' +
+            '<button type="button" class="voice-msg-play"><i class="fa-solid fa-play"></i></button>' +
+            '<div class="voice-msg-wave">' + Array.from({length:16}, (_,i) => '<span style="height:' + (8 + (i*7)%18) + 'px"></span>').join('') + '</div>' +
+            '<span class="voice-msg-dur">0:00</span>' +
+            '<audio preload="metadata" src="' + src + '" style="display:none"></audio>' +
+            '</div>';
+    }
     else body = linkifyMentions(body);
     return (isSuper ? '<span style="font-size:11px;opacity:.85"><i class="fa-solid fa-bolt"></i> SUPER</span><br>' : '') + body;
 }
@@ -1632,6 +1677,7 @@ async function loadMessages(userId) {
         el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
     });
     bindMentions(box);
+    bindVoicePlayers(box);
     box.scrollTop = box.scrollHeight;
 }
 
@@ -1678,19 +1724,54 @@ document.getElementById('chat-file').onchange = async e => {
     socket.emit('send_message', { receiver_id: currentChatUserId, content: content, is_super: false });
     e.target.value = '';
 };
-let mediaRecorder = null, voiceChunks = [];
-document.getElementById('btn-voice').onclick = async () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop();
-        document.getElementById('btn-voice').classList.remove('active');
-        return;
+let mediaRecorder = null, voiceChunks = [], voiceStream = null, voiceTimer = null, voiceSecs = 0, voiceCancelled = false;
+
+function formatVoiceTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + ':' + String(sec).padStart(2, '0');
+}
+function showVoiceBar(on) {
+    const bar = document.getElementById('voice-rec-bar');
+    const input = document.querySelector('.chat-input-area');
+    if (!bar) return;
+    if (on) {
+        bar.classList.remove('hidden');
+        if (input) input.style.display = 'none';
+        document.getElementById('voice-rec-timer').textContent = '0:00';
+    } else {
+        bar.classList.add('hidden');
+        if (input) input.style.display = '';
+        document.getElementById('btn-voice')?.classList.remove('active');
     }
+}
+function stopVoiceRecording(send) {
+    voiceCancelled = !send;
+    if (voiceTimer) { clearInterval(voiceTimer); voiceTimer = null; }
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        try { mediaRecorder.stop(); } catch (e) {}
+    } else {
+        if (voiceStream) voiceStream.getTracks().forEach(t => t.stop());
+        voiceStream = null;
+        showVoiceBar(false);
+    }
+}
+async function startVoiceRecording() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') return;
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
+        voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+                     MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+        mediaRecorder = new MediaRecorder(voiceStream, mime ? { mimeType: mime } : undefined);
         voiceChunks = [];
-        mediaRecorder.ondataavailable = e => voiceChunks.push(e.data);
+        voiceSecs = 0;
+        voiceCancelled = false;
+        mediaRecorder.ondataavailable = e => { if (e.data && e.data.size) voiceChunks.push(e.data); };
         mediaRecorder.onstop = async () => {
+            if (voiceStream) voiceStream.getTracks().forEach(t => t.stop());
+            voiceStream = null;
+            showVoiceBar(false);
+            if (voiceCancelled || !voiceChunks.length || voiceSecs < 1) return;
             const blob = new Blob(voiceChunks, { type: 'audio/webm' });
             const fd = new FormData();
             fd.append('file', blob, 'voice.webm');
@@ -1698,16 +1779,63 @@ document.getElementById('btn-voice').onclick = async () => {
             const ud = await up.json();
             if (ud.url && currentChatUserId) {
                 socket.emit('send_message', { receiver_id: currentChatUserId, content: '[voice]' + ud.url, is_super: false });
-            }
-            stream.getTracks().forEach(t => t.stop());
+            } else if (ud.error) showToast('Ошибка', ud.error, '!');
         };
-        mediaRecorder.start();
-        document.getElementById('btn-voice').classList.add('active');
-        showToast('Запись', 'Нажми ещё раз чтобы отправить', '🎤');
+        mediaRecorder.start(200);
+        document.getElementById('btn-voice')?.classList.add('active');
+        showVoiceBar(true);
+        voiceTimer = setInterval(() => {
+            voiceSecs++;
+            const el = document.getElementById('voice-rec-timer');
+            if (el) el.textContent = formatVoiceTime(voiceSecs);
+            if (voiceSecs >= 120) stopVoiceRecording(true);
+        }, 1000);
     } catch (err) {
         showToast('Ошибка', 'Нет доступа к микрофону', '!');
     }
+}
+document.getElementById('btn-voice').onclick = () => {
+    if (mediaRecorder && mediaRecorder.state === 'recording') stopVoiceRecording(true);
+    else startVoiceRecording();
 };
+document.getElementById('btn-voice-stop')?.addEventListener('click', () => stopVoiceRecording(true));
+document.getElementById('btn-voice-cancel')?.addEventListener('click', () => stopVoiceRecording(false));
+
+function bindVoicePlayers(root) {
+    (root || document).querySelectorAll('.voice-msg').forEach(wrap => {
+        if (wrap.dataset.bound) return;
+        wrap.dataset.bound = '1';
+        const audio = wrap.querySelector('audio');
+        const btn = wrap.querySelector('.voice-msg-play');
+        const dur = wrap.querySelector('.voice-msg-dur');
+        if (!audio || !btn) return;
+        audio.addEventListener('loadedmetadata', () => {
+            if (dur && isFinite(audio.duration)) dur.textContent = formatVoiceTime(Math.round(audio.duration));
+        });
+        audio.addEventListener('timeupdate', () => {
+            if (dur && isFinite(audio.duration)) {
+                const left = Math.max(0, Math.round(audio.duration - audio.currentTime));
+                dur.textContent = formatVoiceTime(left);
+            }
+        });
+        audio.addEventListener('ended', () => {
+            btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+        });
+        btn.onclick = e => {
+            e.stopPropagation();
+            document.querySelectorAll('.voice-msg audio').forEach(a => {
+                if (a !== audio) { a.pause(); const b = a.closest('.voice-msg')?.querySelector('.voice-msg-play'); if (b) b.innerHTML = '<i class="fa-solid fa-play"></i>'; }
+            });
+            if (audio.paused) {
+                audio.play();
+                btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
+            } else {
+                audio.pause();
+                btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+            }
+        };
+    });
+}
 
 
 // ===== Video circles =====
@@ -1722,7 +1850,7 @@ async function startCircleRecording(mode) {
     try {
         if (circleStream) circleStream.getTracks().forEach(t => t.stop());
         circleStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: circleFacing, width: { ideal: 720 }, height: { ideal: 720 } },
+            video: { facingMode: { ideal: circleFacing }, width: { ideal: 720 }, height: { ideal: 720 } },
             audio: true
         });
         const preview = document.getElementById('circle-preview');
@@ -1796,32 +1924,49 @@ document.getElementById('btn-circle-cancel')?.addEventListener('click', () => {
     if (preview) preview.srcObject = null;
 });
 document.getElementById('btn-circle-flip')?.addEventListener('click', async () => {
-    circleFacing = circleFacing === 'user' ? 'environment' : 'user';
-    const wasRecording = circleRecorder && circleRecorder.state === 'recording';
-    const savedSecs = circleSecs;
-    // restart stream with new camera, keep recording if possible
+    const nextFacing = circleFacing === 'user' ? 'environment' : 'user';
     try {
-        if (circleStream) circleStream.getTracks().forEach(t => t.stop());
-        circleStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: circleFacing, width: { ideal: 720 }, height: { ideal: 720 } },
-            audio: true
+        // Prefer swapping only the video track so MediaRecorder keeps going
+        const newVideoStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: nextFacing }, width: { ideal: 720 }, height: { ideal: 720 } },
+            audio: false
         });
+        const newTrack = newVideoStream.getVideoTracks()[0];
+        if (!newTrack) throw new Error('no video');
+        circleFacing = nextFacing;
+
+        if (circleStream) {
+            const oldTrack = circleStream.getVideoTracks()[0];
+            if (oldTrack) {
+                try {
+                    // replaceTrack on sender isn't available; mutate MediaStream
+                    circleStream.removeTrack(oldTrack);
+                    oldTrack.stop();
+                } catch (e) {}
+            }
+            circleStream.addTrack(newTrack);
+        } else {
+            circleStream = newVideoStream;
+        }
         const preview = document.getElementById('circle-preview');
-        preview.srcObject = circleStream;
-        if (wasRecording) {
-            // new recorder continues accumulating - start fresh recorder on new stream
-            const mime = MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
-            const oldOnStop = circleRecorder.onstop;
-            try { circleRecorder.onstop = null; circleRecorder.stop(); } catch(e) {}
+        if (preview) {
+            preview.srcObject = null;
+            preview.srcObject = circleStream;
+            try { await preview.play(); } catch (e) {}
+        }
+        // If recorder died after track swap (some browsers), soft-restart recorder only
+        if (circleRecorder && circleRecorder.state !== 'recording' && circleStream) {
+            const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' :
+                         MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+            const prevOnStop = circleRecorder.onstop;
             circleRecorder = new MediaRecorder(circleStream, mime ? { mimeType: mime } : undefined);
-            circleRecorder.ondataavailable = e => { if (e.data.size) circleChunks.push(e.data); };
-            circleRecorder.onstop = oldOnStop;
-            circleRecorder.start(200);
-            circleSecs = savedSecs;
+            circleRecorder.ondataavailable = e => { if (e.data && e.data.size) circleChunks.push(e.data); };
+            circleRecorder.onstop = prevOnStop;
+            try { circleRecorder.start(200); } catch (e) {}
         }
     } catch (err) {
+        console.warn('flip camera', err);
         showToast('Ошибка', 'Не удалось переключить камеру', '!');
-        circleFacing = circleFacing === 'user' ? 'environment' : 'user';
     }
 });
 document.getElementById('circle-preview')?.addEventListener('click', stopCircle);
@@ -1852,6 +1997,7 @@ socket.on('new_message', data => {
             el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
         });
         bindMentions(box);
+        bindVoicePlayers(div);
         if (!data.is_mine) notifyUser('message');
     } else if (!data.is_mine) {
         notifyUser('message');
@@ -2022,3 +2168,117 @@ document.getElementById('btn-confirm-bulk-delete')?.addEventListener('click', as
     loadMyChannels();
     loadProfile();
 });
+
+
+// ===== Theme & font size =====
+const THEME_PALETTES = {
+    violet:  { name: 'Фиолет', bg:'#0c0a14', bg2:'#130f1f', card:'#1a1528', card2:'#221c35', border:'#2e2645', text:'#f3eefc', muted:'#a89bc4', accent:'#8b5cf6', accent2:'#a78bfa', accent3:'#c4b5fd' },
+    ocean:   { name: 'Океан', bg:'#0a1220', bg2:'#0f1a2e', card:'#152238', card2:'#1c2d48', border:'#243a5c', text:'#e8f1ff', muted:'#8aa4c7', accent:'#3b82f6', accent2:'#60a5fa', accent3:'#93c5fd' },
+    emerald: { name: 'Изумруд', bg:'#0a1410', bg2:'#0f1f18', card:'#152820', card2:'#1c3329', border:'#264a38', text:'#e8fff4', muted:'#8ab8a0', accent:'#10b981', accent2:'#34d399', accent3:'#6ee7b7' },
+    rose:    { name: 'Роза', bg:'#140a12', bg2:'#1f0f1a', card:'#281520', card2:'#351c2a', border:'#4a263a', text:'#ffedf5', muted:'#c49aaf', accent:'#ec4899', accent2:'#f472b6', accent3:'#f9a8d4' },
+    amber:   { name: 'Янтарь', bg:'#14100a', bg2:'#1f180f', card:'#282015', card2:'#352a1c', border:'#4a3a26', text:'#fff8ed', muted:'#c4b08a', accent:'#f59e0b', accent2:'#fbbf24', accent3:'#fcd34d' },
+    crimson: { name: 'Багровый', bg:'#140a0a', bg2:'#1f0f0f', card:'#281515', card2:'#351c1c', border:'#4a2626', text:'#ffeeee', muted:'#c49a9a', accent:'#ef4444', accent2:'#f87171', accent3:'#fca5a5' },
+    cyan:    { name: 'Циан', bg:'#0a1414', bg2:'#0f1f1f', card:'#152828', card2:'#1c3333', border:'#264a4a', text:'#e8ffff', muted:'#8ab8b8', accent:'#06b6d4', accent2:'#22d3ee', accent3:'#67e8f9' },
+    slate:   { name: 'Сланец', bg:'#0c0e12', bg2:'#12151c', card:'#1a1e28', card2:'#222833', border:'#2e3545', text:'#eef1f8', muted:'#9aa3b8', accent:'#64748b', accent2:'#94a3b8', accent3:'#cbd5e1' },
+    indigo:  { name: 'Индиго', bg:'#0a0c18', bg2:'#0f1224', card:'#151a32', card2:'#1c2240', border:'#262e55', text:'#eef0ff', muted:'#9aa3d0', accent:'#6366f1', accent2:'#818cf8', accent3:'#a5b4fc' },
+    mango:   { name: 'Манго', bg:'#141208', bg2:'#1f1b0c', card:'#28240f', card2:'#353014', border:'#4a441c', text:'#fffce8', muted:'#c4bc8a', accent:'#eab308', accent2:'#facc15', accent3:'#fde047' },
+    grape:   { name: 'Виноград', bg:'#100a14', bg2:'#180f20', card:'#22152c', card2:'#2c1c38', border:'#3d2850', text:'#f8eeff', muted:'#b49ac8', accent:'#a855f7', accent2:'#c084fc', accent3:'#d8b4fe' },
+    mint:    { name: 'Мята', bg:'#081412', bg2:'#0c1e1a', card:'#122a24', card2:'#183630', border:'#204840', text:'#e8fff8', muted:'#8ab8ac', accent:'#14b8a6', accent2:'#2dd4bf', accent3:'#5eead4' },
+    sunset:  { name: 'Закат', bg:'#140c0a', bg2:'#1f140f', card:'#281c15', card2:'#35251c', border:'#4a3426', text:'#fff5ed', muted:'#c4a890', accent:'#f97316', accent2:'#fb923c', accent3:'#fdba74' },
+    midnight:{ name: 'Полночь', bg:'#050508', bg2:'#0a0a10', card:'#12121a', card2:'#1a1a24', border:'#282834', text:'#e8e8f0', muted:'#8888a0', accent:'#7c3aed', accent2:'#8b5cf6', accent3:'#a78bfa' },
+    sakura:  { name: 'Сакура', bg:'#140e12', bg2:'#1c1418', card:'#261c22', card2:'#32242c', border:'#453038', text:'#fff0f5', muted:'#c4a0b0', accent:'#db2777', accent2:'#ec4899', accent3:'#f9a8d4' },
+};
+
+let _themeDraft = null;
+let _fontDraft = 16;
+
+function applyThemeVars(p) {
+    if (!p) return;
+    const r = document.documentElement;
+    r.style.setProperty('--bg', p.bg);
+    r.style.setProperty('--bg2', p.bg2);
+    r.style.setProperty('--card', p.card);
+    r.style.setProperty('--card2', p.card2);
+    r.style.setProperty('--border', p.border);
+    r.style.setProperty('--text', p.text);
+    r.style.setProperty('--muted', p.muted);
+    r.style.setProperty('--accent', p.accent);
+    r.style.setProperty('--accent2', p.accent2);
+    r.style.setProperty('--accent3', p.accent3);
+    r.style.setProperty('--purple-glow', p.accent + '59');
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', p.accent);
+}
+function applyFontSize(px) {
+    document.documentElement.style.fontSize = px + 'px';
+}
+function loadSavedTheme() {
+    try {
+        const key = localStorage.getItem('sklews_theme') || 'violet';
+        const font = parseInt(localStorage.getItem('sklews_font') || '16', 10);
+        applyThemeVars(THEME_PALETTES[key] || THEME_PALETTES.violet);
+        applyFontSize(font);
+        _themeDraft = key;
+        _fontDraft = font;
+    } catch (e) {}
+}
+function renderThemeGrid() {
+    const grid = document.getElementById('theme-palette-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    Object.entries(THEME_PALETTES).forEach(([key, p]) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'theme-swatch' + (key === _themeDraft ? ' active' : '');
+        b.style.background = 'linear-gradient(135deg, ' + p.bg + ' 0%, ' + p.card + ' 55%, ' + p.accent + ' 100%)';
+        b.innerHTML = '<span>' + p.name + '</span><span class="dots"><i style="background:' + p.accent + '"></i><i style="background:' + p.accent2 + '"></i><i style="background:' + p.card + ';border:1px solid rgba(255,255,255,.3)"></i></span>';
+        b.onclick = () => {
+            _themeDraft = key;
+            applyThemeVars(p);
+            renderThemeGrid();
+        };
+        grid.appendChild(b);
+    });
+}
+function syncFontButtons() {
+    document.querySelectorAll('.font-size-btn').forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.size, 10) === _fontDraft);
+    });
+}
+document.getElementById('btn-open-theme')?.addEventListener('click', () => {
+    document.getElementById('modal-settings')?.classList.add('hidden');
+    _themeDraft = localStorage.getItem('sklews_theme') || 'violet';
+    _fontDraft = parseInt(localStorage.getItem('sklews_font') || '16', 10);
+    renderThemeGrid();
+    syncFontButtons();
+    document.getElementById('modal-theme').classList.remove('hidden');
+});
+document.getElementById('btn-theme-close')?.addEventListener('click', () => {
+    // restore saved if not saved draft
+    loadSavedTheme();
+    document.getElementById('modal-theme').classList.add('hidden');
+});
+document.getElementById('btn-theme-save')?.addEventListener('click', () => {
+    localStorage.setItem('sklews_theme', _themeDraft || 'violet');
+    localStorage.setItem('sklews_font', String(_fontDraft || 16));
+    applyThemeVars(THEME_PALETTES[_themeDraft] || THEME_PALETTES.violet);
+    applyFontSize(_fontDraft);
+    document.getElementById('modal-theme').classList.add('hidden');
+    showToast('Оформление', 'Сохранено', '✓');
+});
+document.getElementById('btn-theme-reset')?.addEventListener('click', () => {
+    _themeDraft = 'violet';
+    _fontDraft = 16;
+    applyThemeVars(THEME_PALETTES.violet);
+    applyFontSize(16);
+    renderThemeGrid();
+    syncFontButtons();
+});
+document.getElementById('font-size-row')?.addEventListener('click', e => {
+    const btn = e.target.closest('.font-size-btn');
+    if (!btn) return;
+    _fontDraft = parseInt(btn.dataset.size, 10);
+    applyFontSize(_fontDraft);
+    syncFontButtons();
+});
+loadSavedTheme();
