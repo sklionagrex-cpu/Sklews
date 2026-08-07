@@ -163,6 +163,16 @@ class Comment(db.Model):
     media_type = db.Column(db.String(20), default='')  # photo
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+class MediaFile(db.Model):
+    """Persistent media storage in DB (survives Render redeploys)."""
+    id = db.Column(db.String(32), primary_key=True)
+    filename = db.Column(db.String(200), default='')
+    content_type = db.Column(db.String(100), default='application/octet-stream')
+    data = db.Column(db.LargeBinary, nullable=False)
+    size = db.Column(db.Integer, default=0)
+    user_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 def current_user():
     if 'user_id' in session:
         u = User.query.get(session['user_id'])
@@ -1377,36 +1387,99 @@ def update_privacy():
 
 
 import uuid
-from flask import send_from_directory
+from flask import send_from_directory, Response
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 ALLOWED_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'webm', 'mov', 'mp3', 'ogg', 'wav', 'm4a'}
+MAX_UPLOAD_BYTES = 12 * 1024 * 1024  # 12 MB
+
+MIME_MAP = {
+    'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp',
+    'mp4': 'video/mp4', 'webm': 'video/webm', 'mov': 'video/quicktime',
+    'mp3': 'audio/mpeg', 'ogg': 'audio/ogg', 'wav': 'audio/wav', 'm4a': 'audio/mp4',
+}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXT
 
+def save_media_to_db(file_storage, user_id=None):
+    """Read file into MediaFile row; return public URL /media/<id>."""
+    if not file_storage or not file_storage.filename:
+        raise ValueError('Пустой файл')
+    if not allowed_file(file_storage.filename):
+        raise ValueError('Неподдерживаемый формат')
+    ext = file_storage.filename.rsplit('.', 1)[1].lower()
+    data = file_storage.read()
+    if not data:
+        raise ValueError('Пустой файл')
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise ValueError('Файл слишком большой (макс. 12 МБ)')
+    mid = uuid.uuid4().hex
+    ctype = file_storage.mimetype or MIME_MAP.get(ext, 'application/octet-stream')
+    media = MediaFile(
+        id=mid,
+        filename=(file_storage.filename or mid)[:200],
+        content_type=ctype[:100],
+        data=data,
+        size=len(data),
+        user_id=user_id,
+    )
+    db.session.add(media)
+    db.session.commit()
+    return f'/media/{mid}'
+
+@app.route('/media/<media_id>')
+def serve_media_db(media_id):
+    media = MediaFile.query.get(media_id)
+    if not media:
+        # legacy disk fallback
+        path = os.path.join(UPLOAD_FOLDER, media_id)
+        if os.path.isfile(path):
+            return send_from_directory(UPLOAD_FOLDER, media_id, max_age=86400)
+        return jsonify({'error': 'not found'}), 404
+    return Response(
+        media.data,
+        mimetype=media.content_type or 'application/octet-stream',
+        headers={
+            'Cache-Control': 'public, max-age=604800',
+            'Content-Length': str(media.size or len(media.data)),
+        },
+    )
+
 @app.route('/uploads/<path:filename>')
 @app.route('/static/uploads/<path:filename>')
 def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename, max_age=86400)
+    # Prefer DB if id-like without extension
+    base = filename.split('/')[-1]
+    stem = base.rsplit('.', 1)[0] if '.' in base else base
+    media = MediaFile.query.get(stem) or MediaFile.query.get(base)
+    if media:
+        return Response(
+            media.data,
+            mimetype=media.content_type or 'application/octet-stream',
+            headers={'Cache-Control': 'public, max-age=604800'},
+        )
+    path = os.path.join(UPLOAD_FOLDER, filename)
+    if os.path.isfile(path):
+        return send_from_directory(UPLOAD_FOLDER, filename, max_age=86400)
+    return jsonify({'error': 'not found'}), 404
 
 @app.route('/api/upload', methods=['POST'])
 @login_required
 def upload_file():
+    user = current_user()
     if 'file' not in request.files:
         return jsonify({'error': 'Нет файла'}), 400
-    f = request.files['file']
-    if not f or not f.filename:
-        return jsonify({'error': 'Пустой файл'}), 400
-    if not allowed_file(f.filename):
-        return jsonify({'error': 'Неподдерживаемый формат файла'}), 400
-    ext = f.filename.rsplit('.', 1)[1].lower()
-    name = f"{uuid.uuid4().hex}.{ext}"
-    path = os.path.join(UPLOAD_FOLDER, name)
-    f.save(path)
-    # also keep under static path for clients that expect /static/uploads
-    return jsonify({'url': f"/uploads/{name}"})
+    try:
+        url = save_media_to_db(request.files['file'], user_id=user.id if user else None)
+        return jsonify({'url': url})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        print('upload error:', e, flush=True)
+        return jsonify({'error': 'Ошибка сохранения'}), 500
 
 @app.route('/api/profile/avatar', methods=['POST'])
 @login_required
@@ -1414,15 +1487,16 @@ def update_avatar():
     user = current_user()
     if 'file' not in request.files:
         return jsonify({'error': 'Нет файла'}), 400
-    f = request.files['file']
-    if not f or not f.filename or not allowed_file(f.filename):
-        return jsonify({'error': 'Только изображения'}), 400
-    ext = f.filename.rsplit('.', 1)[1].lower()
-    name = f"avatar_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
-    f.save(os.path.join(UPLOAD_FOLDER, name))
-    user.avatar = f"/uploads/{name}"
-    db.session.commit()
-    return jsonify({'status': 'ok', 'avatar': user.avatar})
+    try:
+        url = save_media_to_db(request.files['file'], user_id=user.id)
+        user.avatar = url
+        db.session.commit()
+        return jsonify({'status': 'ok', 'avatar': user.avatar})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Ошибка сохранения'}), 500
 
 @app.route('/api/profile/banner', methods=['POST'])
 @login_required
@@ -1430,15 +1504,37 @@ def update_banner():
     user = current_user()
     if 'file' not in request.files:
         return jsonify({'error': 'Нет файла'}), 400
-    f = request.files['file']
-    if not f or not f.filename or not allowed_file(f.filename):
-        return jsonify({'error': 'Только изображения'}), 400
-    ext = f.filename.rsplit('.', 1)[1].lower()
-    name = f"banner_{user.id}_{uuid.uuid4().hex[:8]}.{ext}"
-    f.save(os.path.join(UPLOAD_FOLDER, name))
-    user.banner = f"/uploads/{name}"
-    db.session.commit()
-    return jsonify({'status': 'ok', 'banner': user.banner})
+    try:
+        url = save_media_to_db(request.files['file'], user_id=user.id)
+        user.banner = url
+        db.session.commit()
+        return jsonify({'status': 'ok', 'banner': user.banner})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Ошибка сохранения'}), 500
+
+@app.route('/api/channel/<int:channel_id>/avatar', methods=['POST'])
+@login_required
+def update_channel_avatar(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id and not is_admin_user(user):
+        return jsonify({'error': 'Только владелец'}), 403
+    if 'file' not in request.files:
+        return jsonify({'error': 'Нет файла'}), 400
+    try:
+        url = save_media_to_db(request.files['file'], user_id=user.id)
+        ch.avatar = url
+        db.session.commit()
+        cache_clear_prefix('channels:')
+        return jsonify({'status': 'ok', 'avatar': ch.avatar})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Ошибка сохранения'}), 500
 
 
 # ==================== ADMIN ====================

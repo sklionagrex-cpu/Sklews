@@ -891,20 +891,66 @@ document.getElementById('btn-confirm-create').onclick = async () => {
     }
 };
 
+let pendingEditChannelAvatar = null;
 document.getElementById('btn-edit-channel').onclick = async () => {
     const res = await fetch('/api/channel/' + currentChannelId);
     const ch = await res.json();
     document.getElementById('edit-channel-name').value = ch.name;
     document.getElementById('edit-channel-desc').value = ch.description || '';
+    pendingEditChannelAvatar = null;
+    const prev = document.getElementById('edit-channel-avatar-preview');
+    if (prev) {
+        prev.innerHTML = '';
+        if (ch.avatar) {
+            const img = document.createElement('img');
+            img.src = ch.avatar;
+            img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit';
+            prev.appendChild(img);
+        } else {
+            prev.textContent = (ch.name || '+')[0].toUpperCase();
+        }
+    }
     document.getElementById('modal-edit-channel').classList.remove('hidden');
 };
-document.getElementById('btn-cancel-edit-ch').onclick = () => document.getElementById('modal-edit-channel').classList.add('hidden');
+document.getElementById('edit-channel-avatar-preview')?.addEventListener('click', () => {
+    document.getElementById('edit-channel-avatar')?.click();
+});
+document.getElementById('edit-channel-avatar')?.addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    pendingEditChannelAvatar = f;
+    const prev = document.getElementById('edit-channel-avatar-preview');
+    if (prev) {
+        prev.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(f);
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit';
+        prev.appendChild(img);
+    }
+    e.target.value = '';
+});
+document.getElementById('btn-cancel-edit-ch').onclick = () => {
+    pendingEditChannelAvatar = null;
+    document.getElementById('modal-edit-channel').classList.add('hidden');
+};
 document.getElementById('btn-save-edit-ch').onclick = async () => {
     const name = document.getElementById('edit-channel-name').value.trim();
     const description = document.getElementById('edit-channel-desc').value.trim();
+    let avatar = null;
+    if (pendingEditChannelAvatar) {
+        const fd = new FormData();
+        fd.append('file', pendingEditChannelAvatar);
+        const up = await fetch('/api/channel/' + currentChannelId + '/avatar', { method: 'POST', body: fd });
+        const ud = await up.json();
+        if (ud.error) return showToast('Аватар', ud.error, '!');
+        avatar = ud.avatar;
+        pendingEditChannelAvatar = null;
+    }
+    const body = { name: name, description: description };
+    if (avatar) body.avatar = avatar;
     const res = await fetch('/api/channel/' + currentChannelId + '/update', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ name: name, description: description })
+        body: JSON.stringify(body)
     });
     const data = await res.json();
     if (data.error) showToast('Ошибка', data.error, '!');
@@ -912,6 +958,8 @@ document.getElementById('btn-save-edit-ch').onclick = async () => {
         document.getElementById('modal-edit-channel').classList.add('hidden');
         showToast('Сохранено', 'Канал обновлён', '✓');
         openChannel(currentChannelId);
+        loadMyChannels();
+        loadHome();
     }
 };
 
