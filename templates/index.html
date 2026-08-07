@@ -242,6 +242,7 @@
             <div class="chat-input-area">
                 <button id="btn-super" class="btn-super" title="Супер"><i class="fa-solid fa-bolt"></i></button>
                 <button id="btn-voice" class="btn-super" title="Голос"><i class="fa-solid fa-microphone"></i></button>
+                <button id="btn-circle" class="btn-super" title="Видео-кружок"><i class="fa-solid fa-circle"></i></button>
                 <input type="file" id="chat-file" accept="image/*,video/*" style="display:none">
                 <button id="btn-attach" class="btn-super" title="Файл"><i class="fa-solid fa-paperclip"></i></button>
                 <input type="text" id="message-input" placeholder="Сообщение..." autocomplete="off">
@@ -345,8 +346,15 @@
         <div id="modal-comments" class="modal hidden">
             <div class="modal-content" style="max-height:80vh;display:flex;flex-direction:column">
                 <h3>Комментарии</h3>
+                <p style="font-size:11px;color:var(--muted);margin:-4px 0 10px">Зажми комментарий, чтобы удалить (автор / владелец)</p>
                 <div id="comments-list" style="flex:1;overflow-y:auto;margin-bottom:12px"></div>
-                <div style="display:flex;gap:8px">
+                <div id="comment-photo-preview" style="display:none;margin-bottom:8px">
+                    <img id="comment-photo-img" style="max-height:120px;border-radius:10px;max-width:100%">
+                    <button id="btn-clear-comment-photo" class="btn btn-secondary btn-sm" style="margin-top:6px">Убрать фото</button>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <button id="btn-comment-photo" class="btn-super" title="Фото" style="flex-shrink:0"><i class="fa-solid fa-image"></i></button>
+                    <input type="file" id="comment-photo-input" accept="image/*" style="display:none">
                     <input type="text" id="comment-input" placeholder="Комментарий..." style="flex:1;margin:0">
                     <button id="btn-send-comment" class="btn btn-primary btn-sm"><i class="fa-solid fa-paper-plane"></i></button>
                 </div>
@@ -370,7 +378,10 @@
                 <div id="roles-list" class="roles-modal-list"></div>
                 <div class="roles-add-box">
                     <label>Назначить роль</label>
-                    <input type="text" id="role-username" placeholder="Логин пользователя" style="margin-bottom:8px">
+                    <button id="btn-pick-role-user" class="btn btn-secondary full" style="margin-bottom:8px;justify-content:flex-start;text-align:left">
+                        <i class="fa-solid fa-user-plus"></i> <span id="role-picked-label">Выбрать пользователя</span>
+                    </button>
+                    <input type="hidden" id="role-picked-id" value="">
                     <select id="role-select" style="width:100%;margin-bottom:10px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:12px;color:var(--text)">
                         <option value="coauthor">✦ Соавтор — может публиковать</option>
                         <option value="moderator">🛡 Модератор — модерация</option>
@@ -379,6 +390,26 @@
                     <button id="btn-add-role" class="btn btn-primary full"><i class="fa-solid fa-plus"></i> Назначить</button>
                 </div>
                 <button id="btn-close-roles" class="btn btn-secondary full" style="margin-top:12px">Закрыть</button>
+            </div>
+        </div>
+
+        
+        <div id="modal-role-pick" class="modal hidden">
+            <div class="modal-content" style="max-height:80vh;display:flex;flex-direction:column">
+                <h3>Выбрать пользователя</h3>
+                <input type="text" id="role-pick-search" placeholder="Поиск по логину..." style="margin-bottom:12px">
+                <div id="role-pick-list" style="flex:1;overflow-y:auto;min-height:120px"></div>
+                <button id="btn-close-role-pick" class="btn btn-secondary full" style="margin-top:12px">Отмена</button>
+            </div>
+        </div>
+
+        
+        <div id="circle-recorder" class="modal hidden" style="align-items:center;background:rgba(0,0,0,0.92)">
+            <div style="text-align:center;padding:20px;width:100%">
+                <video id="circle-preview" autoplay muted playsinline style="width:240px;height:240px;border-radius:50%;object-fit:cover;background:#111;border:3px solid var(--accent)"></video>
+                <p id="circle-timer" style="margin:16px 0 8px;font-size:18px;font-weight:600">0:00</p>
+                <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Удерживай до 60 сек · отпусти чтобы отправить</p>
+                <button id="btn-circle-cancel" class="btn btn-secondary">Отмена</button>
             </div>
         </div>
 

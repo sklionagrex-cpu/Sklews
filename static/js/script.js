@@ -12,6 +12,28 @@ let anChannelId = null;
 let viewingPosts = false;
 let reactPostId = null;
 
+// ===== Notifications: sound + vibration =====
+function notifyUser(type) {
+    try {
+        if (navigator.vibrate) navigator.vibrate(type === 'message' ? [40, 30, 40] : [20, 40, 20]);
+    } catch (e) {}
+    try {
+        const ctx = window._audioCtx || (window._audioCtx = new (window.AudioContext || window.webkitAudioContext)());
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.type = 'sine';
+        if (type === 'message') { o.frequency.value = 880; g.gain.value = 0.08; }
+        else if (type === 'friend') { o.frequency.value = 660; g.gain.value = 0.07; }
+        else { o.frequency.value = 520; g.gain.value = 0.06; }
+        o.start();
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+        o.stop(ctx.currentTime + 0.2);
+    } catch (e) {}
+}
+
+
+
 document.querySelectorAll('.nav-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -261,18 +283,50 @@ async function openRolesModal() {
     if (!(roles || []).length) list.innerHTML = '<div class="empty-state" style="padding:20px">Пока только владелец</div>';
 }
 document.getElementById('btn-close-roles').onclick = () => document.getElementById('modal-roles').classList.add('hidden');
+
+document.getElementById('btn-pick-role-user')?.addEventListener('click', () => {
+    document.getElementById('role-pick-search').value = '';
+    document.getElementById('role-pick-list').innerHTML = '<div class="empty-state">Введите логин для поиска</div>';
+    document.getElementById('modal-role-pick').classList.remove('hidden');
+});
+document.getElementById('btn-close-role-pick')?.addEventListener('click', () => {
+    document.getElementById('modal-role-pick').classList.add('hidden');
+});
+document.getElementById('role-pick-search')?.addEventListener('input', async e => {
+    const q = e.target.value.trim();
+    const list = document.getElementById('role-pick-list');
+    if (q.length < 2) { list.innerHTML = '<div class="empty-state">Введите логин для поиска</div>'; return; }
+    const res = await fetch('/api/users/search?q=' + encodeURIComponent(q));
+    const users = await res.json();
+    list.innerHTML = '';
+    if (!users.length) { list.innerHTML = '<div class="empty-state">Никого не найдено</div>'; return; }
+    users.forEach(u => {
+        const card = document.createElement('div');
+        card.className = 'role-card';
+        card.style.cursor = 'pointer';
+        card.innerHTML = avatarHtml(u.username, u.avatar) +
+            '<div class="role-card-info"><h4>' + escapeHtml(u.username) + '</h4>' +
+            '<span style="font-size:12px;color:var(--muted)">' + escapeHtml(u.status || '') + '</span></div>';
+        card.onclick = () => {
+            document.getElementById('role-picked-id').value = u.id;
+            document.getElementById('role-picked-label').textContent = u.username;
+            document.getElementById('modal-role-pick').classList.add('hidden');
+        };
+        list.appendChild(card);
+    });
+});
+
 document.getElementById('btn-add-role').onclick = async () => {
-    const username = document.getElementById('role-username').value.trim();
+    const userId = document.getElementById('role-picked-id').value;
     const role = document.getElementById('role-select').value;
-    if (!username) return showToast('Ошибка', 'Введите логин', '!');
-    const search = await fetch('/api/users/search?q=' + encodeURIComponent(username));
-    const users = await search.json();
-    const u = users.find(x => x.username.toLowerCase() === username.toLowerCase());
-    if (!u) return showToast('Ошибка', 'Не найден', '!');
+    if (!userId) return showToast('Ошибка', 'Выберите пользователя', '!');
     await fetch('/api/channel/' + currentChannelId + '/roles', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ user_id: u.id, role })
+        body: JSON.stringify({ user_id: parseInt(userId), role })
     });
+    document.getElementById('role-picked-id').value = '';
+    document.getElementById('role-picked-label').textContent = 'Выбрать пользователя';
+    showToast('Роль', 'Назначена', '✓');
     openRolesModal();
 };
 
@@ -904,8 +958,13 @@ document.getElementById('btn-analytics').onclick = () => {
     loadAnalyticsTab();
 };
 
+let pendingCommentPhoto = null;
+
 async function openComments(postId) {
     currentCommentPostId = postId;
+    pendingCommentPhoto = null;
+    const prev = document.getElementById('comment-photo-preview');
+    if (prev) prev.style.display = 'none';
     document.getElementById('modal-comments').classList.remove('hidden');
     const res = await fetch('/api/post/' + postId + '/comments');
     const comments = await res.json();
@@ -915,27 +974,79 @@ async function openComments(postId) {
         const av = c.avatar
             ? '<div class="avatar comment-av" style="background-image:url(' + c.avatar + ');background-size:cover;background-position:center"></div>'
             : '<div class="avatar comment-av">' + (c.username ? c.username[0].toUpperCase() : '?') + '</div>';
+        let media = '';
+        if (c.media_url && c.media_type === 'photo') {
+            media = '<img class="comment-photo media-clickable" data-type="photo" data-src="' + c.media_url + '" src="' + c.media_url + '" style="max-width:160px;border-radius:10px;margin-top:6px;display:block">';
+        }
+        const text = (c.content && c.content !== '📷') ? '<div class="comment-text">' + escapeHtml(c.content) + '</div>' : '';
         const row = document.createElement('div');
         row.className = 'comment-row';
+        row.dataset.cid = c.id;
         row.innerHTML = av +
             '<div class="comment-body">' +
             '<div class="comment-nick" data-uid="' + c.user_id + '">' + escapeHtml(c.username) + '</div>' +
-            '<div class="comment-text">' + escapeHtml(c.content) + '</div>' +
-            '<div class="comment-time">' + c.created_at + '</div></div>';
+            text + media +
+            '<div class="comment-time">' + c.created_at + (c.can_delete ? ' · зажми для удаления' : '') + '</div></div>';
         row.querySelector('.comment-nick').onclick = () => openUserProfile(c.user_id);
         row.querySelector('.comment-av')?.addEventListener('click', () => openUserProfile(c.user_id));
+        row.querySelectorAll('.media-clickable').forEach(el => {
+            el.onclick = e => { e.stopPropagation(); openLightbox(el.dataset.type, el.dataset.src); };
+        });
+        if (c.can_delete) {
+            let timer = null;
+            const start = () => { timer = setTimeout(async () => {
+                if (!confirm('Удалить комментарий?')) return;
+                await fetch('/api/post/' + postId + '/comments/' + c.id, { method: 'DELETE' });
+                openComments(postId);
+                if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
+            }, 550); };
+            const cancel = () => clearTimeout(timer);
+            row.addEventListener('touchstart', start, { passive: true });
+            row.addEventListener('touchend', cancel);
+            row.addEventListener('touchmove', cancel);
+            row.addEventListener('mousedown', start);
+            row.addEventListener('mouseup', cancel);
+            row.addEventListener('mouseleave', cancel);
+        }
         list.appendChild(row);
     });
 }
 document.getElementById('btn-close-comments').onclick = () => document.getElementById('modal-comments').classList.add('hidden');
+document.getElementById('btn-comment-photo')?.addEventListener('click', () => document.getElementById('comment-photo-input').click());
+document.getElementById('comment-photo-input')?.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    pendingCommentPhoto = f;
+    const img = document.getElementById('comment-photo-img');
+    const prev = document.getElementById('comment-photo-preview');
+    img.src = URL.createObjectURL(f);
+    prev.style.display = 'block';
+    e.target.value = '';
+});
+document.getElementById('btn-clear-comment-photo')?.addEventListener('click', () => {
+    pendingCommentPhoto = null;
+    document.getElementById('comment-photo-preview').style.display = 'none';
+});
 document.getElementById('btn-send-comment').onclick = async () => {
     const content = document.getElementById('comment-input').value.trim();
-    if (!content || !currentCommentPostId) return;
+    if ((!content && !pendingCommentPhoto) || !currentCommentPostId) return;
+    let media_url = '', media_type = '';
+    if (pendingCommentPhoto) {
+        const fd = new FormData();
+        fd.append('file', pendingCommentPhoto);
+        const up = await fetch('/api/upload', { method: 'POST', body: fd });
+        const ud = await up.json();
+        if (ud.error) return showToast('Ошибка', ud.error, '!');
+        media_url = ud.url;
+        media_type = 'photo';
+    }
     await fetch('/api/post/' + currentCommentPostId + '/comments', {
         method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ content: content })
+        body: JSON.stringify({ content: content || '📷', media_url, media_type })
     });
     document.getElementById('comment-input').value = '';
+    pendingCommentPhoto = null;
+    document.getElementById('comment-photo-preview').style.display = 'none';
     openComments(currentCommentPostId);
     if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
 };
@@ -1093,6 +1204,7 @@ async function loadChatsList() {
 function formatMessage(content, isSuper) {
     let body = content || '';
     if (body.startsWith('[photo]')) body = '<img class="media-clickable" data-type="photo" data-src="' + body.slice(7) + '" src="' + body.slice(7) + '" style="max-width:220px;border-radius:12px">';
+    else if (body.startsWith('[circle]')) body = '<video class="circle-video" src="' + body.slice(8) + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()" style="width:180px;height:180px;border-radius:50%;object-fit:cover;background:#111;display:block"></video>';
     else if (body.startsWith('[video]')) body = '<video src="' + body.slice(7) + '" controls playsinline style="max-width:220px;border-radius:12px"></video>';
     else if (body.startsWith('[voice]')) body = '<audio src="' + body.slice(7) + '" controls style="max-width:220px"></audio>';
     else body = escapeHtml(body);
@@ -1178,6 +1290,74 @@ document.getElementById('btn-voice').onclick = async () => {
     }
 };
 
+
+// ===== Video circles =====
+let circleRecorder = null, circleChunks = [], circleStream = null, circleTimer = null, circleSecs = 0;
+
+document.getElementById('btn-circle')?.addEventListener('click', async () => {
+    if (!currentChatUserId) return;
+    try {
+        circleStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: 480, height: 480 },
+            audio: true
+        });
+        const preview = document.getElementById('circle-preview');
+        preview.srcObject = circleStream;
+        document.getElementById('circle-recorder').classList.remove('hidden');
+        circleChunks = [];
+        circleSecs = 0;
+        document.getElementById('circle-timer').textContent = '0:00';
+        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' :
+                     MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '';
+        circleRecorder = new MediaRecorder(circleStream, mime ? { mimeType: mime } : undefined);
+        circleRecorder.ondataavailable = e => { if (e.data.size) circleChunks.push(e.data); };
+        circleRecorder.onstop = async () => {
+            clearInterval(circleTimer);
+            if (circleStream) circleStream.getTracks().forEach(t => t.stop());
+            document.getElementById('circle-recorder').classList.add('hidden');
+            preview.srcObject = null;
+            if (!circleChunks.length || circleSecs < 1) return;
+            const blob = new Blob(circleChunks, { type: 'video/webm' });
+            const fd = new FormData();
+            fd.append('file', blob, 'circle.webm');
+            const up = await fetch('/api/upload', { method: 'POST', body: fd });
+            const ud = await up.json();
+            if (ud.url && currentChatUserId) {
+                socket.emit('send_message', { receiver_id: currentChatUserId, content: '[circle]' + ud.url, is_super: false });
+            }
+        };
+        circleRecorder.start(200);
+        circleTimer = setInterval(() => {
+            circleSecs++;
+            const m = Math.floor(circleSecs / 60);
+            const s = String(circleSecs % 60).padStart(2, '0');
+            document.getElementById('circle-timer').textContent = m + ':' + s;
+            if (circleSecs >= 60) stopCircle();
+        }, 1000);
+    } catch (err) {
+        showToast('Ошибка', 'Нет доступа к камере', '!');
+    }
+});
+
+function stopCircle() {
+    if (circleRecorder && circleRecorder.state === 'recording') circleRecorder.stop();
+}
+document.getElementById('btn-circle-cancel')?.addEventListener('click', () => {
+    circleChunks = [];
+    circleSecs = 0;
+    if (circleRecorder && circleRecorder.state === 'recording') {
+        try { circleRecorder.stop(); } catch(e) {}
+    }
+    if (circleStream) circleStream.getTracks().forEach(t => t.stop());
+    document.getElementById('circle-recorder').classList.add('hidden');
+    const preview = document.getElementById('circle-preview');
+    if (preview) preview.srcObject = null;
+});
+// tap timer area or video to stop & send
+document.getElementById('circle-preview')?.addEventListener('click', stopCircle);
+document.getElementById('circle-timer')?.addEventListener('click', stopCircle);
+
+
 socket.on('new_message', data => {
     const inChat = document.getElementById('screen-chat').classList.contains('active');
     if (inChat && (data.sender_id === currentChatUserId || data.is_mine)) {
@@ -1191,8 +1371,9 @@ socket.on('new_message', data => {
         box.querySelectorAll('.media-clickable').forEach(el => {
             el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
         });
+        if (!data.is_mine) notifyUser('message');
     } else if (!data.is_mine) {
-        // update badge
+        notifyUser('message');
         const badge = document.getElementById('nav-chats-badge');
         if (badge) {
             let n = parseInt(badge.textContent) || 0;
@@ -1203,6 +1384,10 @@ socket.on('new_message', data => {
             loadChatsList();
         }
     }
+});
+socket.on('friend_request', data => {
+    notifyUser('friend');
+    showToast('Заявка в друзья', (data.from_username || 'Кто-то') + ' хочет добавить вас', '👋');
 });
 socket.on('error', d => showToast('Ошибка', d.msg || 'Ошибка', '!'));
 

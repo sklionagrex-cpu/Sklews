@@ -1189,3 +1189,20 @@ body:has(#screen-chat.active) .bottom-nav {
     display: block;
     margin-bottom: 6px;
 }
+
+/* Comment photo */
+.comment-photo { cursor: zoom-in; }
+
+/* Video circle in chat */
+.circle-video {
+    box-shadow: 0 4px 20px rgba(139, 92, 246, 0.35);
+    border: 2px solid var(--accent);
+}
+#btn-circle.active {
+    background: #ef4444 !important;
+    color: #fff !important;
+}
+#circle-recorder .modal-content,
+#circle-recorder {
+    z-index: 200;
+}

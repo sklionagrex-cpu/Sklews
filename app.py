@@ -110,7 +110,9 @@ class Comment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    content = db.Column(db.Text, nullable=False)
+    content = db.Column(db.Text, nullable=False, default='')
+    media_url = db.Column(db.String(500), default='')
+    media_type = db.Column(db.String(20), default='')  # photo
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 def current_user():
@@ -545,6 +547,9 @@ def friend_request():
         return jsonify({'status': existing.status})
     db.session.add(Friendship(user_id=me.id, friend_id=friend_id, status='pending'))
     db.session.commit()
+    socketio.emit('friend_request', {
+        'from_id': me.id, 'from_username': me.username, 'from_avatar': me.avatar or ''
+    }, room=f'user_{friend_id}')
     return jsonify({'status': 'pending'})
 
 @app.route('/api/friends/requests')
@@ -743,6 +748,13 @@ with app.app_context():
         db.session.commit()
     except Exception:
         db.session.rollback()
+    for col, typ in [('media_url', 'VARCHAR(500) DEFAULT ""'), ('media_type', 'VARCHAR(20) DEFAULT ""')]:
+        try:
+            from sqlalchemy import text
+            db.session.execute(text(f'ALTER TABLE comment ADD COLUMN {col} {typ}'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
 
 
@@ -771,16 +783,23 @@ def update_channel(channel_id):
 @app.route('/api/post/<int:post_id>/comments')
 @login_required
 def get_comments(post_id):
+    me = current_user()
+    post = Post.query.get_or_404(post_id)
+    ch = Channel.query.get(post.channel_id)
     comments = Comment.query.filter_by(post_id=post_id).order_by(Comment.created_at.asc()).limit(100).all()
     result = []
     for c in comments:
         u = User.query.get(c.user_id)
+        can_delete = (c.user_id == me.id) or (post.author_id == me.id) or (ch and ch.owner_id == me.id)
         result.append({
             'id': c.id, 'content': c.content,
             'user_id': c.user_id,
             'username': u.username if u else '?',
             'avatar': u.avatar if u else '',
-            'created_at': c.created_at.strftime('%H:%M')
+            'media_url': getattr(c, 'media_url', '') or '',
+            'media_type': getattr(c, 'media_type', '') or '',
+            'created_at': c.created_at.strftime('%H:%M'),
+            'can_delete': can_delete
         })
     return jsonify(result)
 
@@ -789,10 +808,16 @@ def get_comments(post_id):
 def add_comment(post_id):
     user = current_user()
     post = Post.query.get_or_404(post_id)
-    content = (request.json or {}).get('content', '').strip()
-    if not content:
+    data = request.json or {}
+    content = (data.get('content') or '').strip()
+    media_url = (data.get('media_url') or '')[:500]
+    media_type = (data.get('media_type') or '')[:20]
+    if not content and not media_url:
         return jsonify({'error': 'Пустой комментарий'}), 400
-    c = Comment(post_id=post_id, user_id=user.id, content=content)
+    if not content and media_url:
+        content = '📷'
+    c = Comment(post_id=post_id, user_id=user.id, content=content,
+                media_url=media_url, media_type=media_type)
     post.comments_count += 1
     db.session.add(c)
     if post.comments_count in (50, 200):
@@ -801,6 +826,20 @@ def add_comment(post_id):
             author.crystals += 5 if post.comments_count == 50 else 12
     db.session.commit()
     return jsonify({'id': c.id, 'status': 'ok', 'comments': post.comments_count})
+
+@app.route('/api/post/<int:post_id>/comments/<int:comment_id>', methods=['DELETE'])
+@login_required
+def delete_comment(post_id, comment_id):
+    me = current_user()
+    post = Post.query.get_or_404(post_id)
+    c = Comment.query.filter_by(id=comment_id, post_id=post_id).first_or_404()
+    ch = Channel.query.get(post.channel_id)
+    if c.user_id != me.id and post.author_id != me.id and (not ch or ch.owner_id != me.id):
+        return jsonify({'error': 'Нет прав'}), 403
+    db.session.delete(c)
+    post.comments_count = max(0, (post.comments_count or 1) - 1)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'comments': post.comments_count})
 
 @app.route('/api/activity')
 @login_required
