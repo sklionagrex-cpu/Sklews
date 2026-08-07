@@ -311,7 +311,7 @@ def can_moderate(user, channel):
 
 @app.route('/__build')
 def __build():
-    return "BUILD-20260807-1500", 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"}
+    return "BUILD-20260807-1600", 200, {"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store"}
 
 @app.route('/')
 def index():
