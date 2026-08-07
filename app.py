@@ -30,6 +30,12 @@ class User(db.Model):
     referred_by = db.Column(db.Integer, nullable=True)
     hide_friends = db.Column(db.Boolean, default=False)
     hide_channels = db.Column(db.Boolean, default=False)
+    last_seen = db.Column(db.DateTime, nullable=True)
+
+class ChatHide(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    peer_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
 class Channel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -117,8 +123,36 @@ class Comment(db.Model):
 
 def current_user():
     if 'user_id' in session:
-        return User.query.get(session['user_id'])
+        u = User.query.get(session['user_id'])
+        if u:
+            try:
+                u.last_seen = datetime.utcnow()
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+        return u
     return None
+
+def format_last_seen(dt):
+    if not dt:
+        return 'давно'
+    now = datetime.utcnow()
+    diff = now - dt
+    secs = int(diff.total_seconds())
+    if secs < 90:
+        return 'в сети'
+    if secs < 3600:
+        m = secs // 60
+        return f'был(а) {m} мин. назад'
+    if secs < 86400:
+        h = secs // 3600
+        return f'был(а) {h} ч. назад'
+    d = secs // 86400
+    if d == 1:
+        return 'был(а) вчера'
+    if d < 7:
+        return f'был(а) {d} дн. назад'
+    return dt.strftime('был(а) %d.%m.%Y')
 
 def login_required(f):
     from functools import wraps
@@ -303,6 +337,54 @@ def leave_channel(channel_id):
         db.session.delete(sub)
         db.session.commit()
     return jsonify({'status': 'left'})
+
+@app.route('/api/channel/<int:channel_id>/support', methods=['POST'])
+@login_required
+def support_channel(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id == user.id:
+        return jsonify({'error': 'Нельзя поддержать свой канал'}), 400
+    data = request.json or {}
+    try:
+        amount = int(data.get('amount', 0))
+    except (TypeError, ValueError):
+        amount = 0
+    if amount < 1:
+        return jsonify({'error': 'Минимум 1 ✦'}), 400
+    if amount > 10000:
+        return jsonify({'error': 'Максимум 10000 ✦'}), 400
+    if user.crystals < amount:
+        return jsonify({'error': f'Недостаточно кристаллов (нужно {amount} ✦)'}), 400
+    owner = User.query.get(ch.owner_id)
+    if not owner:
+        return jsonify({'error': 'Владелец не найден'}), 404
+    user.crystals -= amount
+    owner.crystals += amount
+    db.session.commit()
+    return jsonify({'status': 'ok', 'crystals': user.crystals, 'sent': amount})
+
+@app.route('/api/channel/<int:channel_id>/delete', methods=['POST'])
+@login_required
+def delete_channel(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id:
+        return jsonify({'error': 'Только владелец'}), 403
+    posts = Post.query.filter_by(channel_id=channel_id).all()
+    post_ids = [p.id for p in posts]
+    if post_ids:
+        PostLike.query.filter(PostLike.post_id.in_(post_ids)).delete(synchronize_session=False)
+        PostReaction.query.filter(PostReaction.post_id.in_(post_ids)).delete(synchronize_session=False)
+        PostView.query.filter(PostView.post_id.in_(post_ids)).delete(synchronize_session=False)
+        Comment.query.filter(Comment.post_id.in_(post_ids)).delete(synchronize_session=False)
+        Post.query.filter(Post.id.in_(post_ids)).delete(synchronize_session=False)
+    Subscription.query.filter_by(channel_id=channel_id).delete(synchronize_session=False)
+    ChannelRole.query.filter_by(channel_id=channel_id).delete(synchronize_session=False)
+    db.session.delete(ch)
+    db.session.commit()
+    return jsonify({'status': 'deleted'})
+
 
 @app.route('/api/channel/<int:channel_id>/notifications', methods=['POST'])
 @login_required
@@ -594,13 +676,16 @@ def get_friends():
                 ((Message.sender_id == me.id) & (Message.receiver_id == u.id)) |
                 ((Message.sender_id == u.id) & (Message.receiver_id == me.id))
             ).order_by(Message.created_at.desc()).first()
+            hidden = ChatHide.query.filter_by(user_id=me.id, peer_id=u.id).first()
             result.append({
                 'id': u.id, 'username': u.username, 'avatar': u.avatar, 'status': u.status,
                 'unread': unread,
                 'last_message': (last.content[:40] + '...') if last and len(last.content) > 40 else (last.content if last else ''),
-                'last_time': last.created_at.strftime('%H:%M') if last else ''
+                'last_time': last.created_at.strftime('%H:%M') if last else '',
+                'last_seen': format_last_seen(getattr(u, 'last_seen', None)),
+                'hidden': bool(hidden)
             })
-    # sort by last message time (those with messages first)
+    result = [r for r in result if not r.get('hidden') or r.get('unread', 0) > 0]
     result.sort(key=lambda x: x['last_time'] or '', reverse=True)
     return jsonify(result)
 
@@ -612,16 +697,44 @@ def get_messages(user_id):
         ((Message.sender_id == me.id) & (Message.receiver_id == user_id)) |
         ((Message.sender_id == user_id) & (Message.receiver_id == me.id))
     ).order_by(Message.created_at.asc()).limit(100).all()
-    # mark as read
+    # mark as read + unhide if was hidden for me
     for m in messages:
         if m.receiver_id == me.id and not m.is_read:
             m.is_read = True
+    hid = ChatHide.query.filter_by(user_id=me.id, peer_id=user_id).first()
+    if hid:
+        db.session.delete(hid)
     db.session.commit()
     return jsonify([{
         'id': m.id, 'content': m.content, 'is_mine': m.sender_id == me.id,
         'is_super': m.is_super, 'created_at': m.created_at.strftime('%H:%M'),
         'is_read': m.is_read
     } for m in messages])
+
+
+@app.route('/api/messages/<int:user_id>/delete', methods=['POST'])
+@login_required
+def delete_chat(user_id):
+    me = current_user()
+    data = request.json or {}
+    mode = data.get('mode', 'me')  # me | both
+    if mode == 'both':
+        Message.query.filter(
+            ((Message.sender_id == me.id) & (Message.receiver_id == user_id)) |
+            ((Message.sender_id == user_id) & (Message.receiver_id == me.id))
+        ).delete(synchronize_session=False)
+        ChatHide.query.filter(
+            ((ChatHide.user_id == me.id) & (ChatHide.peer_id == user_id)) |
+            ((ChatHide.user_id == user_id) & (ChatHide.peer_id == me.id))
+        ).delete(synchronize_session=False)
+        db.session.commit()
+        return jsonify({'status': 'deleted_both'})
+    # for me only - hide conversation
+    existing = ChatHide.query.filter_by(user_id=me.id, peer_id=user_id).first()
+    if not existing:
+        db.session.add(ChatHide(user_id=me.id, peer_id=user_id))
+    db.session.commit()
+    return jsonify({'status': 'deleted_me'})
 
 # ==================== SHOP ====================
 
@@ -733,6 +846,11 @@ def handle_message(data):
     if is_super:
         user.crystals -= 30
     db.session.add(msg)
+    # unhide for both so conversation reappears
+    for uid, pid in ((user.id, receiver_id), (receiver_id, user.id)):
+        h = ChatHide.query.filter_by(user_id=uid, peer_id=pid).first()
+        if h:
+            db.session.delete(h)
     db.session.commit()
     payload = {
         'id': msg.id, 'content': content, 'sender_id': user.id,
@@ -757,6 +875,12 @@ with app.app_context():
             db.session.commit()
         except Exception:
             db.session.rollback()
+    try:
+        from sqlalchemy import text
+        db.session.execute(text('ALTER TABLE user ADD COLUMN last_seen DATETIME'))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 
@@ -958,7 +1082,8 @@ def user_public(user_id):
         'hide_friends': bool(u.hide_friends),
         'hide_channels': bool(u.hide_channels),
         'friendship': fr.status if fr else 'none',
-        'is_me': u.id == me.id
+        'is_me': u.id == me.id,
+        'last_seen': format_last_seen(getattr(u, 'last_seen', None))
     })
 
 @app.route('/api/user/<int:user_id>/friends')

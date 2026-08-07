@@ -214,6 +214,8 @@ async function openChannel(id) {
         }
         document.getElementById('btn-analytics').classList.toggle('hidden', !ch.is_owner);
         document.getElementById('btn-edit-channel').classList.toggle('hidden', !ch.is_owner);
+        const btnSup = document.getElementById('btn-support-channel');
+        if (btnSup) btnSup.classList.toggle('hidden', !!ch.is_owner);
 
         // owner row
         const ownerAv = document.getElementById('channel-owner-avatar');
@@ -255,6 +257,31 @@ async function openPostsPage(id) {
     loadPosts(id);
 }
 document.getElementById('btn-back-posts').onclick = () => openChannel(currentChannelId);
+
+
+document.getElementById('btn-support-channel')?.addEventListener('click', () => {
+    document.getElementById('support-amount').value = '';
+    document.getElementById('modal-support-channel').classList.remove('hidden');
+});
+document.getElementById('btn-cancel-support')?.addEventListener('click', () => {
+    document.getElementById('modal-support-channel').classList.add('hidden');
+});
+document.getElementById('btn-send-support')?.addEventListener('click', async () => {
+    const amount = parseInt(document.getElementById('support-amount').value, 10);
+    if (!amount || amount < 1) return showToast('Ошибка', 'Введите сумму', '!');
+    if (!currentChannelId) return;
+    const res = await fetch('/api/channel/' + currentChannelId + '/support', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ amount })
+    });
+    const d = await res.json();
+    document.getElementById('modal-support-channel').classList.add('hidden');
+    if (d.error) showToast('Ошибка', d.error, '!');
+    else {
+        showToast('Поддержка', 'Отправлено ' + d.sent + ' ✦', '⚡');
+        loadProfile();
+    }
+});
 
 document.getElementById('btn-channel-menu').onclick = async () => {
     const res = await fetch('/api/channel/' + currentChannelId);
@@ -574,9 +601,35 @@ async function loadMyChannels() {
         card.innerHTML = avatarHtml(ch.name, ch.avatar) +
             '<div class="channel-info"><h3>' + escapeHtml(ch.name) + ' ' + badge + '</h3><p>' + ch.subscribers + ' участников</p></div>';
         card.onclick = () => openChannel(ch.id);
+        let t = null;
+        const start = e => { t = setTimeout(() => {
+            window._deleteChannelId = ch.id;
+            document.getElementById('modal-delete-channel').classList.remove('hidden');
+        }, 550); };
+        const cancel = () => clearTimeout(t);
+        card.addEventListener('touchstart', start, { passive: true });
+        card.addEventListener('touchend', cancel);
+        card.addEventListener('touchmove', cancel);
+        card.addEventListener('mousedown', start);
+        card.addEventListener('mouseup', cancel);
+        card.addEventListener('mouseleave', cancel);
         list.appendChild(card);
     });
 }
+document.getElementById('btn-cancel-delete-channel')?.addEventListener('click', () => {
+    document.getElementById('modal-delete-channel').classList.add('hidden');
+    window._deleteChannelId = null;
+});
+document.getElementById('btn-confirm-delete-channel')?.addEventListener('click', async () => {
+    const id = window._deleteChannelId;
+    document.getElementById('modal-delete-channel').classList.add('hidden');
+    if (!id) return;
+    const res = await fetch('/api/channel/' + id + '/delete', { method: 'POST' });
+    const d = await res.json();
+    if (d.error) showToast('Ошибка', d.error, '!');
+    else { showToast('Канал', 'Удалён', '✓'); loadMyChannels(); loadProfile(); }
+    window._deleteChannelId = null;
+});
 
 async function loadProfile() {
     const res = await fetch('/api/profile');
@@ -1161,7 +1214,7 @@ async function respondRequest(id, action) {
     loadFriendsAndRequests();
 }
 
-function openChat(userId, username, avatar) {
+function openChat(userId, username, avatar, lastSeen) {
     currentChatUserId = userId;
     isSuperMode = false;
     document.getElementById('chat-title').textContent = username;
@@ -1174,9 +1227,17 @@ function openChat(userId, username, avatar) {
         peerAv.style.backgroundImage = '';
         peerAv.textContent = username ? username[0].toUpperCase() : '?';
     }
+    const st = document.getElementById('chat-peer-status');
+    if (st) st.textContent = lastSeen || 'недавно';
     document.getElementById('chat-peer').onclick = () => openUserProfile(userId);
     showScreen('screen-chat');
     loadMessages(userId);
+    // refresh last_seen from API
+    fetch('/api/user/' + userId).then(r => r.json()).then(u => {
+        if (u.last_seen && document.getElementById('chat-peer-status')) {
+            document.getElementById('chat-peer-status').textContent = u.last_seen;
+        }
+    }).catch(() => {});
 }
 document.getElementById('btn-back-chat').onclick = () => {
     showScreen('screen-chats');
@@ -1217,11 +1278,46 @@ async function loadChatsList() {
             '<p style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
             escapeHtml(f.last_message || 'Нет сообщений') + '</p></div>' +
             '<div class="chat-meta"><span class="chat-time">' + (f.last_time || '') + '</span>' + unreadBadge + '</div>';
-        card.onclick = () => openChat(f.id, f.username, f.avatar);
+        card.onclick = () => openChat(f.id, f.username, f.avatar, f.last_seen);
+        let t = null;
+        const start = e => { t = setTimeout(() => {
+            window._deleteChatPeer = { id: f.id, username: f.username };
+            document.getElementById('delete-chat-name').textContent = f.username;
+            document.getElementById('modal-delete-chat').classList.remove('hidden');
+        }, 550); };
+        const cancel = () => clearTimeout(t);
+        card.addEventListener('touchstart', start, { passive: true });
+        card.addEventListener('touchend', cancel);
+        card.addEventListener('touchmove', cancel);
+        card.addEventListener('mousedown', start);
+        card.addEventListener('mouseup', cancel);
+        card.addEventListener('mouseleave', cancel);
         list.appendChild(card);
     });
     updateChatsBadge(totalUnread);
 }
+document.getElementById('btn-cancel-delete-chat')?.addEventListener('click', () => {
+    document.getElementById('modal-delete-chat').classList.add('hidden');
+    window._deleteChatPeer = null;
+});
+async function doDeleteChat(mode) {
+    const p = window._deleteChatPeer;
+    document.getElementById('modal-delete-chat').classList.add('hidden');
+    if (!p) return;
+    await fetch('/api/messages/' + p.id + '/delete', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ mode })
+    });
+    window._deleteChatPeer = null;
+    if (currentChatUserId === p.id) {
+        showScreen('screen-chats');
+        currentChatUserId = null;
+    }
+    loadChatsList();
+    showToast('Чат', mode === 'both' ? 'Удалён у обоих' : 'Удалён у вас', '✓');
+}
+document.getElementById('btn-delete-chat-me')?.addEventListener('click', () => doDeleteChat('me'));
+document.getElementById('btn-delete-chat-both')?.addEventListener('click', () => doDeleteChat('both'));
 
 function formatMessage(content, isSuper) {
     let body = content || '';
