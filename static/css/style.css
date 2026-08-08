@@ -4796,3 +4796,57 @@ body.xtheme-cashmere_haze .nav-btn.active {
 }
 .voice-transcript.hidden { display: none !important; }
 .ch-post-voice { padding: 4px 0; }
+
+/* === Force no chrome on media / voice / circles everywhere === */
+.message .msg-bubble.media-bubble,
+.message:has(.msg-media-only) .msg-bubble,
+.message:has(.voice-player) .msg-bubble,
+.message:has(.circle-video) .msg-bubble,
+.message:has(.msg-photo) .msg-bubble,
+.message:has(.msg-video) .msg-bubble {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    outline: none !important;
+}
+.pc-msg.media-only,
+.pc-msg:has(.msg-media-only),
+.pc-msg:has(.voice-player),
+.pc-msg:has(.circle-video),
+.pc-msg:has(.msg-photo) {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+.pc-msg.media-only .pc-msg-text,
+.pc-msg:has(.msg-media-only) .pc-msg-text,
+.pc-msg:has(.voice-player) .pc-msg-text {
+    background: transparent !important;
+    padding: 0 !important;
+}
+.msg-media-only, .voice-player, .msg-circle, .circle-video, .msg-photo, .msg-video {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+.voice-player {
+    background: linear-gradient(135deg, rgba(124,58,237,0.22), rgba(167,139,250,0.1)) !important;
+    border: none !important;
+}
+.circle-video.circle-grown,
+.msg-circle.circle-grown {
+    width: min(72vw, 280px) !important;
+    height: min(72vw, 280px) !important;
+    max-width: min(72vw, 280px) !important;
+    transition: width .25s ease, height .25s ease;
+    z-index: 5;
+    position: relative;
+}
+.circle-close-inline {
+    position: absolute;
+    top: -6px; right: -6px;
+    width: 28px; height: 28px; border-radius: 50%;
+    border: none; background: rgba(0,0,0,0.65); color: #fff;
+    font-size: 12px; cursor: pointer; z-index: 6;
+}
