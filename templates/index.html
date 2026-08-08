@@ -273,22 +273,30 @@ window.SKLEWS_BUILD = '20260807m';
             <div id="chats-list" class="feed"></div>
         </div>
 
-        <div id="screen-profile" class="screen" style="overflow:hidden">
-            <div class="profile-hero" id="profile-hero">
+        <div id="screen-profile" class="screen profile-screen" style="overflow:hidden">
+            <div class="profile-page" id="profile-hero">
                 <div class="profile-banner" id="profile-banner">
                     <video id="profile-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
                 </div>
-                <div class="avatar-hero" id="profile-avatar">?</div>
-                <button id="btn-settings" class="btn-icon profile-gear"><i class="fa-solid fa-gear"></i></button>
-                <div class="profile-hero-info">
-                    <h2 id="profile-username">—</h2>
-                    <p id="profile-status" class="status-text">Статус не указан</p>
-                    <div class="crystals-badge" id="crystals-badge"><i class="fa-solid fa-gem"></i> <span id="profile-crystals">0</span></div>
+                <div class="profile-topbar">
+                    <div class="profile-identity">
+                        <div class="avatar-sm" id="profile-avatar">?</div>
+                        <div class="profile-meta">
+                            <div class="profile-name-row">
+                                <h2 id="profile-username">—</h2>
+                                <span id="profile-premium-badge" class="profile-prem-badge hidden" title="Premium"><i class="fa-solid fa-crown"></i></span>
+                            </div>
+                            <p id="profile-status" class="profile-desc">Статус не указан</p>
+                        </div>
+                    </div>
+                    <button id="btn-settings" class="btn-icon profile-menu" type="button" aria-label="Меню"><i class="fa-solid fa-ellipsis"></i></button>
                 </div>
-            </div>
-            <div class="profile-bottom-actions">
-                <button id="btn-open-friends" class="btn btn-secondary" style="position:relative"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span><span id="friends-req-badge" class="nav-badge hidden">0</span></button>
-                <button id="btn-open-subs" class="btn btn-secondary"><i class="fa-solid fa-bookmark"></i> Подписки</button>
+                <div class="profile-own-actions">
+                    <button id="btn-open-friends" class="btn btn-ghost-prof" style="position:relative" type="button"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span><span id="friends-req-badge" class="nav-badge hidden">0</span></button>
+                    <button id="btn-open-subs" class="btn btn-ghost-prof" type="button"><i class="fa-solid fa-bookmark"></i> Подписки</button>
+                </div>
+                <!-- crystals kept for JS daily bonus, visually hidden on main profile -->
+                <div class="crystals-badge hidden" id="crystals-badge"><i class="fa-solid fa-gem"></i> <span id="profile-crystals">0</span></div>
             </div>
         </div>
 
@@ -361,25 +369,33 @@ window.SKLEWS_BUILD = '20260807m';
         </div>
 
         <!-- USER PROFILE -->
-        <div id="screen-user" data-has-wall="1" class="screen" style="overflow:hidden">
-            <button class="btn-icon profile-back" id="btn-back-user"><i class="fa-solid fa-arrow-left"></i></button>
-            <div class="profile-hero" id="user-hero">
+        <div id="screen-user" data-has-wall="1" class="screen profile-screen" style="overflow:hidden">
+            <div class="profile-page" id="user-hero">
                 <div class="profile-banner" id="user-banner">
                     <video id="user-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
                 </div>
-                <div class="avatar-hero" id="user-avatar">?</div>
-                <div class="profile-hero-info">
-                    <h2 id="user-username">—</h2>
-                    <p id="user-status" class="status-text"></p>
+                <button class="btn-icon profile-back" id="btn-back-user" type="button" aria-label="Назад"><i class="fa-solid fa-arrow-left"></i></button>
+                <div class="profile-topbar">
+                    <div class="profile-identity">
+                        <div class="avatar-sm" id="user-avatar">?</div>
+                        <div class="profile-meta">
+                            <div class="profile-name-row">
+                                <h2 id="user-username">—</h2>
+                                <span id="user-premium-badge" class="profile-prem-badge hidden" title="Premium"><i class="fa-solid fa-crown"></i></span>
+                            </div>
+                            <p id="user-status" class="profile-desc"></p>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="profile-bottom-actions">
-                <button id="btn-user-friends-list" class="btn btn-secondary"><i class="fa-solid fa-user-group"></i> Друзья <span id="user-friends">0</span></button>
-                <button id="btn-user-channels-list" class="btn btn-secondary"><i class="fa-solid fa-bookmark"></i> Подписки <span id="user-channels">0</span></button>
-            </div>
-            <div style="padding:0 16px 16px;display:flex;flex-direction:column;gap:10px">
-                <button id="btn-user-friend" class="btn btn-secondary full">Добавить в друзья</button>
-                <button id="btn-user-message" class="btn btn-primary full"><i class="fa-solid fa-paper-plane"></i> Написать</button>
+                <div class="profile-guest-actions">
+                    <button id="btn-user-friend" class="btn btn-secondary full" type="button">Добавить в друзья</button>
+                    <button id="btn-user-message" class="btn btn-primary full" type="button"><i class="fa-solid fa-paper-plane"></i> Написать</button>
+                </div>
+                <!-- hidden legacy counters for existing JS -->
+                <span id="user-friends" class="hidden">0</span>
+                <span id="user-channels" class="hidden">0</span>
+                <button id="btn-user-friends-list" class="hidden" type="button"></button>
+                <button id="btn-user-channels-list" class="hidden" type="button"></button>
             </div>
         </div>
 

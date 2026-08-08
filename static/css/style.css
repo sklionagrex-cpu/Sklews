@@ -4850,3 +4850,260 @@ body.xtheme-cashmere_haze .nav-btn.active {
     border: none; background: rgba(0,0,0,0.65); color: #fff;
     font-size: 12px; cursor: pointer; z-index: 6;
 }
+
+
+/* ===== Profile redesign 2026-08 — full-page banner, compact identity ===== */
+.profile-screen {
+    padding: 0 !important;
+    background: var(--bg);
+}
+.profile-page {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+.profile-page .profile-banner {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: linear-gradient(145deg, #1e1535 0%, #2e1065 45%, #0f0a18 100%);
+    background-size: cover;
+    background-position: center;
+}
+.profile-page .profile-banner.has-banner {
+    background-color: #0c0a12;
+}
+.profile-page .profile-banner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        to bottom,
+        rgba(8,6,14,0.35) 0%,
+        rgba(8,6,14,0.15) 35%,
+        rgba(8,6,14,0.55) 70%,
+        rgba(8,6,14,0.88) 100%
+    );
+    pointer-events: none;
+    z-index: 1;
+}
+.profile-page .profile-banner-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+    display: none;
+    pointer-events: none;
+}
+.profile-page .profile-banner.has-video .profile-banner-video {
+    display: block;
+}
+.profile-page .profile-banner.has-video {
+    background-image: none !important;
+}
+
+.profile-topbar {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 0 14px;
+}
+.profile-identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+.avatar-sm {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    /* no premium rings / borders */
+    border: none !important;
+    outline: none !important;
+}
+.avatar-sm img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: 50%;
+}
+.profile-meta {
+    min-width: 0;
+    flex: 1;
+}
+.profile-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.profile-name-row h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.55);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.profile-name-row h2 .premium-nick,
+.profile-name-row h2 .nick-fx-gold,
+.profile-name-row h2 .nick-fx-aurora {
+    /* strip fancy premium name FX on profile */
+    animation: none !important;
+    background: none !important;
+    -webkit-text-fill-color: #fff !important;
+    color: #fff !important;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.55);
+}
+.profile-prem-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(251, 191, 36, 0.18);
+    color: #fbbf24;
+    font-size: 11px;
+    flex-shrink: 0;
+}
+.profile-prem-badge.hidden { display: none !important; }
+.profile-desc {
+    margin: 4px 0 0;
+    font-size: 13px;
+    line-height: 1.35;
+    color: rgba(255,255,255,0.78);
+    text-shadow: 0 1px 6px rgba(0,0,0,0.5);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.profile-menu {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.35) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff !important;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+.profile-back {
+    position: absolute !important;
+    top: calc(12px + env(safe-area-inset-top, 0px));
+    left: 12px;
+    z-index: 12 !important;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.35) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff !important;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+#screen-user .profile-topbar {
+    padding-left: 56px; /* space for back button */
+}
+
+.profile-own-actions {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px) + 64px); /* above bottom nav */
+    z-index: 5;
+    display: flex;
+    gap: 10px;
+}
+.btn-ghost-prof {
+    flex: 1;
+    background: rgba(0,0,0,0.4) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #fff !important;
+    border: 1px solid rgba(255,255,255,0.14) !important;
+    border-radius: 14px !important;
+    padding: 12px 10px !important;
+    font-size: 13px;
+}
+.profile-guest-actions {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.profile-guest-actions .btn {
+    border-radius: 14px !important;
+    padding: 14px 12px !important;
+    font-weight: 600;
+}
+.profile-guest-actions .btn.hidden,
+.profile-guest-actions .btn[style*="display: none"] {
+    display: none !important;
+}
+
+/* Kill legacy profile hero cosmetics on profile pages */
+.profile-page .avatar-hero-wrap,
+.profile-page .plus-under-banner,
+.profile-page .profile-plus-badge {
+    display: none !important;
+}
+.profile-page.plus-card-glass,
+.profile-page.plus-card-velvet,
+.profile-page.plus-card-metal,
+.profile-page.plus-card-royal,
+.profile-page.has-aura {
+    box-shadow: none !important;
+    background: transparent !important;
+}
+.profile-page .avatar-sm.av-ring-gold,
+.profile-page .avatar-sm.av-ring-diamond,
+.profile-page .avatar-sm.av-ring-aurora,
+.profile-page .avatar-sm.av-ring-rose,
+.profile-page .avatar-sm.av-ring-obsidian,
+.profile-page .avatar-sm.av-ring-prism,
+.profile-page .avatar-sm.av-ring-royal {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35) !important;
+    border: none !important;
+}
+.profile-page .avatar-sm.av-ring-gold::before,
+.profile-page .avatar-sm.av-ring-diamond::before,
+.profile-page .avatar-sm.av-ring-aurora::before,
+.profile-page .avatar-sm.av-ring-rose::before,
+.profile-page .avatar-sm.av-ring-obsidian::before,
+.profile-page .avatar-sm::before {
+    display: none !important;
+    content: none !important;
+}
+

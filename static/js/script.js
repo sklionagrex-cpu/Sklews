@@ -40,62 +40,49 @@ function applyPlusToProfileHero(p, opts) {
     opts = opts || {};
     const heroId = opts.heroId || 'profile-hero';
     const avId = opts.avId || 'profile-avatar';
-    const bannerId = opts.bannerId || 'profile-banner';
     const nameId = opts.nameId || 'profile-username';
-    const badgeId = opts.badgeId || 'profile-plus-badge';
-    const underId = opts.underId || 'profile-plus-under';
+    const premBadgeId = opts.premBadgeId || (avId === 'user-avatar' ? 'user-premium-badge' : 'profile-premium-badge');
     const hero = document.getElementById(heroId);
     const av = document.getElementById(avId);
-    const banner = document.getElementById(bannerId);
-    const under = document.getElementById(underId);
     const pun = document.getElementById(nameId);
     if (!p) return;
 
-    // Restore original avatar DOM if we previously wrapped it
+    // Unwrap legacy frame wrappers
     if (av && av.parentElement && av.parentElement.classList.contains('avatar-hero-wrap')) {
         const wrap = av.parentElement;
         wrap.parentNode.insertBefore(av, wrap);
         wrap.remove();
     }
 
-    // Avatar itself unchanged layout — only ring classes
+    // NO premium cosmetics on profile: strip all rings / frames / auras / card styles
     if (av) {
         av.classList.remove('av-ring-gold','av-ring-diamond','av-ring-aurora','av-ring-rose','av-ring-obsidian','av-ring-prism','av-ring-royal');
-        if (p.plus_avatar_frame) av.classList.add('av-ring-' + p.plus_avatar_frame);
     }
-
-    // Profile banner FX removed — effects only on channels
-    if (under) under.style.display = 'none';
-
     if (hero) {
         hero.classList.remove('plus-card-glass','plus-card-velvet','plus-card-metal','plus-card-royal','has-aura');
-        if (p.plus_card_style) hero.classList.add('plus-card-' + p.plus_card_style);
-        if (p.plus_aura) {
-            hero.classList.add('has-aura');
-            hero.style.setProperty('--plus-aura', p.plus_aura + '88');
-        } else {
-            hero.style.removeProperty('--plus-aura');
-        }
-        if (p.plus_accent) hero.style.setProperty('--plus-accent', p.plus_accent);
-        else hero.style.removeProperty('--plus-accent');
+        hero.style.removeProperty('--plus-aura');
+        hero.style.removeProperty('--plus-accent');
     }
 
+    // Plain username (no fancy FX)
     if (pun) {
-        pun.innerHTML = premiumNickHtml(p.username, p.is_premium || p.is_premium_plus, p.plus_name_fx, p.plus_accent || p.plus_aura || '');
-        let badge = document.getElementById(badgeId);
-        if (p.plus_badge) {
-            if (!badge) {
-                badge = document.createElement('div');
-                badge.id = badgeId;
-                badge.className = 'profile-plus-badge';
-                pun.after(badge);
-            }
-            badge.textContent = p.plus_badge;
-            badge.style.display = '';
-        } else if (badge) {
-            badge.style.display = 'none';
-        }
+        const uname = p.username || '—';
+        pun.textContent = uname;
     }
+
+    // Simple crown badge if premium / premium+
+    const isPrem = !!(p.is_premium || p.is_premium_plus);
+    const premBadge = document.getElementById(premBadgeId);
+    if (premBadge) {
+        if (isPrem) premBadge.classList.remove('hidden');
+        else premBadge.classList.add('hidden');
+    }
+
+    // Hide any leftover plus badge under name
+    const legacyBadge = document.getElementById(opts.badgeId || 'profile-plus-badge');
+    if (legacyBadge) legacyBadge.style.display = 'none';
+    const under = document.getElementById(opts.underId || 'profile-plus-under');
+    if (under) under.style.display = 'none';
 }
 
 
@@ -1720,7 +1707,12 @@ async function loadProfile() {
     const p = await res.json();
     meIsAdmin = !!p.is_admin;
     setMePlusFromProfile(p);
-    applyPlusToProfileHero(p);
+    applyPlusToProfileHero(p, {
+        heroId: 'profile-hero',
+        avId: 'profile-avatar',
+        nameId: 'profile-username',
+        premBadgeId: 'profile-premium-badge'
+    });
     if (p.id) meId = p.id;
     if (p.username) window.__meUsername = p.username;
     if (Array.isArray(p.owned_themes)) loadSavedTheme();
@@ -1921,7 +1913,6 @@ async function openUserProfile(userId) {
     const u = await res.json();
     window._viewUserId = u.id;
 
-    // Clean legacy wrappers
     const uav = document.getElementById('user-avatar');
     if (uav && uav.parentElement && uav.parentElement.classList.contains('avatar-hero-wrap')) {
         const wrap = uav.parentElement;
@@ -1942,25 +1933,26 @@ async function openUserProfile(userId) {
         avId: 'user-avatar',
         bannerId: 'user-banner',
         nameId: 'user-username',
-        badgeId: 'user-plus-badge',
-        underId: 'user-banner-fx'
+        premBadgeId: 'user-premium-badge'
     });
 
     document.getElementById('user-status').textContent = u.status || '';
-    document.getElementById('user-friends').textContent = u.friends_count === null ? '•' : (u.friends_count ?? 0);
-    document.getElementById('user-channels').textContent = u.channels_count === null ? '•' : (u.channels_count ?? 0);
+    const uf = document.getElementById('user-friends');
+    const uc = document.getElementById('user-channels');
+    if (uf) uf.textContent = u.friends_count === null ? '•' : (u.friends_count ?? 0);
+    if (uc) uc.textContent = u.channels_count === null ? '•' : (u.channels_count ?? 0);
 
     const fb = document.getElementById('btn-user-friend');
     const mb = document.getElementById('btn-user-message');
     if (u.is_me) {
-        fb.style.display = 'none';
-        mb.style.display = 'none';
+        if (fb) fb.style.display = 'none';
+        if (mb) mb.style.display = 'none';
     } else {
-        fb.style.display = '';
-        mb.style.display = '';
+        if (fb) fb.style.display = '';
+        if (mb) mb.style.display = '';
         if (u.friendship === 'accepted') fb.textContent = 'Друг';
         else if (u.friendship === 'pending') fb.textContent = 'Запрос отправлен';
-        else fb.textContent = 'Добавить';
+        else fb.textContent = 'Добавить в друзья';
         fb.onclick = async () => {
             if (u.friendship !== 'none') return;
             await sendFriendRequest(u.id);
