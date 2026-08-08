@@ -1022,6 +1022,8 @@ async function openChannelManage(channelId) {
         }
         const desc = document.getElementById('ch-manage-desc');
         if (desc) desc.value = ch.description || '';
+        const nameInp = document.getElementById('ch-manage-name-input');
+        if (nameInp) nameInp.value = ch.name || '';
     } catch (e) {}
     const subsBox = document.getElementById('ch-manage-subs');
     const rolesBox = document.getElementById('ch-manage-roles');
@@ -3492,7 +3494,8 @@ document.getElementById('btn-pf-post')?.addEventListener('click', async () => {
 function renderPremiumChatMsg(m) {
     const div = document.createElement('div');
     const isMine = m.is_mine || (m.user_id && typeof meId !== 'undefined' && m.user_id === meId);
-    div.className = 'pc-msg' + (isMine ? ' mine' : '');
+    const isMedia = /\[photo\]|\[video\]|\[circle\]|\[voice\]/.test(m.content || '');
+    div.className = 'pc-msg' + (isMine ? ' mine' : '') + (isMedia ? ' media-only' : '');
     div.dataset.id = m.id || '';
     const nick = premiumNickHtml(m.username || '?', true);
     const body = formatMessage(m.content || '', false);
@@ -3505,10 +3508,28 @@ function renderPremiumChatMsg(m) {
     });
     bindMentions(div);
     bindVoicePlayers(div);
-    bindCircleVideos(div);
+    if (typeof bindCircleVideos === 'function') bindCircleVideos(div);
     enhanceLinkPreviews(div);
+    if (isMine && m.id) {
+        let lt = null;
+        const start = () => { lt = setTimeout(async () => {
+            if (!confirm('Удалить сообщение?')) return;
+            const res = await fetch('/api/premium/chat/' + m.id + '/delete', { method: 'POST' });
+            const d = await res.json().catch(() => ({}));
+            if (res.ok) div.remove();
+            else showToast('Ошибка', d.error || 'Не удалено', '!');
+        }, 500); };
+        const cancel = () => clearTimeout(lt);
+        div.addEventListener('touchstart', start, { passive: true });
+        div.addEventListener('mousedown', start);
+        div.addEventListener('touchend', cancel);
+        div.addEventListener('mouseup', cancel);
+        div.addEventListener('touchmove', cancel);
+        div.addEventListener('mouseleave', cancel);
+    }
     return div;
 }
+
 
 async function openPremiumChat() {
     const box = document.getElementById('premium-chat-messages');
@@ -4332,29 +4353,51 @@ function bindCircleVideos(root) {
         v.dataset.circleBound = '1';
         v.addEventListener('click', e => {
             e.stopPropagation();
-            openCircleExpand(v.currentSrc || v.src || v.dataset.circleSrc);
+            openCircleExpand(v.currentSrc || v.src || v.dataset.circleSrc, v);
         });
     });
 }
-function openCircleExpand(src) {
-    const ov = document.getElementById('circle-expand-overlay');
-    const vid = document.getElementById('circle-expand-video');
-    if (!ov || !vid || !src) return;
-    vid.src = src;
-    vid.muted = false;
-    vid.loop = true;
-    ov.classList.remove('hidden');
-    vid.play().catch(() => {});
+function openCircleExpand(src, fromEl) {
+    var v = fromEl || null;
+    if (!v && src) {
+        document.querySelectorAll('video.circle-video, video.msg-circle').forEach(function (el) {
+            if ((el.currentSrc || el.src || '').indexOf(src) !== -1 || el.getAttribute('src') === src) v = el;
+        });
+    }
+    if (!v) return;
+    document.querySelectorAll('video.circle-grown').forEach(function (x) {
+        if (x === v) return;
+        x.classList.remove('circle-grown');
+        x.muted = true;
+        var c = x.parentElement && x.parentElement.querySelector('.circle-close-inline');
+        if (c) c.remove();
+    });
+    if (v.classList.contains('circle-grown')) {
+        v.classList.remove('circle-grown');
+        v.muted = true;
+        var c2 = v.parentElement && v.parentElement.querySelector('.circle-close-inline');
+        if (c2) c2.remove();
+        return;
+    }
+    v.classList.add('circle-grown');
+    v.muted = false;
+    v.play().catch(function () {});
+    var wrap = v.parentElement || v;
+    if (wrap && !wrap.querySelector('.circle-close-inline')) {
+        if (getComputedStyle(wrap).position === 'static') wrap.style.position = 'relative';
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'circle-close-inline';
+        btn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+        btn.onclick = function (e) {
+            e.stopPropagation();
+            v.classList.remove('circle-grown');
+            v.muted = true;
+            btn.remove();
+        };
+        wrap.appendChild(btn);
+    }
 }
-document.getElementById('circle-expand-close')?.addEventListener('click', () => {
-    const ov = document.getElementById('circle-expand-overlay');
-    const vid = document.getElementById('circle-expand-video');
-    if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
-    ov?.classList.add('hidden');
-});
-document.getElementById('circle-expand-overlay')?.addEventListener('click', e => {
-    if (e.target.id === 'circle-expand-overlay') document.getElementById('circle-expand-close')?.click();
-});
 
 // Reaction pages
 (function(){
@@ -4413,4 +4456,26 @@ document.getElementById('btn-add-post-voice')?.addEventListener('click', async f
     } catch (e) {
         showToast('Ошибка', 'Нет доступа к микрофону', '!');
     }
+});
+
+socket.on('premium_chat_deleted', function (data) {
+    if (!data || !data.id) return;
+    document.querySelectorAll('.pc-msg[data-id="' + data.id + '"]').forEach(function (el) { el.remove(); });
+});
+
+document.getElementById('ch-manage-rename-btn')?.addEventListener('click', async () => {
+    if (!currentChannelId) return;
+    const name = (document.getElementById('ch-manage-name-input')?.value || '').trim();
+    if (!name) return showToast('Ошибка', 'Введите название', '!');
+    if (!confirm('Сменить название за 100 ✦?')) return;
+    const res = await fetch('/api/channel/' + currentChannelId + '/update', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || d.error) return showToast('Ошибка', d.error || 'Не удалось', '!');
+    showToast('Канал', 'Название обновлено (−100 ✦)', '✓');
+    const t = document.getElementById('posts-page-title');
+    if (t) t.textContent = name;
+    if (typeof loadProfile === 'function') loadProfile();
 });

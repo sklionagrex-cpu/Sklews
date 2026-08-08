@@ -1570,9 +1570,9 @@ def update_channel(channel_id):
     if 'avatar' in data:
         ch.avatar = str(data['avatar'])[:256]
     if 'name' in data and data['name'].strip() and data['name'].strip() != ch.name:
-        if user.crystals < 50:
-            return jsonify({'error': 'Смена названия стоит 50 ✦'}), 400
-        user.crystals -= 50
+        if user.crystals < 100:
+            return jsonify({'error': 'Смена названия стоит 100 ✦'}), 400
+        user.crystals -= 100
         ch.name = data['name'].strip()[:100]
     if 'accent_color' in data:
         ch.accent_color = data['accent_color']
@@ -1894,6 +1894,19 @@ def premium_chat_history():
     return jsonify({'messages': out})
 
 
+
+@app.route('/api/premium/chat/<int:msg_id>/delete', methods=['POST'])
+@login_required
+def delete_premium_chat_message(msg_id):
+    user = current_user()
+    msg = PremiumChatMessage.query.get_or_404(msg_id)
+    if msg.user_id != user.id and not is_admin_user(user):
+        return jsonify({'error': 'Можно удалить только своё сообщение'}), 403
+    db.session.delete(msg)
+    db.session.commit()
+    socketio.emit('premium_chat_deleted', {'id': msg_id}, room='premium_chat')
+    return jsonify({'status': 'ok'})
+
 @socketio.on('join_premium_chat')
 def on_join_premium_chat():
     user = current_user()
@@ -2144,10 +2157,12 @@ def uploaded_file(filename):
     return jsonify({'error': 'not found'}), 404
 
 
+
+
+
 @app.route('/api/transcribe', methods=['POST'])
 @login_required
 def api_transcribe():
-    """Premium / Premium+ voice transcript placeholder (expandable later with real STT)."""
     user = current_user()
     if not user:
         return jsonify({'error': 'Нужно войти'}), 401
@@ -2157,11 +2172,54 @@ def api_transcribe():
     url = (data.get('url') or '')[:500]
     if not url:
         return jsonify({'error': 'Нет ссылки на голос'}), 400
-    # Lightweight offline-friendly stub: real STT can be plugged here (Whisper etc.)
-    return jsonify({
-        'text': 'Расшифровка голосового сообщения. Подключите STT-сервис для точного текста — пока доступен режим «черновик» для Premium.',
-        'url': url,
-    })
+    audio_bytes = None
+    filename = 'voice.webm'
+    ctype = 'audio/webm'
+    if url.startswith('/media/'):
+        mid = url.split('/media/')[-1].split('?')[0]
+        media = MediaFile.query.get(mid)
+        if media and media.data:
+            audio_bytes = media.data
+            filename = (media.filename or filename)[:80]
+            ctype = media.content_type or ctype
+    if not audio_bytes:
+        return jsonify({'error': 'Файл голоса не найден'}), 404
+    api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('WHISPER_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'Распознавание не настроено (OPENAI_API_KEY)'}), 503
+    try:
+        import json as _json
+        from urllib.request import Request, urlopen
+        boundary = '----SklewsFormBoundary7MA4YWxk'
+        nl = '\r\n'
+        chunks = []
+        chunks.append('--' + boundary + nl)
+        chunks.append('Content-Disposition: form-data; name="model"' + nl + nl)
+        chunks.append('whisper-1' + nl)
+        chunks.append('--' + boundary + nl)
+        chunks.append('Content-Disposition: form-data; name="file"; filename="%s"' % filename + nl)
+        chunks.append('Content-Type: %s' % ctype + nl + nl)
+        head = ''.join(chunks).encode('utf-8')
+        tail = (nl + '--' + boundary + '--' + nl).encode('utf-8')
+        body = head + audio_bytes + tail
+        req = Request(
+            'https://api.openai.com/v1/audio/transcriptions',
+            data=body,
+            headers={
+                'Authorization': 'Bearer ' + api_key,
+                'Content-Type': 'multipart/form-data; boundary=' + boundary,
+            },
+            method='POST',
+        )
+        with urlopen(req, timeout=90) as resp:
+            out = _json.loads(resp.read().decode('utf-8', errors='replace'))
+        text = (out.get('text') or '').strip()
+        if not text:
+            return jsonify({'error': 'Пустая расшифровка'}), 502
+        return jsonify({'text': text})
+    except Exception as e:
+        print('whisper error:', e, flush=True)
+        return jsonify({'error': 'Не удалось распознать речь'}), 502
 
 
 @app.route('/api/upload', methods=['POST'])
@@ -2669,3 +2727,5 @@ if __name__ == '__main__':
 # media-ux 20260808112017
 
 # ux2 20260808113836
+
+# fix-media-borders 20260808115111
