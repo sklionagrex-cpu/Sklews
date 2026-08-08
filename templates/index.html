@@ -391,21 +391,46 @@ window.SKLEWS_BUILD = '20260807m';
 
         <!-- REACTIONS POPOVER -->
         <div id="modal-react" class="modal hidden">
-            <div class="modal-content" style="text-align:center">
-                <h3>Реакция</h3>
-                <div id="react-options" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:16px 0">
-                    <button class="react-pick" data-emoji="🔥" style="font-size:28px;background:none;border:none;cursor:pointer">🔥</button>
-                    <button class="react-pick" data-emoji="❤️" style="font-size:28px;background:none;border:none;cursor:pointer">❤️</button>
-                    <button class="react-pick" data-emoji="😂" style="font-size:28px;background:none;border:none;cursor:pointer">😂</button>
-                    <button class="react-pick" data-emoji="😮" style="font-size:28px;background:none;border:none;cursor:pointer">😮</button>
-                    <button class="react-pick" data-emoji="😢" style="font-size:28px;background:none;border:none;cursor:pointer">😢</button>
-                    <button class="react-pick" data-emoji="👏" style="font-size:28px;background:none;border:none;cursor:pointer">👏</button>
-                    <button class="react-pick" data-emoji="✨" style="font-size:28px;background:none;border:none;cursor:pointer">✨</button>
-                    <button class="react-pick" data-emoji="💯" style="font-size:28px;background:none;border:none;cursor:pointer">💯</button>
-                    <button class="react-pick" data-emoji="🚀" style="font-size:28px;background:none;border:none;cursor:pointer">🚀</button>
-                    <button class="react-pick" data-emoji="❤️‍🔥" style="font-size:28px;background:none;border:none;cursor:pointer">❤️‍🔥</button>
+            <div class="modal-content react-modal-sheet">
+                <div class="react-modal-head">
+                    <h3>Реакция</h3>
+                    <button type="button" id="btn-close-react" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <button id="btn-close-react" class="btn btn-secondary full">Закрыть</button>
+                <div class="react-pages-wrap">
+                    <button type="button" class="react-nav" id="react-prev"><i class="fa-solid fa-chevron-left"></i></button>
+                    <div class="react-pages" id="react-pages">
+                        <div class="react-page active">
+                            <button class="react-pick" data-emoji="🔥"><i class="fa-solid fa-fire"></i></button>
+                            <button class="react-pick" data-emoji="❤️"><i class="fa-solid fa-heart"></i></button>
+                            <button class="react-pick" data-emoji="😂"><i class="fa-solid fa-face-smile"></i></button>
+                            <button class="react-pick" data-emoji="😮"><i class="fa-solid fa-face-surprise"></i></button>
+                            <button class="react-pick" data-emoji="😢"><i class="fa-solid fa-face-sad-tear"></i></button>
+                        </div>
+                        <div class="react-page">
+                            <button class="react-pick" data-emoji="👏"><i class="fa-solid fa-hands-clapping"></i></button>
+                            <button class="react-pick" data-emoji="✨"><i class="fa-solid fa-star"></i></button>
+                            <button class="react-pick" data-emoji="🚀"><i class="fa-solid fa-rocket"></i></button>
+                            <button class="react-pick" data-emoji="💯"><i class="fa-solid fa-100"></i></button>
+                            <button class="react-pick" data-emoji="👍"><i class="fa-solid fa-thumbs-up"></i></button>
+                        </div>
+                        <div class="react-page">
+                            <button class="react-pick" data-emoji="👎"><i class="fa-solid fa-thumbs-down"></i></button>
+                            <button class="react-pick" data-emoji="🤯"><i class="fa-solid fa-bomb"></i></button>
+                            <button class="react-pick" data-emoji="🥰"><i class="fa-solid fa-face-grin-hearts"></i></button>
+                            <button class="react-pick" data-emoji="💀"><i class="fa-solid fa-skull"></i></button>
+                            <button class="react-pick" data-emoji="⚡️"><i class="fa-solid fa-bolt"></i></button>
+                        </div>
+                        <div class="react-page">
+                            <button class="react-pick" data-emoji="🎉"><i class="fa-solid fa-champagne-glasses"></i></button>
+                            <button class="react-pick" data-emoji="👀"><i class="fa-solid fa-eye"></i></button>
+                            <button class="react-pick" data-emoji="💪"><i class="fa-solid fa-dumbbell"></i></button>
+                            <button class="react-pick" data-emoji="🙏"><i class="fa-solid fa-hands-praying"></i></button>
+                            <button class="react-pick" data-emoji="❤️‍🔥"><i class="fa-solid fa-heart-crack"></i></button>
+                        </div>
+                    </div>
+                    <button type="button" class="react-nav" id="react-next"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <div class="react-dots" id="react-dots"><span class="on"></span><span></span><span></span><span></span></div>
             </div>
         </div>
 
@@ -959,5 +984,10 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
     <script src="/static/js/script.js?v={{ cache_bust|default('1') }}"></script>
+
+        <div id="circle-expand-overlay" class="circle-expand-overlay hidden">
+            <button type="button" id="circle-expand-close" class="circle-expand-close"><i class="fa-solid fa-xmark"></i></button>
+            <video id="circle-expand-video" playsinline loop></video>
+        </div>
 </body>
 </html>

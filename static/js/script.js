@@ -250,14 +250,51 @@ function hideUploadProgress() {
     const fill = document.getElementById('upload-progress-fill');
     if (fill) fill.style.width = '0%';
 }
-function uploadWithProgress(url, file, fieldName) {
+function compressImageFile(file, maxSide, quality) {
+    maxSide = maxSide || 1600;
+    quality = quality || 0.8;
+    if (!file || !file.type || !file.type.startsWith('image/') || file.type === 'image/gif') {
+        return Promise.resolve(file);
+    }
+    return new Promise(resolve => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            let w = img.naturalWidth || img.width;
+            let h = img.naturalHeight || img.height;
+            if (w <= maxSide && h <= maxSide && file.size < 700000) {
+                URL.revokeObjectURL(url);
+                return resolve(file);
+            }
+            const scale = Math.min(1, maxSide / Math.max(w, h));
+            w = Math.round(w * scale); h = Math.round(h * scale);
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            URL.revokeObjectURL(url);
+            canvas.toBlob(blob => {
+                if (!blob) return resolve(file);
+                resolve(new File([blob], (file.name || 'photo').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' }));
+            }, 'image/jpeg', quality);
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+        img.src = url;
+    });
+}
+async function uploadWithProgress(url, file, fieldName) {
     fieldName = fieldName || 'file';
+    try {
+        if (file && file.type && file.type.startsWith('image/')) {
+            showUploadProgress(5, 'Сжатие');
+            file = await compressImageFile(file);
+        }
+    } catch (e) {}
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', url);
         xhr.withCredentials = true;
         xhr.upload.onprogress = e => {
-            if (e.lengthComputable) showUploadProgress((e.loaded / e.total) * 100, 'Загрузка');
+            if (e.lengthComputable) showUploadProgress(10 + (e.loaded / e.total) * 90, 'Загрузка');
             else showUploadProgress(50, 'Загрузка');
         };
         xhr.onload = () => {
@@ -270,7 +307,7 @@ function uploadWithProgress(url, file, fieldName) {
         xhr.onerror = () => { hideUploadProgress(); reject(new Error('Сеть')); };
         const fd = new FormData();
         fd.append(fieldName, file);
-        showUploadProgress(0, 'Загрузка');
+        showUploadProgress(10, 'Загрузка');
         xhr.send(fd);
     });
 }
@@ -2391,24 +2428,28 @@ document.getElementById('btn-delete-chat-both')?.addEventListener('click', () =>
 
 function formatMessage(content, isSuper) {
     let body = content || '';
-    if (body.startsWith('[photo]')) body = '<img class="media-clickable" data-type="photo" data-src="' + body.slice(7) + '" src="' + body.slice(7) + '" style="max-width:220px;border-radius:12px">';
-    else if (body.startsWith('[circle]')) body = '<video class="circle-video" src="' + body.slice(8) + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()"></video>';
-    else if (body.startsWith('[video]')) body = '<video src="' + body.slice(7) + '" controls playsinline style="max-width:220px;border-radius:12px"></video>';
-    else if (body.startsWith('[voice]')) {
+    if (body.startsWith('[photo]')) {
         const src = body.slice(7);
-        const bars = Array.from({length:12}, (_,i) => {
-            const h = 5 + ((i * 9) % 14);
-            return '<i style="display:inline-block;width:2px;height:' + h + 'px;margin:0 1px;border-radius:1px;background:rgba(255,255,255,0.8);vertical-align:middle"></i>';
-        }).join('');
-        body = '<div class="voice-msg" data-src="' + src + '" style="display:flex;align-items:center;gap:8px;min-width:140px;max-width:180px;padding:2px 0">' +
-            '<button type="button" class="voice-msg-play" style="width:28px;height:28px;border-radius:50%;border:none;background:rgba(0,0,0,0.28);color:#fff;flex-shrink:0;cursor:pointer;font-size:11px"><i class="fa-solid fa-play"></i></button>' +
-            '<div class="voice-msg-wave" style="flex:1;display:flex;align-items:center;height:22px">' + bars + '</div>' +
-            '<span class="voice-msg-dur" style="font-size:11px;opacity:0.9;min-width:28px">🎙</span>' +
-            '<audio preload="metadata" src="' + src + '" style="display:none"></audio></div>';
+        body = '<div class="msg-media-only"><img class="media-clickable msg-photo" data-type="photo" data-src="' + src + '" src="' + src + '" alt=""></div>';
+    } else if (body.startsWith('[circle]')) {
+        const src = body.slice(8);
+        body = '<div class="msg-media-only"><video class="circle-video msg-circle" src="' + src + '" playsinline loop muted data-circle-src="' + src + '"></video></div>';
+    } else if (body.startsWith('[video]')) {
+        const src = body.slice(7);
+        body = '<div class="msg-media-only"><video class="media-clickable msg-video" data-type="video" data-src="' + src + '" src="' + src + '" controls playsinline preload="metadata"></video></div>';
+    } else if (body.startsWith('[voice]')) {
+        const src = body.slice(7);
+        body = '<div class="voice-player" data-src="' + src + '">' +
+            '<button type="button" class="voice-play-btn"><i class="fa-solid fa-play"></i></button>' +
+            '<div class="voice-wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
+            '<span class="voice-time">0:00</span>' +
+            '<audio preload="metadata" src="' + src + '"></audio></div>';
+    } else {
+        body = linkifyMentions(escapeHtml(body));
     }
-    else body = linkifyMentions(body);
-    return (isSuper ? '<span style="font-size:11px;opacity:.85"><i class="fa-solid fa-bolt"></i> SUPER</span><br>' : '') + body;
+    return (isSuper ? '<span class="msg-super-tag"><i class="fa-solid fa-bolt"></i> SUPER</span>' : '') + body;
 }
+
 
 function bindMsgLongPress(div, msgId) {
     let t = null;
@@ -2434,16 +2475,18 @@ async function loadMessages(userId) {
         const div = document.createElement('div');
         div.className = 'message ' + (m.is_mine ? 'mine' : 'theirs') + (m.is_super ? ' super' : '') + (m.is_mine && mePlus.plus_msg_style ? ' plus-msg-' + mePlus.plus_msg_style : '');
         div.dataset.msgId = m.id;
-        div.innerHTML = '<div class="msg-bubble">' + formatMessage(m.content, m.is_super) +
+        const isMedia = /\[photo\]|\[video\]|\[circle\]|\[voice\]/.test(m.content || '');
+        div.innerHTML = '<div class="msg-bubble' + (isMedia ? ' media-bubble' : '') + '">' + formatMessage(m.content, m.is_super) +
             '<div class="msg-time">' + (m.created_at || '') + (m.is_mine && m.is_read ? ' ✓✓' : (m.is_mine ? ' ✓' : '')) + '</div></div>';
         bindMsgLongPress(div, m.id);
         box.appendChild(div);
     });
     box.querySelectorAll('.media-clickable').forEach(el => {
-        el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
+        el.onclick = e => { e.stopPropagation(); openLightbox(el.dataset.type, el.dataset.src); };
     });
     bindMentions(box);
     bindVoicePlayers(box);
+    bindCircleVideos(box);
     enhanceLinkPreviews(box);
     box.scrollTop = box.scrollHeight;
 }
@@ -2568,40 +2611,40 @@ document.getElementById('btn-voice-stop')?.addEventListener('click', () => stopV
 document.getElementById('btn-voice-cancel')?.addEventListener('click', () => stopVoiceRecording(false));
 
 function bindVoicePlayers(root) {
-    (root || document).querySelectorAll('.voice-msg').forEach(wrap => {
-        if (wrap.dataset.bound) return;
-        wrap.dataset.bound = '1';
-        const audio = wrap.querySelector('audio');
-        const btn = wrap.querySelector('.voice-msg-play');
-        const dur = wrap.querySelector('.voice-msg-dur');
+    (root || document).querySelectorAll('.voice-player').forEach(el => {
+        if (el.dataset.bound) return;
+        el.dataset.bound = '1';
+        const audio = el.querySelector('audio');
+        const btn = el.querySelector('.voice-play-btn');
+        const time = el.querySelector('.voice-time');
         if (!audio || !btn) return;
-        audio.addEventListener('loadedmetadata', () => {
-            if (dur && isFinite(audio.duration)) dur.textContent = formatVoiceTime(Math.round(audio.duration));
-        });
-        audio.addEventListener('timeupdate', () => {
-            if (dur && isFinite(audio.duration)) {
-                const left = Math.max(0, Math.round(audio.duration - audio.currentTime));
-                dur.textContent = formatVoiceTime(left);
-            }
-        });
-        audio.addEventListener('ended', () => {
-            btn.innerHTML = '<i class="fa-solid fa-play"></i>';
-        });
         btn.onclick = e => {
             e.stopPropagation();
-            document.querySelectorAll('.voice-msg audio').forEach(a => {
-                if (a !== audio) { a.pause(); const b = a.closest('.voice-msg')?.querySelector('.voice-msg-play'); if (b) b.innerHTML = '<i class="fa-solid fa-play"></i>'; }
+            document.querySelectorAll('.voice-player audio').forEach(a => {
+                if (a !== audio) { a.pause(); a.parentElement?.classList.remove('playing'); }
             });
             if (audio.paused) {
-                audio.play();
+                audio.play().catch(() => {});
+                el.classList.add('playing');
                 btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
             } else {
                 audio.pause();
+                el.classList.remove('playing');
                 btn.innerHTML = '<i class="fa-solid fa-play"></i>';
             }
         };
+        audio.addEventListener('timeupdate', () => {
+            if (!time) return;
+            const s = Math.floor(audio.currentTime || 0);
+            time.textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+        });
+        audio.addEventListener('ended', () => {
+            el.classList.remove('playing');
+            btn.innerHTML = '<i class="fa-solid fa-play"></i>';
+        });
     });
 }
+
 
 
 // ===== Video circles =====
@@ -3342,10 +3385,11 @@ function renderPremiumChatMsg(m) {
         '<div class="pc-msg-text">' + body + '</div>' +
         '<div class="pc-msg-time">' + escapeHtml(m.created_at || '') + '</div>';
     div.querySelectorAll('.media-clickable').forEach(el => {
-        el.onclick = () => openLightbox(el.dataset.type, el.dataset.src);
+        el.onclick = e => { e.stopPropagation(); openLightbox(el.dataset.type, el.dataset.src); };
     });
     bindMentions(div);
     bindVoicePlayers(div);
+    bindCircleVideos(div);
     enhanceLinkPreviews(div);
     return div;
 }
@@ -3373,6 +3417,8 @@ async function openPremiumChat() {
             box.innerHTML = '<div class="premium-chat-empty"><i class="fa-solid fa-comments"></i><span>Общий чат Premium<br>Напишите первым</span></div>';
         } else {
             msgs.forEach(m => box.appendChild(renderPremiumChatMsg(m)));
+            box.querySelectorAll('.media-clickable').forEach(el => { el.onclick = e => { e.stopPropagation(); openLightbox(el.dataset.type, el.dataset.src); }; });
+            bindCircleVideos(box); bindVoicePlayers(box);
             box.scrollTop = box.scrollHeight;
         }
         if (!premiumChatJoined) {
@@ -3403,13 +3449,14 @@ document.getElementById('btn-premium-attach')?.addEventListener('click', () => d
 document.getElementById('premium-chat-file')?.addEventListener('change', async e => {
     const file = e.target.files && e.target.files[0];
     if (!file || !meHasPremium) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    const up = await fetch('/api/upload', { method: 'POST', body: fd });
-    const ud = await up.json();
-    if (ud.error) return showToast('Ошибка', ud.error, '!');
-    const content = file.type.startsWith('video') ? '[video]' + ud.url : '[photo]' + ud.url;
-    sendPremiumChat(content);
+    try {
+        const ud = await uploadWithProgress('/api/upload', file);
+        if (ud.error) return showToast('Ошибка', ud.error, '!');
+        let content;
+        if (file.type.startsWith('video')) content = '[video]' + ud.url;
+        else content = '[photo]' + ud.url;
+        sendPremiumChat(content);
+    } catch (err) { showToast('Ошибка', err.message || 'Сеть', '!'); }
     e.target.value = '';
 });
 
@@ -4135,3 +4182,82 @@ document.getElementById('ch-manage-save-meta')?.addEventListener('click', async 
     if (!res.ok || d.error) showToast('Ошибка', d.error || 'Не сохранено', '!');
     else showToast('Канал', 'Описание сохранено', '✓');
 });
+
+// Global media open
+document.addEventListener('click', function (e) {
+    const el = e.target.closest('.media-clickable');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openLightbox(el.dataset.type || 'photo', el.dataset.src || el.getAttribute('src'));
+}, true);
+
+// Circle expand + viewport autoplay
+function bindCircleVideos(root) {
+    const scope = root || document;
+    const vids = scope.querySelectorAll('video.circle-video, video.msg-circle');
+    if (!window._circleIO) {
+        window._circleIO = new IntersectionObserver(entries => {
+            entries.forEach(en => {
+                const v = en.target;
+                if (en.isIntersecting) {
+                    v.muted = true;
+                    v.playsInline = true;
+                    v.play().catch(() => {});
+                } else {
+                    try { v.pause(); } catch (e) {}
+                }
+            });
+        }, { threshold: 0.35 });
+    }
+    vids.forEach(v => {
+        window._circleIO.observe(v);
+        if (v.dataset.circleBound) return;
+        v.dataset.circleBound = '1';
+        v.addEventListener('click', e => {
+            e.stopPropagation();
+            openCircleExpand(v.currentSrc || v.src || v.dataset.circleSrc);
+        });
+    });
+}
+function openCircleExpand(src) {
+    const ov = document.getElementById('circle-expand-overlay');
+    const vid = document.getElementById('circle-expand-video');
+    if (!ov || !vid || !src) return;
+    vid.src = src;
+    vid.muted = false;
+    vid.loop = true;
+    ov.classList.remove('hidden');
+    vid.play().catch(() => {});
+}
+document.getElementById('circle-expand-close')?.addEventListener('click', () => {
+    const ov = document.getElementById('circle-expand-overlay');
+    const vid = document.getElementById('circle-expand-video');
+    if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
+    ov?.classList.add('hidden');
+});
+document.getElementById('circle-expand-overlay')?.addEventListener('click', e => {
+    if (e.target.id === 'circle-expand-overlay') document.getElementById('circle-expand-close')?.click();
+});
+
+// Reaction pages
+(function(){
+    let page = 0;
+    function showReactPage(i) {
+        const pages = document.querySelectorAll('#react-pages .react-page');
+        const dots = document.querySelectorAll('#react-dots span');
+        if (!pages.length) return;
+        page = (i + pages.length) % pages.length;
+        pages.forEach((p, idx) => p.classList.toggle('active', idx === page));
+        dots.forEach((d, idx) => d.classList.toggle('on', idx === page));
+    }
+    document.getElementById('react-prev')?.addEventListener('click', () => showReactPage(page - 1));
+    document.getElementById('react-next')?.addEventListener('click', () => showReactPage(page + 1));
+    let sx = 0;
+    document.getElementById('react-pages')?.addEventListener('touchstart', e => { sx = e.touches[0].clientX; }, { passive: true });
+    document.getElementById('react-pages')?.addEventListener('touchend', e => {
+        const dx = e.changedTouches[0].clientX - sx;
+        if (dx > 40) showReactPage(page - 1);
+        if (dx < -40) showReactPage(page + 1);
+    });
+})();

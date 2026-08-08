@@ -4587,3 +4587,101 @@ body.xtheme-cashmere_haze .nav-btn.active {
     background-size: cover; background-position: center;
     margin-bottom: 10px;
 }
+
+/* Upload progress higher */
+.upload-progress-toast {
+    bottom: calc(130px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* Media without bubble chrome */
+.message .msg-bubble.media-bubble {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+}
+.message .msg-bubble.media-bubble .msg-time {
+    padding: 4px 6px 0;
+    color: var(--muted);
+}
+.msg-media-only { display: inline-block; max-width: min(78vw, 280px); }
+.msg-photo {
+    max-width: 100%; border-radius: 16px; display: block; cursor: zoom-in;
+}
+.msg-video { max-width: 100%; border-radius: 16px; display: block; background: #000; }
+.msg-circle, .circle-video {
+    width: 180px; height: 180px; border-radius: 50%; object-fit: cover;
+    display: block; background: #111; cursor: pointer;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.35);
+}
+.pc-msg-text .msg-media-only { max-width: min(70vw, 260px); }
+
+/* Voice player */
+.voice-player {
+    display: flex; align-items: center; gap: 10px;
+    min-width: 180px; max-width: 260px;
+    padding: 10px 12px; border-radius: 18px;
+    background: linear-gradient(135deg, rgba(124,58,237,0.2), rgba(167,139,250,0.12));
+    border: 1px solid rgba(167,139,250,0.25);
+}
+.voice-play-btn {
+    width: 36px; height: 36px; border-radius: 50%; border: none;
+    background: #8b5cf6; color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+}
+.voice-player.playing .voice-play-btn { background: #a78bfa; }
+.voice-wave { display: flex; align-items: center; gap: 3px; flex: 1; height: 22px; }
+.voice-wave span {
+    flex: 1; border-radius: 99px; background: rgba(196,181,253,0.55);
+    height: 30%; animation: none;
+}
+.voice-player.playing .voice-wave span { animation: voiceBar 0.9s ease-in-out infinite; }
+.voice-wave span:nth-child(2) { height: 55%; animation-delay: .05s; }
+.voice-wave span:nth-child(3) { height: 80%; animation-delay: .1s; }
+.voice-wave span:nth-child(4) { height: 45%; animation-delay: .15s; }
+.voice-wave span:nth-child(5) { height: 70%; animation-delay: .2s; }
+.voice-wave span:nth-child(6) { height: 40%; animation-delay: .25s; }
+.voice-wave span:nth-child(7) { height: 60%; animation-delay: .3s; }
+@keyframes voiceBar {
+    0%, 100% { transform: scaleY(0.55); }
+    50% { transform: scaleY(1.15); }
+}
+.voice-time { font-size: 11px; color: #c4b5fd; min-width: 32px; text-align: right; }
+
+/* Circle expand */
+.circle-expand-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    background: rgba(0,0,0,0.92);
+    display: flex; align-items: center; justify-content: center;
+}
+.circle-expand-overlay.hidden { display: none !important; }
+.circle-expand-overlay video {
+    width: min(88vw, 420px); height: min(88vw, 420px);
+    border-radius: 50%; object-fit: cover; background: #000;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+}
+.circle-expand-close {
+    position: absolute; top: calc(16px + env(safe-area-inset-top, 0px)); right: 16px;
+    width: 42px; height: 42px; border-radius: 50%; border: none;
+    background: rgba(255,255,255,0.12); color: #fff; font-size: 18px; cursor: pointer;
+}
+
+/* Reaction pages */
+.react-modal-sheet { max-width: 340px; padding: 16px !important; }
+.react-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.react-pages-wrap { display: flex; align-items: center; gap: 6px; }
+.react-pages { flex: 1; overflow: hidden; }
+.react-page { display: none; justify-content: space-between; gap: 6px; }
+.react-page.active { display: flex; }
+.react-pick {
+    width: 48px; height: 48px; border-radius: 14px; border: none;
+    background: rgba(255,255,255,0.06); color: #e9e0ff; font-size: 20px; cursor: pointer;
+}
+.react-pick:active { background: rgba(139,92,246,0.3); transform: scale(1.08); }
+.react-nav {
+    width: 32px; height: 48px; border: none; background: transparent;
+    color: var(--muted); cursor: pointer; font-size: 14px;
+}
+.react-dots { display: flex; justify-content: center; gap: 6px; margin-top: 12px; }
+.react-dots span { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.2); }
+.react-dots span.on { background: #a78bfa; }
