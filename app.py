@@ -827,11 +827,15 @@ def create_post(channel_id):
     if not can_post(user, ch):
         return jsonify({'error': 'Нет прав на публикацию'}), 403
     data = request.json or {}
-    content = data.get('content', '').strip()
-    if not content:
+    content = (data.get('content') or '').strip()
+    media_type = (data.get('media_type') or 'text')[:20]
+    media_url = (data.get('media_url') or '')[:500]
+    if not content and not media_url:
         return jsonify({'error': 'Пустой пост'}), 400
+    if not content and media_url:
+        content = '📷' if media_type in ('photo', 'image') else ('🎥' if media_type == 'video' else '📎')
     post = Post(channel_id=channel_id, author_id=user.id, content=content,
-                media_type=data.get('media_type', 'text'), media_url=data.get('media_url', ''))
+                media_type=media_type, media_url=media_url)
     db.session.add(post)
     for s in Subscription.query.filter_by(channel_id=channel_id).all():
         if s.user_id != user.id and s.notifications:
@@ -2638,3 +2642,5 @@ if __name__ == '__main__':
 # cache-bust 20260807195406
 
 # redesign-bust 20260808105026
+
+# fix-bust 20260808110406

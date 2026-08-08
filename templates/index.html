@@ -33,7 +33,6 @@ window.SKLEWS_BUILD = '20260807m';
         <nav class="bottom-nav" id="bottom-nav">
             <button class="nav-btn active" data-tab="home"><i class="fa-solid fa-house icon"></i><span>Лента</span></button>
             <button class="nav-btn hidden" data-tab="premium" id="nav-premium"><i class="fa-solid fa-crown icon"></i><span>Premium</span></button>
-            <button class="nav-btn" data-tab="create"><i class="fa-solid fa-plus icon"></i><span>Создать</span></button>
             <button class="nav-btn" data-tab="analytics"><i class="fa-solid fa-chart-line icon"></i><span>Аналитика</span></button>
             <button class="nav-btn" data-tab="shop"><i class="fa-solid fa-gem icon"></i><span>Магазин</span></button>
             <button class="nav-btn" data-tab="chats"><i class="fa-solid fa-comments icon"></i><span>Чаты</span><span id="nav-chats-badge" class="nav-badge hidden">0</span></button>
@@ -337,12 +336,25 @@ window.SKLEWS_BUILD = '20260807m';
                 <h1>Управление</h1>
                 <div style="width:40px"></div>
             </header>
+            <div class="ch-manage-edit">
+                <div class="ch-manage-av-edit" id="ch-manage-av-edit">?</div>
+                <input type="file" id="ch-manage-av-input" accept="image/*" hidden>
+                <button type="button" class="btn btn-secondary btn-sm" id="ch-manage-av-btn">Сменить аватар</button>
+                <label class="plus-label" style="margin-top:12px">Описание канала</label>
+                <textarea id="ch-manage-desc" rows="3" class="plus-input" placeholder="Описание..." style="width:100%;resize:vertical"></textarea>
+                <button type="button" class="btn btn-primary full" id="ch-manage-save-meta" style="margin-top:10px">Сохранить</button>
+            </div>
             <div class="ch-manage-tabs">
                 <button type="button" class="ch-manage-tab active" data-mtab="subs">Подписчики</button>
                 <button type="button" class="ch-manage-tab" data-mtab="roles">Роли</button>
             </div>
             <div id="ch-manage-subs" class="feed"></div>
             <div id="ch-manage-roles" class="feed hidden"></div>
+        </div>
+        <!-- global upload progress -->
+        <div id="upload-progress-toast" class="upload-progress-toast hidden">
+            <div class="upload-progress-label">Загрузка… <span id="upload-progress-pct">0%</span></div>
+            <div class="upload-progress-bar"><div id="upload-progress-fill"></div></div>
         </div>
 
         <!-- USER PROFILE -->

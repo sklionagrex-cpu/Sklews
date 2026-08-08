@@ -4554,3 +4554,36 @@ body.xtheme-cashmere_haze .nav-btn.active {
     background: rgba(255,255,255,0.05); color: var(--muted); font-weight: 600; cursor: pointer;
 }
 .ch-manage-tab.active { background: var(--accent); color: #fff; }
+
+.upload-progress-toast {
+    position: fixed;
+    left: 16px; right: 16px; bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    z-index: 9999;
+    background: rgba(20,16,30,0.96);
+    border: 1px solid rgba(139,92,246,0.35);
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+}
+.upload-progress-toast.hidden { display: none !important; }
+.upload-progress-label { font-size: 13px; color: #e9e0ff; margin-bottom: 8px; font-weight: 600; }
+.upload-progress-bar {
+    height: 6px; border-radius: 99px; background: rgba(255,255,255,0.08); overflow: hidden;
+}
+#upload-progress-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #7c3aed, #a78bfa);
+    transition: width 0.15s linear;
+}
+.ch-manage-edit {
+    padding: 14px 16px 8px;
+    border-bottom: 1px solid var(--border);
+}
+.ch-manage-av-edit {
+    width: 72px; height: 72px; border-radius: 18px;
+    background: linear-gradient(135deg,#7c3aed,#a78bfa);
+    color: #fff; font-weight: 700; font-size: 28px;
+    display: flex; align-items: center; justify-content: center;
+    background-size: cover; background-position: center;
+    margin-bottom: 10px;
+}

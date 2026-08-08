@@ -217,7 +217,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
             else loadPremiumFeed();
         }
         if (tab === 'profile') loadProfile();
-        if (tab === 'create') { showScreen('screen-home', { push: false }); document.querySelector('.ch-hub-tab[data-hub="mine"]')?.click(); }
+        if (tab === 'create') { showScreen('screen-home', { push: false }); document.querySelector('.ch-hub-tab[data-hub="mine"]')?.click(); } // legacy
         if (tab === 'analytics') loadAnalyticsTab();
         if (tab === 'shop') loadShop();
         if (tab === 'chats') {
@@ -230,6 +230,52 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
 
 // ===== In-app navigation stack (hardware back button) =====
 const NAV_STACK = [];
+
+function showUploadProgress(pct, label) {
+    const t = document.getElementById('upload-progress-toast');
+    if (!t) return;
+    t.classList.remove('hidden');
+    const fill = document.getElementById('upload-progress-fill');
+    const p = document.getElementById('upload-progress-pct');
+    if (fill) fill.style.width = Math.max(0, Math.min(100, pct)) + '%';
+    if (p) p.textContent = Math.round(pct) + '%';
+    if (label) {
+        const lab = t.querySelector('.upload-progress-label');
+        if (lab) lab.childNodes[0].textContent = label + ' ';
+    }
+}
+function hideUploadProgress() {
+    const t = document.getElementById('upload-progress-toast');
+    if (t) t.classList.add('hidden');
+    const fill = document.getElementById('upload-progress-fill');
+    if (fill) fill.style.width = '0%';
+}
+function uploadWithProgress(url, file, fieldName) {
+    fieldName = fieldName || 'file';
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', url);
+        xhr.withCredentials = true;
+        xhr.upload.onprogress = e => {
+            if (e.lengthComputable) showUploadProgress((e.loaded / e.total) * 100, 'Загрузка');
+            else showUploadProgress(50, 'Загрузка');
+        };
+        xhr.onload = () => {
+            hideUploadProgress();
+            let data = {};
+            try { data = JSON.parse(xhr.responseText || '{}'); } catch (err) {}
+            if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+            else reject(new Error(data.error || ('HTTP ' + xhr.status)));
+        };
+        xhr.onerror = () => { hideUploadProgress(); reject(new Error('Сеть')); };
+        const fd = new FormData();
+        fd.append(fieldName, file);
+        showUploadProgress(0, 'Загрузка');
+        xhr.send(fd);
+    });
+}
+
+
 let _navSuppress = false;
 
 function showScreen(id, opts) {
@@ -870,7 +916,11 @@ function applyChannelHeaderFx(ch) {
 async function openPostsPage(id) {
     currentChannelId = id;
     viewingPosts = true;
-    showScreen('screen-posts');
+    // avoid stacking manage <-> posts
+    while (NAV_STACK.length && NAV_STACK[NAV_STACK.length - 1].screen === 'screen-ch-manage') NAV_STACK.pop();
+    const cur = document.querySelector('.screen.active');
+    const fromManage = cur && cur.id === 'screen-ch-manage';
+    showScreen('screen-posts', { push: !fromManage });
     try {
         const res = await fetch('/api/channel/' + id);
         const ch = await res.json();
@@ -917,7 +967,24 @@ async function openPostsPage(id) {
 }
 
 async function openChannelManage(channelId) {
-    showScreen('screen-ch-manage');
+    currentChannelId = channelId;
+    // replace posts in stack so Back from manage returns to posts once, not loop
+    showScreen('screen-ch-manage', { push: true });
+    // load meta
+    try {
+        const res = await fetch('/api/channel/' + channelId);
+        const ch = await res.json();
+        const av = document.getElementById('ch-manage-av-edit');
+        if (av) {
+            if (typeof setAvatarEl === 'function') setAvatarEl(av, ch.avatar, ch.name);
+            else {
+                av.textContent = (ch.name || '?')[0].toUpperCase();
+                if (ch.avatar) { av.style.backgroundImage = 'url(' + ch.avatar + ')'; av.style.backgroundSize = 'cover'; av.textContent = ''; }
+            }
+        }
+        const desc = document.getElementById('ch-manage-desc');
+        if (desc) desc.value = ch.description || '';
+    } catch (e) {}
     const subsBox = document.getElementById('ch-manage-subs');
     const rolesBox = document.getElementById('ch-manage-roles');
     if (subsBox) subsBox.innerHTML = '<div class="empty-state">Загрузка…</div>';
@@ -925,7 +992,6 @@ async function openChannelManage(channelId) {
         const res = await fetch('/api/channel/' + channelId + '/subscribers');
         let subs = await res.json();
         if (!Array.isArray(subs)) {
-            // fallback roles endpoint users
             const r2 = await fetch('/api/channel/' + channelId + '/roles');
             subs = await r2.json();
         }
@@ -956,14 +1022,19 @@ async function openChannelManage(channelId) {
     } catch (e) {
         if (subsBox) subsBox.innerHTML = '<div class="empty-state">Не удалось загрузить</div>';
     }
-    // roles tab reuses openRolesModal data lightly
     if (rolesBox) {
         rolesBox.innerHTML = '<button type="button" class="btn btn-primary full" id="btn-open-roles-from-manage">Назначить роли</button>';
         document.getElementById('btn-open-roles-from-manage')?.addEventListener('click', () => openRolesModal());
     }
 }
 
-document.getElementById('btn-back-posts').onclick = () => { if (NAV_STACK.length) navGoBack(); else openChannel(currentChannelId); };
+
+document.getElementById('btn-back-posts').onclick = () => {
+    // drop manage from stack if present
+    while (NAV_STACK.length && NAV_STACK[NAV_STACK.length - 1].screen === 'screen-ch-manage') NAV_STACK.pop();
+    if (NAV_STACK.length) navGoBack();
+    else showScreen('screen-home', { push: false });
+};
 
 
 document.getElementById('btn-support-channel')?.addEventListener('click', () => {
@@ -1337,29 +1408,44 @@ document.getElementById('post-video-input').onchange = e => {
 document.getElementById('btn-confirm-post').onclick = async () => {
     const content = document.getElementById('new-post-content').value.trim();
     if (!content && !pendingPostPhoto && !pendingPostCircleUrl) return;
+    if (!currentChannelId) return showToast('Ошибка', 'Канал не выбран', '!');
+    const btn = document.getElementById('btn-confirm-post');
+    if (btn) btn.disabled = true;
     let media_url = '', media_type = 'text';
-    if (pendingPostCircleUrl) {
-        media_url = pendingPostCircleUrl;
-        media_type = 'circle';
-    } else if (pendingPostPhoto) {
-        const fd = new FormData();
-        fd.append('file', pendingPostPhoto);
-        const up = await fetch('/api/upload', { method: 'POST', body: fd });
-        const upData = await up.json();
-        if (upData.error) { showToast('Ошибка', upData.error, '!'); return; }
-        media_url = upData.url;
-        media_type = pendingPostPhoto._type === 'video' ? 'video' : 'photo';
+    try {
+        if (pendingPostCircleUrl) {
+            media_url = pendingPostCircleUrl;
+            media_type = 'circle';
+        } else if (pendingPostPhoto) {
+            media_type = pendingPostPhoto._type === 'video' ? 'video' : 'photo';
+            const upData = await uploadWithProgress('/api/upload', pendingPostPhoto);
+            if (upData.error) { showToast('Ошибка', upData.error, '!'); return; }
+            media_url = upData.url;
+        }
+        showUploadProgress(100, 'Публикация');
+        const res = await fetch('/api/channel/' + currentChannelId + '/post', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ content: content || (media_type === 'circle' ? '⭕' : '📷'), media_type: media_type, media_url: media_url })
+        });
+        const data = await res.json().catch(() => ({}));
+        hideUploadProgress();
+        if (!res.ok || data.error) {
+            showToast('Ошибка', data.error || 'Не удалось опубликовать', '!');
+            return;
+        }
+        document.getElementById('modal-post').classList.add('hidden');
+        pendingPostPhoto = null;
+        pendingPostCircleUrl = null;
+        const pcv = document.getElementById('post-circle-preview');
+        if (pcv) pcv.style.display = 'none';
+        showToast('Пост', 'Опубликован', '✓');
+        loadPosts(currentChannelId);
+    } catch (e) {
+        hideUploadProgress();
+        showToast('Ошибка', e.message || 'Сеть', '!');
+    } finally {
+        if (btn) btn.disabled = false;
     }
-    await fetch('/api/channel/' + currentChannelId + '/post', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ content: content || (media_type === 'circle' ? '⭕' : '📷'), media_type: media_type, media_url: media_url })
-    });
-    document.getElementById('modal-post').classList.add('hidden');
-    pendingPostPhoto = null;
-    pendingPostCircleUrl = null;
-    const pcv = document.getElementById('post-circle-preview');
-    if (pcv) pcv.style.display = 'none';
-    loadPosts(currentChannelId);
 };
 
 document.getElementById('btn-create-channel').onclick = () => {
@@ -1387,11 +1473,10 @@ document.getElementById('btn-confirm-create').onclick = async () => {
     if (!name) return showToast('Ошибка', 'Введите название', '!');
     let avatar = '';
     if (pendingChannelAvatar) {
-        const fd = new FormData();
-        fd.append('file', pendingChannelAvatar);
-        const up = await fetch('/api/upload', { method: 'POST', body: fd });
-        const ud = await up.json();
-        if (ud.url) avatar = ud.url;
+        try {
+            const ud = await uploadWithProgress('/api/upload', pendingChannelAvatar);
+            if (ud.url) avatar = ud.url;
+        } catch (err) { showToast('Ошибка', err.message || 'Загрузка', '!'); return; }
     }
     const res = await fetch('/api/channel/create', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -1459,7 +1544,7 @@ document.getElementById('btn-save-edit-ch').onclick = async () => {
     if (pendingEditChannelAvatar) {
         const fd = new FormData();
         fd.append('file', pendingEditChannelAvatar);
-        const up = await fetch('/api/channel/' + currentChannelId + '/avatar', { method: 'POST', body: fd });
+        const up = { ok: true, json: async () => await uploadWithProgress('/api/channel/' + currentChannelId + '/avatar', pendingEditChannelAvatar) };
         const ud = await up.json();
         if (ud.error) return showToast('Аватар', ud.error, '!');
         avatar = ud.avatar;
@@ -1582,13 +1667,13 @@ document.getElementById('btn-set-avatar').onclick = () => document.getElementByI
 document.getElementById('avatar-input').onchange = async e => {
     const file = e.target.files[0];
     if (!file) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch('/api/profile/avatar', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (data.error) showToast('Ошибка', data.error, '!');
-    else { showToast('Аватар', 'Обновлён', '✓'); loadProfile(); }
+    try {
+        const data = await uploadWithProgress('/api/profile/avatar', file);
+        if (data.error) showToast('Ошибка', data.error, '!');
+        else { showToast('Аватар', 'Обновлён', '✓'); loadProfile(); }
+    } catch (err) { showToast('Ошибка', err.message || 'Сеть', '!'); }
     document.getElementById('modal-settings').classList.add('hidden');
+    e.target.value = '';
 };
 document.getElementById('btn-set-banner').onclick = () => document.getElementById('banner-input').click();
 document.getElementById('banner-input').onchange = async e => {
@@ -1600,20 +1685,15 @@ document.getElementById('banner-input').onchange = async e => {
         e.target.value = '';
         return;
     }
-    const fd = new FormData();
-    fd.append('file', f);
     try {
-        const res = await fetch('/api/profile/banner', { method: 'POST', body: fd });
-        const raw = await res.text();
-        let d = {};
-        try { d = raw ? JSON.parse(raw) : {}; } catch (err) { d = { error: 'Ошибка сервера' }; }
-        if (!res.ok || d.error) showToast('Шапка', d.error || 'Не удалось', '!');
+        const d = await uploadWithProgress('/api/profile/banner', f);
+        if (d.error) showToast('Шапка', d.error || 'Не удалось', '!');
         else {
             showToast('Шапка', isVideo ? 'Видео-шапка установлена' : 'Обновлена', '✓');
             loadProfile();
         }
     } catch (err) {
-        showToast('Шапка', 'Сеть', '!');
+        showToast('Шапка', err.message || 'Сеть', '!');
     }
     e.target.value = '';
 };
@@ -2095,11 +2175,8 @@ document.getElementById('btn-send-comment').onclick = async () => {
     if ((!content && !pendingCommentPhoto) || !currentCommentPostId) return;
     let media_url = '', media_type = '';
     if (pendingCommentPhoto) {
-        const fd = new FormData();
-        fd.append('file', pendingCommentPhoto);
-        const up = await fetch('/api/upload', { method: 'POST', body: fd });
-        const ud = await up.json();
-        if (ud.error) return showToast('Ошибка', ud.error, '!');
+        const ud = await uploadWithProgress('/api/upload', pendingCommentPhoto);
+        if (ud.error) { showToast('Ошибка', ud.error, '!'); return; }
         media_url = ud.url;
         media_type = 'photo';
     }
@@ -2405,13 +2482,12 @@ document.getElementById('btn-attach').onclick = () => document.getElementById('c
 document.getElementById('chat-file').onchange = async e => {
     const file = e.target.files[0];
     if (!file || !currentChatUserId) return;
-    const fd = new FormData();
-    fd.append('file', file);
-    const up = await fetch('/api/upload', { method: 'POST', body: fd });
-    const ud = await up.json();
-    if (ud.error) return showToast('Ошибка', ud.error, '!');
-    const content = file.type.startsWith('video') ? '[video]' + ud.url : '[photo]' + ud.url;
-    socket.emit('send_message', { receiver_id: currentChatUserId, content: content, is_super: false });
+    try {
+        const ud = await uploadWithProgress('/api/upload', file);
+        if (ud.error) return showToast('Ошибка', ud.error, '!');
+        const content = file.type.startsWith('video') ? '[video]' + ud.url : '[photo]' + ud.url;
+        socket.emit('send_message', { receiver_id: currentChatUserId, content: content, is_super: false });
+    } catch (err) { showToast('Ошибка', err.message || 'Сеть', '!'); }
     e.target.value = '';
 };
 let mediaRecorder = null, voiceChunks = [], voiceStream = null, voiceTimer = null, voiceSecs = 0, voiceCancelled = false;
@@ -2463,13 +2539,13 @@ async function startVoiceRecording() {
             showVoiceBar(false);
             if (voiceCancelled || !voiceChunks.length || voiceSecs < 1) return;
             const blob = new Blob(voiceChunks, { type: 'audio/webm' });
-            const fd = new FormData();
-            fd.append('file', blob, 'voice.webm');
-            const up = await fetch('/api/upload', { method: 'POST', body: fd });
-            const ud = await up.json();
-            if (ud.url && currentChatUserId) {
-                socket.emit('send_message', { receiver_id: currentChatUserId, content: '[voice]' + ud.url, is_super: false });
-            } else if (ud.error) showToast('Ошибка', ud.error, '!');
+            try {
+                const file = new File([blob], 'voice.webm', { type: 'audio/webm' });
+                const ud = await uploadWithProgress('/api/upload', file);
+                if (ud.url && currentChatUserId) {
+                    socket.emit('send_message', { receiver_id: currentChatUserId, content: '[voice]' + ud.url, is_super: false });
+                } else if (ud.error) showToast('Ошибка', ud.error, '!');
+            } catch (err) { showToast('Ошибка', err.message || 'Сеть', '!'); }
         };
         mediaRecorder.start(200);
         document.getElementById('btn-voice')?.classList.add('active');
@@ -4007,8 +4083,11 @@ document.addEventListener('click', e => {
 
 
 document.getElementById('btn-back-ch-manage')?.addEventListener('click', () => {
+    // always return to posts, do not leave manage on stack
+    while (NAV_STACK.length && NAV_STACK[NAV_STACK.length - 1].screen === 'screen-ch-manage') NAV_STACK.pop();
+    // also remove posts if top so we don't loop manage<->posts
     if (currentChannelId) openPostsPage(currentChannelId);
-    else showScreen('screen-home');
+    else showScreen('screen-home', { push: false });
 });
 document.querySelectorAll('.ch-manage-tab').forEach(t => {
     t.addEventListener('click', () => {
@@ -4018,4 +4097,41 @@ document.querySelectorAll('.ch-manage-tab').forEach(t => {
         document.getElementById('ch-manage-subs')?.classList.toggle('hidden', m !== 'subs');
         document.getElementById('ch-manage-roles')?.classList.toggle('hidden', m !== 'roles');
     });
+});
+
+document.getElementById('ch-manage-av-btn')?.addEventListener('click', () => document.getElementById('ch-manage-av-input')?.click());
+document.getElementById('ch-manage-av-input')?.addEventListener('change', async e => {
+    const f = e.target.files && e.target.files[0];
+    if (!f || !currentChannelId) return;
+    try {
+        const data = await uploadWithProgress('/api/channel/' + currentChannelId + '/avatar', f);
+        if (data.error) return showToast('Ошибка', data.error, '!');
+        const av = document.getElementById('ch-manage-av-edit');
+        if (av && data.avatar) {
+            av.style.backgroundImage = 'url(' + data.avatar + ')';
+            av.style.backgroundSize = 'cover';
+            av.textContent = '';
+        }
+        showToast('Канал', 'Аватар обновлён', '✓');
+        const topAv = document.getElementById('tg-ch-top-av');
+        if (topAv && data.avatar) {
+            topAv.style.backgroundImage = 'url(' + data.avatar + ')';
+            topAv.style.backgroundSize = 'cover';
+            topAv.textContent = '';
+        }
+    } catch (err) {
+        showToast('Ошибка', err.message || 'Загрузка', '!');
+    }
+    e.target.value = '';
+});
+document.getElementById('ch-manage-save-meta')?.addEventListener('click', async () => {
+    if (!currentChannelId) return;
+    const description = (document.getElementById('ch-manage-desc')?.value || '').trim();
+    const res = await fetch('/api/channel/' + currentChannelId + '/update', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description })
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || d.error) showToast('Ошибка', d.error || 'Не сохранено', '!');
+    else showToast('Канал', 'Описание сохранено', '✓');
 });
