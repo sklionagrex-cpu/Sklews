@@ -1877,11 +1877,14 @@ body:has(#screen-chat.active) .bottom-nav {
     width: 72px;
     height: 72px;
     border-radius: 18px;
-    box-shadow: 0 12px 40px rgba(139, 92, 246, 0.45), 0 0 0 1px rgba(167, 139, 250, 0.35);
+    object-fit: cover;
+    display: block;
+    box-shadow: 0 10px 32px rgba(124, 58, 237, 0.4), 0 0 0 1px rgba(167, 139, 250, 0.25);
     position: fixed;
     z-index: 5;
-    /* pointer-events restored */
     will-change: transform;
+    animation: none !important; /* don't fight bounce physics */
+    background: transparent;
 }
 @keyframes logoReveal {
     from { opacity: 0; transform: scale(0.7) rotate(-8deg); filter: blur(8px); }
