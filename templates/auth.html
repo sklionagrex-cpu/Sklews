@@ -13,6 +13,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/static/apple-touch-icon.png?v=7">
 
     <title>Sklews — Вход</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <link rel="stylesheet" href="/static/css/style.css?v=BUILD-20260807-1600">
     <style>
         .auth-form input {
@@ -63,7 +64,10 @@
         <form method="POST" class="auth-form" id="authForm">
             <input type="hidden" name="action" id="form-action" value="login">
             <input type="text" name="username" placeholder="Логин" required autocomplete="username" autofocus>
-            <input type="password" name="password" placeholder="Пароль" required autocomplete="current-password">
+            <div class="auth-pass-wrap">
+            <input type="password" name="password" id="auth-password" placeholder="Пароль" required autocomplete="current-password">
+            <button type="button" class="auth-pass-toggle" id="auth-pass-toggle" aria-label="Показать пароль"><i class="fa-solid fa-eye"></i></button>
+        </div>
             <button type="submit" class="btn btn-primary full" id="submit-btn" style="margin-top:8px;width:100%">Войти</button>
         </form>
     </div>
@@ -133,6 +137,34 @@
       placeHome();
     }
   });
+})();
+</script>
+
+<style>
+.auth-pass-wrap{position:relative;width:100%}
+.auth-pass-wrap input{width:100%;padding-right:44px!important}
+.auth-pass-toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:16px}
+</style>
+<script>
+(function(){
+  try{
+    var raw=localStorage.getItem('sklews_theme_vars');
+    if(raw){
+      var p=JSON.parse(raw), r=document.documentElement;
+      if(p.bg){r.style.setProperty('--bg',p.bg);document.body.style.background=p.bg}
+      if(p.card)r.style.setProperty('--card',p.card);
+      if(p.text)r.style.setProperty('--text',p.text);
+      if(p.muted)r.style.setProperty('--muted',p.muted);
+      if(p.accent){r.style.setProperty('--accent',p.accent);var m=document.querySelector('meta[name=theme-color]');if(m)m.content=p.accent}
+      if(p.border)r.style.setProperty('--border',p.border);
+    }
+  }catch(e){}
+  var btn=document.getElementById('auth-pass-toggle'), inp=document.getElementById('auth-password');
+  if(btn&&inp)btn.onclick=function(){
+    var show=inp.type==='password';
+    inp.type=show?'text':'password';
+    btn.innerHTML=show?'<i class="fa-solid fa-eye-slash"></i>':'<i class="fa-solid fa-eye"></i>';
+  };
 })();
 </script>
 </body>

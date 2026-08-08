@@ -381,11 +381,13 @@ window.SKLEWS_BUILD = '20260807m';
         </div>
 
             <!-- MEDIA LIGHTBOX -->
-        <div id="media-lightbox" class="modal hidden" style="align-items:center;background:rgba(0,0,0,0.92)">
-            <div style="width:100%;max-width:100%;text-align:center;padding:12px">
-                <button id="btn-close-lightbox" class="btn-icon" style="position:absolute;top:16px;right:16px;z-index:10"><i class="fa-solid fa-xmark"></i></button>
-                <img id="lightbox-img" style="max-width:100%;max-height:85vh;border-radius:8px;display:none">
-                <video id="lightbox-video" controls playsinline style="max-width:100%;max-height:85vh;border-radius:8px;display:none"></video>
+        <div id="media-lightbox" class="modal hidden lightbox-modal">
+            <button type="button" id="btn-close-lightbox" class="lightbox-close"><i class="fa-solid fa-xmark"></i></button>
+            <div id="lightbox-viewport" class="lightbox-viewport">
+                <div id="lightbox-pan" class="lightbox-pan">
+                    <img id="lightbox-img" alt="">
+                    <video id="lightbox-video" playsinline controls></video>
+                </div>
             </div>
         </div>
 
@@ -748,6 +750,7 @@ window.SKLEWS_BUILD = '20260807m';
                 <div style="display:flex;gap:8px;margin-bottom:12px">
                     <button type="button" id="btn-add-photo" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-image"></i> Фото</button>
                     <button type="button" id="btn-add-video" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-video"></i> Видео</button>
+                    <button type="button" id="btn-add-post-voice" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-microphone"></i> Голос</button>
                     <button type="button" id="btn-add-circle" class="btn btn-secondary" style="flex:1"><i class="fa-solid fa-circle-play"></i> Кружок</button>
                 </div>
                 <div id="post-circle-preview" style="display:none;text-align:center;margin-bottom:12px">
@@ -780,20 +783,23 @@ window.SKLEWS_BUILD = '20260807m';
         </div>
 
         <div id="modal-comments" class="modal hidden">
-            <div class="modal-content" style="max-height:80vh;display:flex;flex-direction:column">
-                <h3>Комментарии</h3>
-                                <div id="comments-list" style="flex:1;overflow-y:auto;margin-bottom:12px"></div>
-                <div id="comment-photo-preview" style="display:none;margin-bottom:8px">
-                    <img id="comment-photo-img" style="max-height:120px;border-radius:10px;max-width:100%">
+            <div class="modal-content comments-sheet">
+                <div class="comments-sheet-head">
+                    <h3>Комментарии</h3>
+                    <button type="button" id="btn-close-comments" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div id="comments-post-preview" class="comments-post-preview"></div>
+                <div id="comments-list" class="comments-list"></div>
+                <div id="comment-photo-preview" class="hidden" style="padding:0 12px 8px">
+                    <img id="comment-photo-img" style="max-height:100px;border-radius:10px;max-width:100%">
                     <button id="btn-clear-comment-photo" class="btn btn-secondary btn-sm" style="margin-top:6px">Убрать фото</button>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center">
-                    <button id="btn-comment-photo" class="btn-super" title="Фото" style="flex-shrink:0"><i class="fa-solid fa-image"></i></button>
+                <div class="comments-compose">
+                    <button id="btn-comment-photo" class="btn-icon" title="Фото"><i class="fa-solid fa-image"></i></button>
                     <input type="file" id="comment-photo-input" accept="image/*" style="display:none">
-                    <input type="text" id="comment-input" placeholder="Комментарий..." style="flex:1;margin:0">
+                    <input type="text" id="comment-input" placeholder="Написать комментарий..." autocomplete="off">
                     <button id="btn-send-comment" class="btn btn-primary btn-sm"><i class="fa-solid fa-paper-plane"></i></button>
                 </div>
-                <button id="btn-close-comments" class="btn btn-secondary full" style="margin-top:12px">Закрыть</button>
             </div>
         </div>
 

@@ -958,6 +958,7 @@ async function openPostsPage(id) {
     const cur = document.querySelector('.screen.active');
     const fromManage = cur && cur.id === 'screen-ch-manage';
     showScreen('screen-posts', { push: !fromManage });
+    const _f = document.getElementById('posts-feed'); if (_f) _f.innerHTML = '<div class="empty-state">Загрузка…</div>';
     try {
         const res = await fetch('/api/channel/' + id);
         const ch = await res.json();
@@ -1185,10 +1186,16 @@ document.getElementById('btn-add-role').onclick = async () => {
     openRolesModal();
 };
 
+let _postsLoadToken = 0;
 async function loadPosts(channelId) {
+    const token = ++_postsLoadToken;
+    const feed = document.getElementById('posts-feed');
+    if (feed) feed.innerHTML = '<div class="empty-state">Загрузка…</div>';
+    const pinBar0 = document.getElementById('ch-pinned-bar');
+    if (pinBar0) { pinBar0.classList.add('hidden'); pinBar0.innerHTML = ''; }
     const res = await fetch('/api/channel/' + channelId + '/posts');
     const posts = await res.json();
-    const feed = document.getElementById('posts-feed');
+    if (token !== _postsLoadToken || String(currentChannelId) !== String(channelId)) return;
     if (!feed) return;
     feed.innerHTML = '';
     // Pinned bar
@@ -1239,7 +1246,7 @@ async function loadPosts(channelId) {
         } else if (p.media_type === 'circle' && p.media_url) {
             media = '<div class="ch-post-media ch-post-circle"><video class="circle-video" src="' + p.media_url + '" playsinline loop muted></video></div>';
         } else if (p.media_type === 'voice' && p.media_url) {
-            media = '<div class="ch-post-voice"><i class="fa-solid fa-waveform"></i><audio controls src="' + p.media_url + '"></audio></div>';
+            media = '<div class="ch-post-voice">' + formatMessage('[voice]' + p.media_url, false) + '</div>';
         }
 
         const reacts = p.reactions || {};
@@ -1325,6 +1332,8 @@ async function loadPosts(channelId) {
     document.querySelectorAll('.media-clickable').forEach(el => {
         el.onclick = e => { e.stopPropagation(); openLightbox(el.dataset.type, el.dataset.src); };
     });
+    bindVoicePlayers(feed);
+    if (typeof bindCircleVideos === 'function') bindCircleVideos(feed);
     document.addEventListener('click', function _closeSheet(e) {
         if (!e.target.closest('.ch-react-sheet') && !e.target.closest('.ch-post-text')) {
             document.querySelectorAll('.ch-react-sheet.open').forEach(s => s.classList.remove('open'));
@@ -1364,45 +1373,96 @@ document.querySelectorAll('.react-pick').forEach(btn => {
     };
 });
 
+let lbScale = 1, lbX = 0, lbY = 0, lbPanning = false, lbLastX = 0, lbLastY = 0, lastPinch = 0;
+function lbApplyTransform() {
+    const pan = document.getElementById('lightbox-pan');
+    if (pan) pan.style.transform = 'translate(' + lbX + 'px,' + lbY + 'px) scale(' + lbScale + ')';
+}
 function openLightbox(type, src) {
     const img = document.getElementById('lightbox-img');
     const vid = document.getElementById('lightbox-video');
-    lbScale = 1;
-    img.style.transform = 'scale(1)';
-    vid.style.transform = 'scale(1)';
-    img.style.display = 'none'; vid.style.display = 'none'; vid.pause();
-    if (type === 'video') { vid.src = src; vid.style.display = 'block'; }
-    else { img.src = src; img.style.display = 'block'; }
-    document.getElementById('media-lightbox').classList.remove('hidden');
-}
-let lbScale = 1;
-document.getElementById('media-lightbox').addEventListener('wheel', e => {
-    e.preventDefault();
-    lbScale = Math.min(4, Math.max(0.5, lbScale + (e.deltaY > 0 ? -0.15 : 0.15)));
-    const t = 'scale(' + lbScale + ')';
-    document.getElementById('lightbox-img').style.transform = t;
-    document.getElementById('lightbox-video').style.transform = t;
-}, { passive: false });
-// pinch
-let lastPinch = 0;
-document.getElementById('media-lightbox').addEventListener('touchmove', e => {
-    if (e.touches.length === 2) {
-        e.preventDefault();
-        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-        if (lastPinch) {
-            lbScale = Math.min(4, Math.max(0.5, lbScale * (d / lastPinch)));
-            const t = 'scale(' + lbScale + ')';
-            document.getElementById('lightbox-img').style.transform = t;
-            document.getElementById('lightbox-video').style.transform = t;
-        }
-        lastPinch = d;
+    const modal = document.getElementById('media-lightbox');
+    if (!img || !vid || !modal) return;
+    lbScale = 1; lbX = 0; lbY = 0; lastPinch = 0; lbPanning = false;
+    lbApplyTransform();
+    img.style.display = 'none';
+    vid.style.display = 'none';
+    try { vid.pause(); vid.removeAttribute('src'); } catch (e) {}
+    if (type === 'video') {
+        vid.src = src;
+        vid.style.display = 'block';
+    } else {
+        img.src = src;
+        img.style.display = 'block';
     }
-}, { passive: false });
-document.getElementById('media-lightbox').addEventListener('touchend', () => { lastPinch = 0; });
-
-document.getElementById('btn-close-lightbox').onclick = () => {
+    modal.classList.remove('hidden');
+}
+(function setupLightboxPanZoom() {
+    const vp = document.getElementById('lightbox-viewport');
+    if (!vp) return;
+    vp.addEventListener('wheel', function (e) {
+        e.preventDefault();
+        const rect = vp.getBoundingClientRect();
+        const cx = e.clientX - rect.left - rect.width / 2;
+        const cy = e.clientY - rect.top - rect.height / 2;
+        const prev = lbScale;
+        lbScale = Math.min(6, Math.max(1, lbScale + (e.deltaY > 0 ? -0.15 : 0.15)));
+        lbX = cx - (cx - lbX) * (lbScale / prev);
+        lbY = cy - (cy - lbY) * (lbScale / prev);
+        if (lbScale <= 1) { lbScale = 1; lbX = 0; lbY = 0; }
+        lbApplyTransform();
+    }, { passive: false });
+    vp.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        lbPanning = true;
+        lbLastX = e.clientX;
+        lbLastY = e.clientY;
+        try { vp.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+    vp.addEventListener('pointermove', function (e) {
+        if (!lbPanning) return;
+        if (lbScale <= 1) return;
+        lbX += e.clientX - lbLastX;
+        lbY += e.clientY - lbLastY;
+        lbLastX = e.clientX;
+        lbLastY = e.clientY;
+        lbApplyTransform();
+    });
+    function endPan() { lbPanning = false; }
+    vp.addEventListener('pointerup', endPan);
+    vp.addEventListener('pointercancel', endPan);
+    vp.addEventListener('touchmove', function (e) {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const d = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            if (lastPinch) {
+                lbScale = Math.min(6, Math.max(1, lbScale * (d / lastPinch)));
+                if (lbScale <= 1) { lbScale = 1; lbX = 0; lbY = 0; }
+                lbApplyTransform();
+            }
+            lastPinch = d;
+        }
+    }, { passive: false });
+    vp.addEventListener('touchend', function () { lastPinch = 0; lbPanning = false; });
+    var lastTap = 0;
+    vp.addEventListener('click', function (e) {
+        if (e.target.closest('video')) return;
+        var now = Date.now();
+        if (now - lastTap < 280) {
+            if (lbScale > 1) { lbScale = 1; lbX = 0; lbY = 0; }
+            else { lbScale = 2.5; }
+            lbApplyTransform();
+        }
+        lastTap = now;
+    });
+})();
+document.getElementById('btn-close-lightbox').onclick = function () {
     document.getElementById('media-lightbox').classList.add('hidden');
-    document.getElementById('lightbox-video').pause();
+    var vid = document.getElementById('lightbox-video');
+    if (vid) { try { vid.pause(); vid.removeAttribute('src'); } catch (e) {} }
 };
 
 document.getElementById('btn-add-post').onclick = () => {
@@ -1444,13 +1504,18 @@ document.getElementById('post-video-input').onchange = e => {
 };
 document.getElementById('btn-confirm-post').onclick = async () => {
     const content = document.getElementById('new-post-content').value.trim();
-    if (!content && !pendingPostPhoto && !pendingPostCircleUrl) return;
+    if (!content && !pendingPostPhoto && !pendingPostCircleUrl && !window._pendingPostVoiceUrl) return;
     if (!currentChannelId) return showToast('Ошибка', 'Канал не выбран', '!');
     const btn = document.getElementById('btn-confirm-post');
     if (btn) btn.disabled = true;
+    document.getElementById('modal-post')?.classList.add('hidden');
     let media_url = '', media_type = 'text';
     try {
-        if (pendingPostCircleUrl) {
+        if (window._pendingPostVoiceUrl) {
+            media_url = window._pendingPostVoiceUrl;
+            media_type = 'voice';
+            window._pendingPostVoiceUrl = null;
+        } else if (pendingPostCircleUrl) {
             media_url = pendingPostCircleUrl;
             media_type = 'circle';
         } else if (pendingPostPhoto) {
@@ -2131,8 +2196,20 @@ async function openComments(postId) {
     currentCommentPostId = postId;
     pendingCommentPhoto = null;
     const prev = document.getElementById('comment-photo-preview');
-    if (prev) prev.style.display = 'none';
+    if (prev) { prev.classList.add('hidden'); prev.style.display = 'none'; }
     document.getElementById('modal-comments').classList.remove('hidden');
+    const postPrev = document.getElementById('comments-post-preview');
+    if (postPrev) {
+        const card = document.getElementById('ch-post-' + postId);
+        if (card) {
+            const text = (card.querySelector('.ch-post-text') || {}).textContent || '';
+            const img = card.querySelector('img');
+            postPrev.innerHTML = (img && img.src ? '<img src="' + img.src + '" alt="">' : '') +
+                '<div class="comments-post-text">' + escapeHtml((text || 'Пост').slice(0, 240)) + '</div>';
+        } else {
+            postPrev.innerHTML = '<div class="comments-post-text">Пост</div>';
+        }
+    }
     const res = await fetch('/api/post/' + postId + '/comments');
     const comments = await res.json();
     const list = document.getElementById('comments-list');
@@ -2439,10 +2516,14 @@ function formatMessage(content, isSuper) {
         body = '<div class="msg-media-only"><video class="media-clickable msg-video" data-type="video" data-src="' + src + '" src="' + src + '" controls playsinline preload="metadata"></video></div>';
     } else if (body.startsWith('[voice]')) {
         const src = body.slice(7);
-        body = '<div class="voice-player" data-src="' + src + '">' +
+        var canTr = (typeof meHasPremium !== 'undefined' && meHasPremium) || (typeof meHasPremiumPlus !== 'undefined' && meHasPremiumPlus);
+        body = '<div class="voice-player msg-media-only" data-src="' + src + '">' +
+            '<div class="voice-player-row">' +
             '<button type="button" class="voice-play-btn"><i class="fa-solid fa-play"></i></button>' +
             '<div class="voice-wave"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>' +
             '<span class="voice-time">0:00</span>' +
+            (canTr ? '<button type="button" class="voice-transcribe-btn" title="Текст"><i class="fa-solid fa-align-left"></i></button>' : '') +
+            '</div><div class="voice-transcript hidden"></div>' +
             '<audio preload="metadata" src="' + src + '"></audio></div>';
     } else {
         body = linkifyMentions(escapeHtml(body));
@@ -2611,20 +2692,25 @@ document.getElementById('btn-voice-stop')?.addEventListener('click', () => stopV
 document.getElementById('btn-voice-cancel')?.addEventListener('click', () => stopVoiceRecording(false));
 
 function bindVoicePlayers(root) {
-    (root || document).querySelectorAll('.voice-player').forEach(el => {
+    (root || document).querySelectorAll('.voice-player').forEach(function (el) {
         if (el.dataset.bound) return;
         el.dataset.bound = '1';
-        const audio = el.querySelector('audio');
-        const btn = el.querySelector('.voice-play-btn');
-        const time = el.querySelector('.voice-time');
+        var audio = el.querySelector('audio');
+        var btn = el.querySelector('.voice-play-btn');
+        var time = el.querySelector('.voice-time');
         if (!audio || !btn) return;
-        btn.onclick = e => {
+        btn.onclick = function (e) {
             e.stopPropagation();
-            document.querySelectorAll('.voice-player audio').forEach(a => {
-                if (a !== audio) { a.pause(); a.parentElement?.classList.remove('playing'); }
+            document.querySelectorAll('.voice-player audio').forEach(function (a) {
+                if (a !== audio) {
+                    a.pause();
+                    if (a.parentElement) a.parentElement.classList.remove('playing');
+                    var b = a.parentElement && a.parentElement.querySelector('.voice-play-btn');
+                    if (b) b.innerHTML = '<i class="fa-solid fa-play"></i>';
+                }
             });
             if (audio.paused) {
-                audio.play().catch(() => {});
+                audio.play().catch(function () {});
                 el.classList.add('playing');
                 btn.innerHTML = '<i class="fa-solid fa-pause"></i>';
             } else {
@@ -2633,17 +2719,42 @@ function bindVoicePlayers(root) {
                 btn.innerHTML = '<i class="fa-solid fa-play"></i>';
             }
         };
-        audio.addEventListener('timeupdate', () => {
+        audio.addEventListener('timeupdate', function () {
             if (!time) return;
-            const s = Math.floor(audio.currentTime || 0);
-            time.textContent = Math.floor(s/60) + ':' + String(s%60).padStart(2,'0');
+            var s = Math.floor(audio.currentTime || 0);
+            time.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
         });
-        audio.addEventListener('ended', () => {
+        audio.addEventListener('ended', function () {
             el.classList.remove('playing');
             btn.innerHTML = '<i class="fa-solid fa-play"></i>';
         });
+        var trBtn = el.querySelector('.voice-transcribe-btn');
+        var trBox = el.querySelector('.voice-transcript');
+        if (trBtn && trBox) {
+            trBtn.onclick = async function (e) {
+                e.stopPropagation();
+                if (!trBox.classList.contains('hidden') && trBox.textContent) {
+                    trBox.classList.add('hidden');
+                    return;
+                }
+                trBox.classList.remove('hidden');
+                trBox.textContent = 'Расшифровка…';
+                try {
+                    var res = await fetch('/api/transcribe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: el.dataset.src || audio.src })
+                    });
+                    var d = await res.json();
+                    trBox.textContent = d.error || d.text || 'Пусто';
+                } catch (err) {
+                    trBox.textContent = 'Не удалось расшифровать';
+                }
+            };
+        }
     });
 }
+
 
 
 
@@ -3090,6 +3201,11 @@ let _themeDraft = null;
 let _fontDraft = 16;
 
 function applyThemeVars(p, key) {
+    try {
+        localStorage.setItem('sklews_theme_vars', JSON.stringify({
+            bg: p.bg, card: p.card, text: p.text, muted: p.muted, accent: p.accent, border: p.border
+        }));
+    } catch (e) {}
     if (!p) return;
     const r = document.documentElement;
     r.style.setProperty('--bg', p.bg);
@@ -4261,3 +4377,40 @@ document.getElementById('circle-expand-overlay')?.addEventListener('click', e =>
         if (dx < -40) showReactPage(page + 1);
     });
 })();
+
+
+document.getElementById('btn-add-post-voice')?.addEventListener('click', async function () {
+    if (window._postVoiceRec && window._postVoiceRec.state === 'recording') {
+        try { window._postVoiceRec.stop(); } catch (e) {}
+        return;
+    }
+    pendingPostPhoto = null;
+    pendingPostCircleUrl = null;
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const chunks = [];
+        const mr = new MediaRecorder(stream);
+        window._postVoiceRec = mr;
+        showToast('Голос', 'Идёт запись — нажмите «Голос» ещё раз чтобы остановить', '🎙️');
+        mr.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+        mr.onstop = async function () {
+            stream.getTracks().forEach(function (t) { t.stop(); });
+            window._postVoiceRec = null;
+            const blob = new Blob(chunks, { type: 'audio/webm' });
+            const file = new File([blob], 'voice.webm', { type: 'audio/webm' });
+            try {
+                const ud = await uploadWithProgress('/api/upload', file);
+                if (ud.url) {
+                    window._pendingPostVoiceUrl = ud.url;
+                    showToast('Голос', 'Готово — нажмите Опубликовать', '✓');
+                } else showToast('Ошибка', ud.error || 'Загрузка', '!');
+            } catch (err) { showToast('Ошибка', err.message || 'Сеть', '!'); }
+        };
+        mr.start();
+        setTimeout(function () {
+            if (mr.state === 'recording') mr.stop();
+        }, 60000);
+    } catch (e) {
+        showToast('Ошибка', 'Нет доступа к микрофону', '!');
+    }
+});

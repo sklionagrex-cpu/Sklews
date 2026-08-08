@@ -2143,6 +2143,27 @@ def uploaded_file(filename):
         return send_from_directory(UPLOAD_FOLDER, filename, max_age=86400)
     return jsonify({'error': 'not found'}), 404
 
+
+@app.route('/api/transcribe', methods=['POST'])
+@login_required
+def api_transcribe():
+    """Premium / Premium+ voice transcript placeholder (expandable later with real STT)."""
+    user = current_user()
+    if not user:
+        return jsonify({'error': 'Нужно войти'}), 401
+    if not (premium_active(user) or premium_plus_active(user)):
+        return jsonify({'error': 'Расшифровка только для Premium'}), 403
+    data = request.get_json(silent=True) or {}
+    url = (data.get('url') or '')[:500]
+    if not url:
+        return jsonify({'error': 'Нет ссылки на голос'}), 400
+    # Lightweight offline-friendly stub: real STT can be plugged here (Whisper etc.)
+    return jsonify({
+        'text': 'Расшифровка голосового сообщения. Подключите STT-сервис для точного текста — пока доступен режим «черновик» для Premium.',
+        'url': url,
+    })
+
+
 @app.route('/api/upload', methods=['POST'])
 @login_required
 def upload_file():
@@ -2646,3 +2667,5 @@ if __name__ == '__main__':
 # fix-bust 20260808110406
 
 # media-ux 20260808112017
+
+# ux2 20260808113836
