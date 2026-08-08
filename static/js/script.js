@@ -2111,8 +2111,17 @@ async function openUserProfile(userId) {
         if (fb) fb.style.display = 'none';
         if (mb) mb.style.display = 'none';
     } else {
-        if (fb) fb.style.display = '';
-        if (mb) mb.style.display = '';
+        if (fb) {
+            fb.style.display = '';
+            fb.style.visibility = 'visible';
+            fb.classList.remove('hidden');
+        }
+        if (mb) {
+            mb.style.display = '';
+            mb.style.visibility = 'visible';
+            mb.classList.remove('hidden');
+            mb.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Написать';
+        }
         if (u.friendship === 'accepted') {
             fb.textContent = 'Удалить';
             fb.classList.remove('btn-primary');
@@ -2136,7 +2145,7 @@ async function openUserProfile(userId) {
             await sendFriendRequest(u.id);
             openUserProfile(userId);
         };
-        mb.onclick = () => openChat(u.id, u.username, u.avatar);
+        if (mb) mb.onclick = () => openChat(u.id, u.username, u.avatar);
     }
 }
 
@@ -3700,12 +3709,8 @@ function renderPremiumChatMsg(m) {
     enhanceLinkPreviews(div);
     if (isMine && m.id) {
         let lt = null;
-        const start = () => { lt = setTimeout(async () => {
-            if (!confirm('Удалить сообщение?')) return;
-            const res = await fetch('/api/premium/chat/' + m.id + '/delete', { method: 'POST' });
-            const d = await res.json().catch(() => ({}));
-            if (res.ok) div.remove();
-            else showToast('Ошибка', d.error || 'Не удалено', '!');
+        const start = () => { lt = setTimeout(() => {
+            openDeletePremiumMsg(m.id, div);
         }, 500); };
         const cancel = () => clearTimeout(lt);
         div.addEventListener('touchstart', start, { passive: true });
@@ -3764,6 +3769,39 @@ function sendPremiumChat(content) {
     socket.emit('premium_chat_message', { content: text });
     if (content == null && input) input.value = '';
 }
+
+
+let _pendingPremiumDelete = { id: null, el: null };
+function openDeletePremiumMsg(id, el) {
+    _pendingPremiumDelete = { id: id, el: el };
+    document.getElementById('modal-delete-premium-msg')?.classList.remove('hidden');
+}
+function closeDeletePremiumMsg() {
+    _pendingPremiumDelete = { id: null, el: null };
+    document.getElementById('modal-delete-premium-msg')?.classList.add('hidden');
+}
+document.getElementById('btn-cancel-delete-premium-msg')?.addEventListener('click', closeDeletePremiumMsg);
+document.getElementById('btn-confirm-delete-premium-msg')?.addEventListener('click', async () => {
+    const { id, el } = _pendingPremiumDelete;
+    if (!id) return closeDeletePremiumMsg();
+    try {
+        const res = await fetch('/api/premium/chat/' + id + '/delete', { method: 'POST' });
+        const d = await res.json().catch(() => ({}));
+        if (res.ok) {
+            if (el && el.parentNode) el.remove();
+            else document.querySelectorAll('.pc-msg[data-id="' + id + '"]').forEach(n => n.remove());
+            showToast('Чат', 'Сообщение удалено', '✓');
+        } else {
+            showToast('Ошибка', d.error || 'Не удалено', '!');
+        }
+    } catch (e) {
+        showToast('Ошибка', 'Сеть', '!');
+    }
+    closeDeletePremiumMsg();
+});
+document.getElementById('modal-delete-premium-msg')?.addEventListener('click', e => {
+    if (e.target && e.target.id === 'modal-delete-premium-msg') closeDeletePremiumMsg();
+});
 
 document.getElementById('btn-premium-chat-send')?.addEventListener('click', () => sendPremiumChat());
 document.getElementById('premium-chat-input')?.addEventListener('keypress', e => {

@@ -5448,3 +5448,35 @@ body.xtheme-cashmere_haze .nav-btn.active {
 #screen-profile .profile-identity {
     padding-right: 8px;
 }
+
+
+/* Guest profile: two buttons in a row */
+.profile-page .profile-guest-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 10px !important;
+    width: 100% !important;
+}
+.profile-page .profile-guest-actions .btn {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 14px !important;
+    padding: 13px 10px !important;
+}
+.profile-page .profile-guest-actions .btn.full {
+    width: auto !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+}
+#screen-user #btn-user-friend,
+#screen-user #btn-user-message {
+    display: inline-flex !important;
+    grid-column: auto !important;
+}
+
