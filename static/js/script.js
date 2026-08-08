@@ -2108,6 +2108,8 @@ async function openUserProfile(userId) {
     });
 
     document.getElementById('user-status').textContent = u.status || '';
+    const ucr = document.getElementById('user-crystals');
+    if (ucr) ucr.textContent = (u.crystals != null ? u.crystals : 0);
     const uf = document.getElementById('user-friends');
     const uc = document.getElementById('user-channels');
     if (uf) uf.textContent = u.friends_count === null ? '•' : (u.friends_count ?? 0);

@@ -1779,6 +1779,7 @@ def user_public(user_id):
         'banner': getattr(u, 'banner', '') or '',
         'banner_type': getattr(u, 'banner_type', 'image') or 'image',
         'banner_stretch': bool(getattr(u, 'banner_stretch', False)),
+        'crystals': int(getattr(u, 'crystals', 0) or 0),
         'status': u.status,
         'is_premium': premium_active(u),
         **user_plus_payload(u),
