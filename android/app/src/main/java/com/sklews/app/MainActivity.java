@@ -27,7 +27,7 @@ public class MainActivity extends AppCompatActivity {
     // "https://xxxx.trycloudflare.com"
     // "http://192.168.1.50:5000"
     // "http://127.0.0.1:5000"  — только если сервер на ЭТОМ же телефоне
-    private static final String SERVER_URL = "http://127.0.0.1:5000";
+    private static final String SERVER_URL = "https://sklewss.onrender.com";
     // ============================================
 
     private WebView webView;

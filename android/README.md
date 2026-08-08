@@ -18,7 +18,7 @@
 Строка:
 
 ```java
-private static final String SERVER_URL = "http://127.0.0.1:5000";
+private static final String SERVER_URL = "https://sklewss.onrender.com";
 ```
 
 Замени на свой адрес, например:
