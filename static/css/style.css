@@ -5480,3 +5480,52 @@ body.xtheme-cashmere_haze .nav-btn.active {
     grid-column: auto !important;
 }
 
+
+
+/* Other user profile: raise identity + buttons so all fits one screen */
+#screen-user.profile-screen,
+#screen-user.screen {
+    overflow: hidden !important;
+}
+#screen-user .profile-page {
+    height: 100% !important;
+    min-height: 100% !important;
+}
+#screen-user .profile-overlay {
+    margin-top: 0 !important;
+    position: absolute !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: calc(18% + env(safe-area-inset-top, 0px)) !important;
+    bottom: auto !important;
+    padding: 0 14px 0 14px !important;
+    gap: 12px !important;
+    z-index: 6;
+    box-sizing: border-box;
+}
+#screen-user .profile-topbar {
+    padding-left: 44px !important; /* room for back */
+}
+#screen-user .profile-guest-actions {
+    margin-top: 4px !important;
+    flex-direction: row !important;
+    gap: 10px !important;
+}
+#screen-user .profile-guest-actions .btn {
+    flex: 1 1 0 !important;
+    padding: 12px 8px !important;
+    font-size: 13px !important;
+}
+#screen-user .avatar-sm {
+    width: 58px !important;
+    height: 58px !important;
+    font-size: 22px !important;
+}
+#screen-user .profile-name-row h2 {
+    font-size: 18px !important;
+}
+#screen-user .profile-desc {
+    font-size: 13px !important;
+    -webkit-line-clamp: 3;
+}
+
