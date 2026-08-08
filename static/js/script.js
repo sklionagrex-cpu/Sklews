@@ -1660,23 +1660,60 @@ document.getElementById('btn-save-edit-ch').onclick = async () => {
 
 async function loadMyChannels() {
     const list = document.getElementById('my-channels-list');
+    const ownedEl = document.getElementById('my-channels-owned');
+    const subsEl = document.getElementById('my-channels-subs');
     if (!list) return;
-    list.innerHTML = '<div class="empty-state">Загрузка…</div>';
+
+    // Ensure section structure exists (in case of hot reload / old DOM)
+    if (!ownedEl || !subsEl) {
+        list.innerHTML =
+            '<div class="section-title mine-section-title">Созданные</div>' +
+            '<div id="my-channels-owned" class="mine-section-list"></div>' +
+            '<div class="section-title mine-section-title">Подписки</div>' +
+            '<div id="my-channels-subs" class="mine-section-list"></div>';
+    }
+    const ownedBox = document.getElementById('my-channels-owned');
+    const subsBox = document.getElementById('my-channels-subs');
+    if (ownedBox) ownedBox.innerHTML = '<div class="empty-state" style="padding:8px 16px">Загрузка…</div>';
+    if (subsBox) subsBox.innerHTML = '';
+
     try {
         const res = await fetch('/api/my_channels');
         let channels = await res.json();
         if (!Array.isArray(channels)) channels = [];
-        list.innerHTML = '';
-        if (!channels.length) {
-            list.innerHTML = '<div class="empty-state">Пока нет каналов и подписок</div>';
-            return;
+        const owned = channels.filter(ch => ch.is_owner);
+        const subs = channels.filter(ch => !ch.is_owner);
+
+        if (ownedBox) {
+            ownedBox.innerHTML = '';
+            if (!owned.length) {
+                /* empty handled by CSS :empty */
+            } else {
+                owned.forEach(ch => {
+                    ch.is_subscribed = true;
+                    ownedBox.appendChild(renderChannelVisitCard(ch, 'mine'));
+                });
+            }
         }
-        channels.forEach(ch => {
-            ch.is_subscribed = true;
-            list.appendChild(renderChannelVisitCard(ch, 'mine'));
-        });
+        if (subsBox) {
+            subsBox.innerHTML = '';
+            if (!subs.length) {
+                /* empty handled by CSS :empty */
+            } else {
+                subs.forEach(ch => {
+                    ch.is_subscribed = true;
+                    subsBox.appendChild(renderChannelVisitCard(ch, 'mine'));
+                });
+            }
+        }
+        if (!channels.length && ownedBox && subsBox) {
+            // both empty — show one friendly message under create button via owned box
+            ownedBox.innerHTML = '<div class="empty-state" style="padding:12px 16px">Пока нет созданных каналов</div>';
+            subsBox.innerHTML = '<div class="empty-state" style="padding:12px 16px">Нет подписок</div>';
+        }
     } catch (e) {
-        list.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+        if (ownedBox) ownedBox.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+        if (subsBox) subsBox.innerHTML = '';
     }
 }
 
@@ -1772,121 +1809,15 @@ document.getElementById('avatar-input').onchange = async e => {
     e.target.value = '';
 };
 
-/* ===== Banner editor: preview + pan/zoom + crop (image) / upload (video) ===== */
-let _bannerEdit = {
-    file: null,
-    isVideo: false,
-    objectUrl: null,
-    naturalW: 0,
-    naturalH: 0,
-    zoom: 1,
-    minZoom: 1,
-    offsetX: 0,
-    offsetY: 0,
-    dragging: false,
-    lastX: 0,
-    lastY: 0,
-};
+
+/* ===== Banner editor: preview as-is (contain), upload original ===== */
+let _bannerEdit = { file: null, isVideo: false, objectUrl: null };
 
 function _bannerRevoke() {
     if (_bannerEdit.objectUrl) {
         try { URL.revokeObjectURL(_bannerEdit.objectUrl); } catch (e) {}
         _bannerEdit.objectUrl = null;
     }
-}
-
-function _bannerFitBase() {
-    const vp = document.getElementById('banner-edit-viewport');
-    if (!vp || !_bannerEdit.naturalW) return { baseW: 0, baseH: 0 };
-    const vw = vp.clientWidth;
-    const vh = vp.clientHeight;
-    const nw = _bannerEdit.naturalW;
-    const nh = _bannerEdit.naturalH;
-    // cover: scale so media fully covers viewport at zoom=1
-    const scale = Math.max(vw / nw, vh / nh);
-    return { baseW: nw * scale, baseH: nh * scale, vw, vh };
-}
-
-function _bannerClampOffset() {
-    const { baseW, baseH, vw, vh } = _bannerFitBase();
-    if (!baseW) return;
-    const z = _bannerEdit.zoom;
-    const w = baseW * z;
-    const h = baseH * z;
-    const maxX = Math.max(0, (w - vw) / 2);
-    const maxY = Math.max(0, (h - vh) / 2);
-    _bannerEdit.offsetX = Math.max(-maxX, Math.min(maxX, _bannerEdit.offsetX));
-    _bannerEdit.offsetY = Math.max(-maxY, Math.min(maxY, _bannerEdit.offsetY));
-}
-
-function _bannerApplyTransform() {
-    const img = document.getElementById('banner-edit-img');
-    const vid = document.getElementById('banner-edit-video');
-    const el = _bannerEdit.isVideo ? vid : img;
-    if (!el) return;
-    const { baseW, baseH } = _bannerFitBase();
-    if (!baseW) return;
-    const z = _bannerEdit.zoom;
-    const w = baseW * z;
-    const h = baseH * z;
-    el.style.width = w + 'px';
-    el.style.height = h + 'px';
-    el.style.transform = 'translate(calc(-50% + ' + _bannerEdit.offsetX + 'px), calc(-50% + ' + _bannerEdit.offsetY + 'px))';
-}
-
-function _bannerBindDrag() {
-    const vp = document.getElementById('banner-edit-viewport');
-    if (!vp || vp._bannerDragBound) return;
-    vp._bannerDragBound = true;
-
-    const onDown = (clientX, clientY) => {
-        _bannerEdit.dragging = true;
-        _bannerEdit.lastX = clientX;
-        _bannerEdit.lastY = clientY;
-        vp.classList.add('is-dragging');
-    };
-    const onMove = (clientX, clientY) => {
-        if (!_bannerEdit.dragging) return;
-        const dx = clientX - _bannerEdit.lastX;
-        const dy = clientY - _bannerEdit.lastY;
-        _bannerEdit.lastX = clientX;
-        _bannerEdit.lastY = clientY;
-        _bannerEdit.offsetX += dx;
-        _bannerEdit.offsetY += dy;
-        _bannerClampOffset();
-        _bannerApplyTransform();
-    };
-    const onUp = () => {
-        _bannerEdit.dragging = false;
-        vp.classList.remove('is-dragging');
-    };
-
-    vp.addEventListener('mousedown', e => { e.preventDefault(); onDown(e.clientX, e.clientY); });
-    window.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
-    window.addEventListener('mouseup', onUp);
-
-    vp.addEventListener('touchstart', e => {
-        if (e.touches.length !== 1) return;
-        onDown(e.touches[0].clientX, e.touches[0].clientY);
-    }, { passive: true });
-    vp.addEventListener('touchmove', e => {
-        if (!_bannerEdit.dragging || e.touches.length !== 1) return;
-        e.preventDefault();
-        onMove(e.touches[0].clientX, e.touches[0].clientY);
-    }, { passive: false });
-    vp.addEventListener('touchend', onUp);
-    vp.addEventListener('touchcancel', onUp);
-
-    vp.addEventListener('wheel', e => {
-        e.preventDefault();
-        const zoomEl = document.getElementById('banner-zoom');
-        let z = _bannerEdit.zoom + (e.deltaY < 0 ? 0.08 : -0.08);
-        z = Math.max(1, Math.min(3, z));
-        _bannerEdit.zoom = z;
-        if (zoomEl) zoomEl.value = String(z);
-        _bannerClampOffset();
-        _bannerApplyTransform();
-    }, { passive: false });
 }
 
 function openBannerEditor(file) {
@@ -1898,56 +1829,41 @@ function openBannerEditor(file) {
     _bannerRevoke();
     _bannerEdit.file = file;
     _bannerEdit.isVideo = isVideo;
-    _bannerEdit.zoom = 1;
-    _bannerEdit.offsetX = 0;
-    _bannerEdit.offsetY = 0;
     _bannerEdit.objectUrl = URL.createObjectURL(file);
 
     const img = document.getElementById('banner-edit-img');
     const vid = document.getElementById('banner-edit-video');
-    const zoomEl = document.getElementById('banner-zoom');
     const modal = document.getElementById('modal-banner-edit');
 
     img.classList.add('hidden');
+    img.removeAttribute('src');
+    img.style.cssText = '';
     vid.classList.add('hidden');
     vid.pause();
-    if (zoomEl) zoomEl.value = '1';
+    vid.removeAttribute('src');
+    try { vid.load(); } catch (e) {}
 
     document.getElementById('modal-settings')?.classList.add('hidden');
     modal?.classList.remove('hidden');
-    _bannerBindDrag();
-
-    const onReady = (w, h) => {
-        _bannerEdit.naturalW = w;
-        _bannerEdit.naturalH = h;
-        // wait layout
-        requestAnimationFrame(() => {
-            _bannerClampOffset();
-            _bannerApplyTransform();
-        });
-    };
 
     if (isVideo) {
         vid.classList.remove('hidden');
         vid.src = _bannerEdit.objectUrl;
         vid.onloadedmetadata = () => {
-            onReady(vid.videoWidth || 720, vid.videoHeight || 1280);
             vid.muted = true;
             vid.loop = true;
             vid.play().catch(() => {});
         };
     } else {
         img.classList.remove('hidden');
-        img.onload = () => onReady(img.naturalWidth, img.naturalHeight);
         img.src = _bannerEdit.objectUrl;
     }
 }
 
 function closeBannerEditor() {
-    const modal = document.getElementById('modal-banner-edit');
-    modal?.classList.add('hidden');
+    document.getElementById('modal-banner-edit')?.classList.add('hidden');
     const vid = document.getElementById('banner-edit-video');
-    if (vid) { vid.pause(); vid.removeAttribute('src'); vid.load(); }
+    if (vid) { vid.pause(); vid.removeAttribute('src'); try { vid.load(); } catch (e) {} }
     const img = document.getElementById('banner-edit-img');
     if (img) img.removeAttribute('src');
     _bannerRevoke();
@@ -1958,42 +1874,8 @@ async function saveBannerEditor() {
     if (!_bannerEdit.file) return closeBannerEditor();
     const btn = document.getElementById('btn-banner-edit-save');
     if (btn) { btn.disabled = true; btn.textContent = 'Сохранение…'; }
-
     try {
-        let uploadFile = _bannerEdit.file;
-        if (!_bannerEdit.isVideo) {
-            // Crop visible viewport to JPEG
-            const vp = document.getElementById('banner-edit-viewport');
-            const { baseW, baseH, vw, vh } = _bannerFitBase();
-            const z = _bannerEdit.zoom;
-            const dispW = baseW * z;
-            const dispH = baseH * z;
-            // media center is at viewport center + offset
-            // top-left of media relative to viewport:
-            const mediaLeft = (vw / 2) + _bannerEdit.offsetX - dispW / 2;
-            const mediaTop = (vh / 2) + _bannerEdit.offsetY - dispH / 2;
-            // source rect in natural pixels
-            const scaleToNatural = _bannerEdit.naturalW / dispW;
-            const sx = Math.max(0, (-mediaLeft) * scaleToNatural);
-            const sy = Math.max(0, (-mediaTop) * scaleToNatural);
-            const sw = Math.min(_bannerEdit.naturalW - sx, vw * scaleToNatural);
-            const sh = Math.min(_bannerEdit.naturalH - sy, vh * scaleToNatural);
-
-            const outW = Math.min(1440, Math.round(sw));
-            const outH = Math.round(outW * (sh / sw));
-            const canvas = document.createElement('canvas');
-            canvas.width = outW;
-            canvas.height = outH;
-            const ctx = canvas.getContext('2d');
-            const img = document.getElementById('banner-edit-img');
-            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, outW, outH);
-            const blob = await new Promise((resolve, reject) => {
-                canvas.toBlob(b => b ? resolve(b) : reject(new Error('canvas')), 'image/jpeg', 0.92);
-            });
-            uploadFile = new File([blob], 'banner.jpg', { type: 'image/jpeg' });
-        }
-
-        const d = await uploadWithProgress('/api/profile/banner', uploadFile);
+        const d = await uploadWithProgress('/api/profile/banner', _bannerEdit.file);
         if (d.error) showToast('Шапка', d.error || 'Не удалось', '!');
         else {
             showToast('Шапка', _bannerEdit.isVideo ? 'Видео-шапка установлена' : 'Обновлена', '✓');
@@ -2014,15 +1896,9 @@ document.getElementById('banner-input').onchange = e => {
     if (!f) return;
     openBannerEditor(f);
 };
-
 document.getElementById('btn-banner-edit-close')?.addEventListener('click', closeBannerEditor);
 document.getElementById('btn-banner-edit-cancel')?.addEventListener('click', closeBannerEditor);
 document.getElementById('btn-banner-edit-save')?.addEventListener('click', saveBannerEditor);
-document.getElementById('banner-zoom')?.addEventListener('input', e => {
-    _bannerEdit.zoom = Math.max(1, Math.min(3, parseFloat(e.target.value) || 1));
-    _bannerClampOffset();
-    _bannerApplyTransform();
-});
 
 
 document.getElementById('btn-set-status').onclick = () => {

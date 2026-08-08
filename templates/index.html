@@ -80,7 +80,12 @@ window.SKLEWS_BUILD = '20260807m';
                 <div style="padding:12px 16px 8px">
                     <button id="btn-create-channel" class="btn btn-primary full"><i class="fa-solid fa-plus"></i> Создать канал</button>
                 </div>
-                <div id="my-channels-list" class="feed ch-visiting-feed"></div>
+                <div id="my-channels-list" class="feed ch-visiting-feed">
+                    <div class="section-title mine-section-title">Созданные</div>
+                    <div id="my-channels-owned" class="mine-section-list"></div>
+                    <div class="section-title mine-section-title">Подписки</div>
+                    <div id="my-channels-subs" class="mine-section-list"></div>
+                </div>
             </div>
         </div>
 
@@ -710,11 +715,7 @@ window.SKLEWS_BUILD = '20260807m';
                         <img id="banner-edit-img" class="banner-edit-media hidden" alt="">
                         <video id="banner-edit-video" class="banner-edit-media hidden" muted loop playsinline></video>
                     </div>
-                    <div class="banner-edit-hint">Потяните, чтобы сдвинуть · колёсико/ползунок — масштаб</div>
-                </div>
-                <div class="banner-edit-controls">
-                    <label class="banner-zoom-label"><i class="fa-solid fa-magnifying-glass"></i> Масштаб</label>
-                    <input type="range" id="banner-zoom" min="1" max="3" step="0.01" value="1">
+                    <div class="banner-edit-hint">Предпросмотр как на профиле · без обрезки и растягивания</div>
                 </div>
                 <div class="modal-actions banner-edit-actions">
                     <button type="button" id="btn-banner-edit-cancel" class="btn btn-secondary">Отмена</button>
