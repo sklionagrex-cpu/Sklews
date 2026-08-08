@@ -5365,3 +5365,86 @@ body.xtheme-cashmere_haze .nav-btn.active {
     color: #c4b5fd !important;
 }
 
+
+
+/* Profile layout: banner full bleed top; identity lower */
+.profile-page {
+    display: flex !important;
+    flex-direction: column !important;
+}
+.profile-page .profile-banner {
+    inset: 0 !important;
+}
+.profile-page .profile-banner::after {
+    background: linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.08) 0%,
+        rgba(0,0,0,0.05) 35%,
+        rgba(0,0,0,0.45) 70%,
+        rgba(0,0,0,0.82) 100%
+    ) !important;
+}
+.profile-overlay {
+    margin-top: auto !important;
+    padding: 0 16px calc(18px + env(safe-area-inset-bottom, 0px) + 72px) 16px !important;
+    gap: 12px !important;
+    width: 100%;
+    box-sizing: border-box;
+}
+#screen-user .profile-overlay {
+    padding-left: 16px !important;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)) !important;
+}
+.profile-page .profile-topbar {
+    padding: 0 !important;
+}
+.profile-page .profile-menu {
+    position: absolute !important;
+    top: calc(10px + env(safe-area-inset-top, 0px)) !important;
+    right: 12px !important;
+    z-index: 12 !important;
+}
+.profile-page .profile-back {
+    top: calc(10px + env(safe-area-inset-top, 0px)) !important;
+}
+/* slightly smaller identity since it sits lower */
+.profile-page .avatar-sm {
+    width: 64px !important;
+    height: 64px !important;
+    font-size: 24px !important;
+}
+.profile-page .profile-name-row h2 {
+    font-size: 20px !important;
+}
+.profile-page .profile-desc {
+    font-size: 14px !important;
+}
+
+/* Kill gradient / plus message bubble styles */
+.message.mine.plus-msg-glow .msg-bubble,
+.message.mine.plus-msg-gradient .msg-bubble,
+.message.mine.plus-msg-neon .msg-bubble,
+.message.mine.plus-msg-glass .msg-bubble {
+    background: var(--accent, #8b5cf6) !important;
+    box-shadow: none !important;
+    border: none !important;
+    text-shadow: none !important;
+    backdrop-filter: none !important;
+}
+
+
+.profile-page { position: relative !important; }
+.profile-overlay, .profile-page .profile-topbar { position: static !important; }
+.profile-page .profile-menu {
+    position: absolute !important;
+    top: calc(10px + env(safe-area-inset-top, 0px)) !important;
+    right: 12px !important;
+    z-index: 12 !important;
+}
+#screen-profile .profile-topbar {
+    /* menu is absolute; identity uses full width */
+    display: block !important;
+}
+#screen-profile .profile-identity {
+    padding-right: 8px;
+}

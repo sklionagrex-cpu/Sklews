@@ -1069,6 +1069,25 @@ def respond_request():
     db.session.commit()
     return jsonify({'status': fr.status})
 
+@app.route('/api/friends/remove', methods=['POST'])
+@login_required
+def remove_friend():
+    me = current_user()
+    data = request.json or {}
+    peer_id = data.get('user_id')
+    if not peer_id:
+        return jsonify({'error': 'Некорректный ID'}), 400
+    fr = Friendship.query.filter(
+        ((Friendship.user_id == me.id) & (Friendship.friend_id == peer_id)) |
+        ((Friendship.user_id == peer_id) & (Friendship.friend_id == me.id))
+    ).first()
+    if not fr:
+        return jsonify({'status': 'none'})
+    db.session.delete(fr)
+    db.session.commit()
+    return jsonify({'status': 'removed'})
+
+
 @app.route('/api/friends')
 @login_required
 def get_friends():

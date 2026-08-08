@@ -29,7 +29,7 @@ function setMePlusFromProfile(p) {
         plus_aura: p.plus_aura || '',
         plus_badge: p.plus_badge || '',
         plus_banner_fx: p.plus_banner_fx || '',
-        plus_msg_style: p.plus_msg_style || '',
+        plus_msg_style: '',
         plus_card_style: p.plus_card_style || '',
         plus_accent: p.plus_accent || '',
     };
@@ -2113,11 +2113,26 @@ async function openUserProfile(userId) {
     } else {
         if (fb) fb.style.display = '';
         if (mb) mb.style.display = '';
-        if (u.friendship === 'accepted') fb.textContent = 'Друг';
-        else if (u.friendship === 'pending') fb.textContent = 'Запрос отправлен';
-        else fb.textContent = 'Добавить в друзья';
+        if (u.friendship === 'accepted') {
+            fb.textContent = 'Удалить';
+            fb.classList.remove('btn-primary');
+            fb.classList.add('btn-secondary');
+        } else if (u.friendship === 'pending') {
+            fb.textContent = 'Запрос отправлен';
+            fb.classList.remove('btn-primary');
+            fb.classList.add('btn-secondary');
+        } else {
+            fb.textContent = 'Добавить в друзья';
+            fb.classList.remove('btn-primary');
+            fb.classList.add('btn-secondary');
+        }
         fb.onclick = async () => {
-            if (u.friendship !== 'none') return;
+            if (u.friendship === 'accepted') {
+                await removeFriend(u.id);
+                openUserProfile(userId);
+                return;
+            }
+            if (u.friendship === 'pending') return;
             await sendFriendRequest(u.id);
             openUserProfile(userId);
         };
@@ -2497,6 +2512,24 @@ async function searchUsers(q) {
         feed.appendChild(card);
     });
 }
+
+async function removeFriend(userId) {
+    try {
+        const res = await fetch('/api/friends/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId })
+        });
+        const d = await res.json();
+        if (d.error) showToast('Друзья', d.error, '!');
+        else showToast('Друзья', 'Удалено из друзей', '✓');
+        return d;
+    } catch (e) {
+        showToast('Друзья', 'Сеть', '!');
+        return { error: 'network' };
+    }
+}
+
 async function sendFriendRequest(userId) {
     await fetch('/api/friends/request', {
         method: 'POST', headers: {'Content-Type':'application/json'},
@@ -2711,7 +2744,7 @@ async function loadMessages(userId) {
     box.innerHTML = '';
     messages.forEach(m => {
         const div = document.createElement('div');
-        div.className = 'message ' + (m.is_mine ? 'mine' : 'theirs') + (m.is_super ? ' super' : '') + (m.is_mine && mePlus.plus_msg_style ? ' plus-msg-' + mePlus.plus_msg_style : '');
+        div.className = 'message ' + (m.is_mine ? 'mine' : 'theirs') + (m.is_super ? ' super' : '');
         div.dataset.msgId = m.id;
         const isMedia = /\[photo\]|\[video\]|\[circle\]|\[voice\]/.test(m.content || '');
         div.innerHTML = '<div class="msg-bubble' + (isMedia ? ' media-bubble' : '') + '">' + formatMessage(m.content, m.is_super) +
@@ -3098,7 +3131,7 @@ socket.on('new_message', data => {
     if (inChat && (data.sender_id === currentChatUserId || data.is_mine)) {
         const box = document.getElementById('messages');
         const div = document.createElement('div');
-        div.className = 'message ' + (data.is_mine ? 'mine' : 'theirs') + (data.is_super ? ' super' : '') + (data.is_mine && mePlus.plus_msg_style ? ' plus-msg-' + mePlus.plus_msg_style : '');
+        div.className = 'message ' + (data.is_mine ? 'mine' : 'theirs') + (data.is_super ? ' super' : '');
         div.innerHTML = '<div class="msg-bubble">' + formatMessage(data.content, data.is_super) +
             '<div class="msg-time">' + (data.created_at || '') + '</div></div>';
         if (data.id) {
