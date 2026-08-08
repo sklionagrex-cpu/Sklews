@@ -5107,3 +5107,167 @@ body.xtheme-cashmere_haze .nav-btn.active {
     content: none !important;
 }
 
+
+
+/* ===== Profile size + buttons under description + banner editor ===== */
+.profile-overlay {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 0 16px;
+    max-width: 100%;
+}
+.profile-page .profile-topbar {
+    padding: 0 !important;
+    align-items: flex-start;
+}
+#screen-user .profile-overlay {
+    padding-left: 56px;
+}
+.profile-page .avatar-sm {
+    width: 78px !important;
+    height: 78px !important;
+    font-size: 28px !important;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.4);
+}
+.profile-page .profile-name-row h2 {
+    font-size: 24px !important;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+.profile-page .profile-prem-badge {
+    width: 26px !important;
+    height: 26px !important;
+    font-size: 13px !important;
+}
+.profile-page .profile-desc {
+    margin-top: 6px !important;
+    font-size: 15px !important;
+    line-height: 1.4 !important;
+    -webkit-line-clamp: 4;
+    color: rgba(255,255,255,0.88) !important;
+}
+.profile-page .profile-identity {
+    gap: 14px !important;
+}
+.profile-page .profile-menu {
+    width: 44px !important;
+    height: 44px !important;
+}
+
+/* Buttons under description — not pinned to bottom */
+.profile-page .profile-own-actions,
+.profile-page .profile-guest-actions {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    margin: 0;
+    width: 100%;
+}
+.profile-page .profile-own-actions {
+    display: flex;
+    gap: 10px;
+}
+.profile-page .profile-guest-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.profile-page .btn-ghost-prof {
+    padding: 13px 12px !important;
+    font-size: 14px !important;
+}
+.profile-page .profile-guest-actions .btn {
+    padding: 14px 12px !important;
+    font-size: 15px !important;
+}
+
+/* Banner editor modal */
+#modal-banner-edit .banner-edit-sheet {
+    max-width: 520px;
+    width: calc(100% - 24px);
+    padding: 16px;
+    border-radius: 18px;
+}
+.banner-edit-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.banner-edit-head h3 {
+    margin: 0;
+    font-size: 18px;
+}
+.banner-edit-stage {
+    position: relative;
+}
+.banner-edit-viewport {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 9 / 16;
+    max-height: 52vh;
+    margin: 0 auto;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #0c0a12;
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+}
+.banner-edit-viewport.is-dragging {
+    cursor: grabbing;
+}
+.banner-edit-media {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform-origin: center center;
+    max-width: none;
+    pointer-events: none;
+    user-select: none;
+}
+.banner-edit-media.hidden {
+    display: none !important;
+}
+#banner-edit-img.banner-edit-media {
+    /* width/height set by JS */
+}
+#banner-edit-video.banner-edit-media {
+    /* sized by JS */
+}
+.banner-edit-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted, #9ca3af);
+    text-align: center;
+}
+.banner-edit-controls {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.banner-zoom-label {
+    font-size: 13px;
+    color: var(--muted, #9ca3af);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+#banner-zoom {
+    width: 100%;
+    accent-color: #8b5cf6;
+}
+.banner-edit-actions {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+}
+.banner-edit-actions .btn {
+    flex: 1;
+}
+

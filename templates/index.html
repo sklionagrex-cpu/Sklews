@@ -278,24 +278,25 @@ window.SKLEWS_BUILD = '20260807m';
                 <div class="profile-banner" id="profile-banner">
                     <video id="profile-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
                 </div>
-                <div class="profile-topbar">
-                    <div class="profile-identity">
-                        <div class="avatar-sm" id="profile-avatar">?</div>
-                        <div class="profile-meta">
-                            <div class="profile-name-row">
-                                <h2 id="profile-username">—</h2>
-                                <span id="profile-premium-badge" class="profile-prem-badge hidden" title="Premium"><i class="fa-solid fa-crown"></i></span>
+                <div class="profile-overlay">
+                    <div class="profile-topbar">
+                        <div class="profile-identity">
+                            <div class="avatar-sm" id="profile-avatar">?</div>
+                            <div class="profile-meta">
+                                <div class="profile-name-row">
+                                    <h2 id="profile-username">—</h2>
+                                    <span id="profile-premium-badge" class="profile-prem-badge hidden" title="Premium"><i class="fa-solid fa-crown"></i></span>
+                                </div>
+                                <p id="profile-status" class="profile-desc">Статус не указан</p>
                             </div>
-                            <p id="profile-status" class="profile-desc">Статус не указан</p>
                         </div>
+                        <button id="btn-settings" class="btn-icon profile-menu" type="button" aria-label="Меню"><i class="fa-solid fa-ellipsis"></i></button>
                     </div>
-                    <button id="btn-settings" class="btn-icon profile-menu" type="button" aria-label="Меню"><i class="fa-solid fa-ellipsis"></i></button>
+                    <div class="profile-own-actions">
+                        <button id="btn-open-friends" class="btn btn-ghost-prof" style="position:relative" type="button"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span><span id="friends-req-badge" class="nav-badge hidden">0</span></button>
+                        <button id="btn-open-subs" class="btn btn-ghost-prof" type="button"><i class="fa-solid fa-bookmark"></i> Подписки</button>
+                    </div>
                 </div>
-                <div class="profile-own-actions">
-                    <button id="btn-open-friends" class="btn btn-ghost-prof" style="position:relative" type="button"><i class="fa-solid fa-user-group"></i> Друзья <span id="profile-friends">0</span><span id="friends-req-badge" class="nav-badge hidden">0</span></button>
-                    <button id="btn-open-subs" class="btn btn-ghost-prof" type="button"><i class="fa-solid fa-bookmark"></i> Подписки</button>
-                </div>
-                <!-- crystals kept for JS daily bonus, visually hidden on main profile -->
                 <div class="crystals-badge hidden" id="crystals-badge"><i class="fa-solid fa-gem"></i> <span id="profile-crystals">0</span></div>
             </div>
         </div>
@@ -375,23 +376,24 @@ window.SKLEWS_BUILD = '20260807m';
                     <video id="user-banner-video" class="profile-banner-video" muted loop playsinline autoplay></video>
                 </div>
                 <button class="btn-icon profile-back" id="btn-back-user" type="button" aria-label="Назад"><i class="fa-solid fa-arrow-left"></i></button>
-                <div class="profile-topbar">
-                    <div class="profile-identity">
-                        <div class="avatar-sm" id="user-avatar">?</div>
-                        <div class="profile-meta">
-                            <div class="profile-name-row">
-                                <h2 id="user-username">—</h2>
-                                <span id="user-premium-badge" class="profile-prem-badge hidden" title="Premium"><i class="fa-solid fa-crown"></i></span>
+                <div class="profile-overlay">
+                    <div class="profile-topbar">
+                        <div class="profile-identity">
+                            <div class="avatar-sm" id="user-avatar">?</div>
+                            <div class="profile-meta">
+                                <div class="profile-name-row">
+                                    <h2 id="user-username">—</h2>
+                                    <span id="user-premium-badge" class="profile-prem-badge hidden" title="Premium"><i class="fa-solid fa-crown"></i></span>
+                                </div>
+                                <p id="user-status" class="profile-desc"></p>
                             </div>
-                            <p id="user-status" class="profile-desc"></p>
                         </div>
                     </div>
+                    <div class="profile-guest-actions">
+                        <button id="btn-user-friend" class="btn btn-secondary full" type="button">Добавить в друзья</button>
+                        <button id="btn-user-message" class="btn btn-primary full" type="button"><i class="fa-solid fa-paper-plane"></i> Написать</button>
+                    </div>
                 </div>
-                <div class="profile-guest-actions">
-                    <button id="btn-user-friend" class="btn btn-secondary full" type="button">Добавить в друзья</button>
-                    <button id="btn-user-message" class="btn btn-primary full" type="button"><i class="fa-solid fa-paper-plane"></i> Написать</button>
-                </div>
-                <!-- hidden legacy counters for existing JS -->
                 <span id="user-friends" class="hidden">0</span>
                 <span id="user-channels" class="hidden">0</span>
                 <button id="btn-user-friends-list" class="hidden" type="button"></button>
@@ -691,6 +693,32 @@ window.SKLEWS_BUILD = '20260807m';
                     <button id="btn-theme-save" class="btn btn-primary full">Сохранить</button>
                     <button id="btn-theme-reset" class="btn btn-secondary full">Сбросить</button>
                     <button id="btn-theme-close" class="btn btn-secondary full">Закрыть</button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- BANNER EDITOR -->
+        <div id="modal-banner-edit" class="modal hidden">
+            <div class="modal-content banner-edit-sheet">
+                <div class="banner-edit-head">
+                    <h3>Шапка профиля</h3>
+                    <button type="button" id="btn-banner-edit-close" class="btn-icon"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="banner-edit-stage" id="banner-edit-stage">
+                    <div class="banner-edit-viewport" id="banner-edit-viewport">
+                        <img id="banner-edit-img" class="banner-edit-media hidden" alt="">
+                        <video id="banner-edit-video" class="banner-edit-media hidden" muted loop playsinline></video>
+                    </div>
+                    <div class="banner-edit-hint">Потяните, чтобы сдвинуть · колёсико/ползунок — масштаб</div>
+                </div>
+                <div class="banner-edit-controls">
+                    <label class="banner-zoom-label"><i class="fa-solid fa-magnifying-glass"></i> Масштаб</label>
+                    <input type="range" id="banner-zoom" min="1" max="3" step="0.01" value="1">
+                </div>
+                <div class="modal-actions banner-edit-actions">
+                    <button type="button" id="btn-banner-edit-cancel" class="btn btn-secondary">Отмена</button>
+                    <button type="button" id="btn-banner-edit-save" class="btn btn-primary">Сохранить</button>
                 </div>
             </div>
         </div>
