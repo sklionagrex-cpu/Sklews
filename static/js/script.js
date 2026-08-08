@@ -611,7 +611,8 @@ function setJoinHide(id) {
 
 function renderChannelVisitCard(ch, mode) {
     const card = document.createElement('div');
-    card.className = 'ch-visit-card';
+    const boost = (ch.boost_level || '').toLowerCase();
+    card.className = 'ch-visit-card' + (ch.is_boosted && boost ? ' boosted boosted-' + boost : (ch.is_boosted ? ' boosted' : ''));
     card.dataset.channelId = ch.id;
     const bg = ch.banner || ch.avatar || '';
     if (bg) card.style.backgroundImage = 'url(' + bg + ')';
@@ -623,7 +624,10 @@ function renderChannelVisitCard(ch, mode) {
         '<div class="ch-visit-row">' +
           '<div class="ch-visit-av" id="chav-' + ch.id + '"></div>' +
           '<div class="ch-visit-meta">' +
-            '<div class="ch-visit-name">' + escapeHtml(ch.name || 'Канал') + '</div>' +
+            '<div class="ch-visit-name">' + escapeHtml(ch.name || 'Канал') +
+            (ch.is_boosted ? (' <span class="ch-boost-badge ' + escapeHtml((ch.boost_level||'').toLowerCase()) + '">' +
+              ({gold:'👑',silver:'⭐',bronze:'🔥'}[(ch.boost_level||'').toLowerCase()] || '🚀') +
+            '</span>') : '') + '</div>' +
             '<div class="ch-visit-desc">' + escapeHtml(desc) + '</div>' +
             '<div class="ch-visit-subs"><i class="fa-solid fa-user-group"></i> ' + subs + '</div>' +
             '<div class="ch-visit-actions">' +
@@ -959,6 +963,10 @@ async function openPostsPage(id) {
             else {
                 av.textContent = (ch.name || '?')[0].toUpperCase();
                 if (ch.avatar) { av.style.backgroundImage = 'url(' + ch.avatar + ')'; av.style.backgroundSize = 'cover'; av.textContent = ''; }
+            }
+            av.classList.remove('boosted-gold', 'boosted-silver', 'boosted-bronze');
+            if (ch.is_boosted && ch.boost_level) {
+                av.classList.add('boosted-' + String(ch.boost_level).toLowerCase());
             }
         }
         const isOwner = !!(ch.is_owner || ch.role === 'admin' || ch.role === 'editor' || ch.role === 'coauthor');
