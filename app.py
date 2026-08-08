@@ -112,6 +112,7 @@ class User(db.Model):
     avatar = db.Column(db.String(256), default='')
     banner = db.Column(db.String(256), default='')
     banner_type = db.Column(db.String(16), default='image')  # image | video
+    banner_stretch = db.Column(db.Boolean, default=False)  # False=contain letterbox, True=cover
     status = db.Column(db.String(120), default='')
     crystals = db.Column(db.Integer, default=0)
     is_premium = db.Column(db.Boolean, default=False)
@@ -961,6 +962,7 @@ def api_profile():
         'username': user.username, 'status': user.status, 'avatar': user.avatar,
         'banner': getattr(user, 'banner', '') or '',
         'banner_type': getattr(user, 'banner_type', 'image') or 'image',
+        'banner_stretch': bool(getattr(user, 'banner_stretch', False)),
         'crystals': user.crystals, 'channels': my_channels, 'friends': friends_count,
         'is_premium': premium_active(user), 'referral_code': user.referral_code or '',
         'owned_themes': [t for t in (user.owned_themes or '').split(',') if t],
@@ -1757,6 +1759,7 @@ def user_public(user_id):
         'id': u.id, 'username': u.username, 'avatar': u.avatar,
         'banner': getattr(u, 'banner', '') or '',
         'banner_type': getattr(u, 'banner_type', 'image') or 'image',
+        'banner_stretch': bool(getattr(u, 'banner_stretch', False)),
         'status': u.status,
         'is_premium': premium_active(u),
         **user_plus_payload(u),
@@ -2270,14 +2273,37 @@ def update_banner():
         url = save_media_to_db(f, user_id=user.id)
         user.banner = url
         user.banner_type = 'video' if is_video else 'image'
+        stretch_raw = request.form.get('stretch') or request.form.get('banner_stretch') or ''
+        user.banner_stretch = str(stretch_raw).lower() in ('1', 'true', 'yes', 'on')
         db.session.commit()
-        return jsonify({'status': 'ok', 'banner': user.banner, 'banner_type': user.banner_type})
+        return jsonify({
+            'status': 'ok',
+            'banner': user.banner,
+            'banner_type': user.banner_type,
+            'banner_stretch': bool(user.banner_stretch),
+        })
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         db.session.rollback()
         print('banner upload error:', e, flush=True)
         return jsonify({'error': 'Ошибка сохранения'}), 500
+
+@app.route('/api/profile/banner-fit', methods=['POST'])
+@login_required
+def update_banner_fit():
+    """Toggle banner stretch (cover) vs contain (letterbox)."""
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    stretch = data.get('stretch', data.get('banner_stretch', False))
+    user.banner_stretch = bool(stretch)
+    try:
+        db.session.commit()
+        return jsonify({'status': 'ok', 'banner_stretch': bool(user.banner_stretch)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Ошибка сохранения'}), 500
+
 
 @app.route('/api/channel/<int:channel_id>/avatar', methods=['POST'])
 @login_required
@@ -2469,6 +2495,7 @@ def ensure_db_schema():
         user_cols = [
             ('banner', "VARCHAR(256) DEFAULT ''"),
             ('banner_type', "VARCHAR(16) DEFAULT 'image'"),
+            ('banner_stretch', 'BOOLEAN DEFAULT FALSE'),
             ('last_seen', 'TIMESTAMP'),
             ('is_admin', 'BOOLEAN DEFAULT FALSE'),
             ('muted_until', 'TIMESTAMP'),
@@ -2493,6 +2520,7 @@ def ensure_db_schema():
         user_cols = [
             ('banner', "VARCHAR(256) DEFAULT ''"),
             ('banner_type', "VARCHAR(16) DEFAULT 'image'"),
+            ('banner_stretch', 'BOOLEAN DEFAULT 0'),
             ('last_seen', 'DATETIME'),
             ('is_admin', 'BOOLEAN DEFAULT 0'),
             ('muted_until', 'DATETIME'),
@@ -2551,6 +2579,7 @@ if __name__ == '__main__':
             user_cols = [
                 ('banner', "VARCHAR(256) DEFAULT ''"),
             ('banner_type', "VARCHAR(16) DEFAULT 'image'"),
+                ('banner_stretch', 'BOOLEAN DEFAULT FALSE'),
                 ('last_seen', 'TIMESTAMP'),
                 ('is_admin', 'BOOLEAN DEFAULT FALSE'),
                 ('muted_until', 'TIMESTAMP'),
@@ -2563,6 +2592,7 @@ if __name__ == '__main__':
             user_cols = [
                 ('banner', "VARCHAR(256) DEFAULT ''"),
             ('banner_type', "VARCHAR(16) DEFAULT 'image'"),
+                ('banner_stretch', 'BOOLEAN DEFAULT 0'),
                 ('last_seen', 'DATETIME'),
                 ('is_admin', 'BOOLEAN DEFAULT 0'),
                 ('muted_until', 'DATETIME'),

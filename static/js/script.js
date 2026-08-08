@@ -95,16 +95,18 @@ function premiumNickHtml(username, isPremium, plusFx, pulseColor) {
     return '<span class="premium-nick' + fx + '"' + style + '>@' + name + '</span>';
 }
 
-function setProfileBanner(bannerEl, videoEl, url, bannerType) {
+function setProfileBanner(bannerEl, videoEl, url, bannerType, stretch) {
     if (!bannerEl) return;
     const isVideo = bannerType === 'video' || (!!url && /\.(mp4|webm|mov|m4v)(\?|$)/i.test(url));
+    const doStretch = !!stretch;
     if (videoEl) {
         videoEl.pause();
         videoEl.removeAttribute('src');
         videoEl.load();
     }
+    bannerEl.classList.toggle('has-stretch', doStretch);
     if (!url) {
-        bannerEl.classList.remove('has-banner', 'has-video');
+        bannerEl.classList.remove('has-banner', 'has-video', 'has-stretch');
         bannerEl.style.backgroundImage = '';
         return;
     }
@@ -1769,7 +1771,8 @@ async function loadProfile() {
         document.getElementById('profile-banner'),
         document.getElementById('profile-banner-video'),
         p.banner || '',
-        p.banner_type || 'image'
+        p.banner_type || 'image',
+        !!p.banner_stretch
     );
     const sb = document.getElementById('shop-balance');
     if (sb) sb.textContent = p.crystals;
@@ -1810,14 +1813,28 @@ document.getElementById('avatar-input').onchange = async e => {
 };
 
 
-/* ===== Banner editor: preview as-is (contain), upload original ===== */
-let _bannerEdit = { file: null, isVideo: false, objectUrl: null };
+
+/* ===== Banner editor: preview contain/cover toggle, upload original ===== */
+let _bannerEdit = { file: null, isVideo: false, objectUrl: null, stretch: false };
 
 function _bannerRevoke() {
     if (_bannerEdit.objectUrl) {
         try { URL.revokeObjectURL(_bannerEdit.objectUrl); } catch (e) {}
         _bannerEdit.objectUrl = null;
     }
+}
+
+function _bannerUpdateStretchUI() {
+    const vp = document.getElementById('banner-edit-viewport');
+    const btn = document.getElementById('btn-banner-stretch');
+    const lab = document.getElementById('banner-stretch-label');
+    const on = !!_bannerEdit.stretch;
+    if (vp) vp.classList.toggle('is-stretch', on);
+    if (btn) {
+        btn.classList.toggle('is-on', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
+    if (lab) lab.textContent = on ? 'Растянуто' : 'Растянуть';
 }
 
 function openBannerEditor(file) {
@@ -1829,6 +1846,7 @@ function openBannerEditor(file) {
     _bannerRevoke();
     _bannerEdit.file = file;
     _bannerEdit.isVideo = isVideo;
+    _bannerEdit.stretch = false;
     _bannerEdit.objectUrl = URL.createObjectURL(file);
 
     const img = document.getElementById('banner-edit-img');
@@ -1837,12 +1855,12 @@ function openBannerEditor(file) {
 
     img.classList.add('hidden');
     img.removeAttribute('src');
-    img.style.cssText = '';
     vid.classList.add('hidden');
     vid.pause();
     vid.removeAttribute('src');
     try { vid.load(); } catch (e) {}
 
+    _bannerUpdateStretchUI();
     document.getElementById('modal-settings')?.classList.add('hidden');
     modal?.classList.remove('hidden');
 
@@ -1868,6 +1886,8 @@ function closeBannerEditor() {
     if (img) img.removeAttribute('src');
     _bannerRevoke();
     _bannerEdit.file = null;
+    _bannerEdit.stretch = false;
+    _bannerUpdateStretchUI();
 }
 
 async function saveBannerEditor() {
@@ -1875,7 +1895,8 @@ async function saveBannerEditor() {
     const btn = document.getElementById('btn-banner-edit-save');
     if (btn) { btn.disabled = true; btn.textContent = 'Сохранение…'; }
     try {
-        const d = await uploadWithProgress('/api/profile/banner', _bannerEdit.file);
+        // uploadWithProgress may only send file — append stretch via custom FormData path
+        const d = await uploadBannerWithStretch(_bannerEdit.file, _bannerEdit.stretch);
         if (d.error) showToast('Шапка', d.error || 'Не удалось', '!');
         else {
             showToast('Шапка', _bannerEdit.isVideo ? 'Видео-шапка установлена' : 'Обновлена', '✓');
@@ -1889,6 +1910,35 @@ async function saveBannerEditor() {
     }
 }
 
+async function uploadBannerWithStretch(file, stretch) {
+    // Prefer extending uploadWithProgress if it accepts FormData extras; otherwise raw XHR
+    return new Promise((resolve, reject) => {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('stretch', stretch ? '1' : '0');
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/profile/banner');
+        xhr.withCredentials = true;
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && typeof showUploadProgress === 'function') {
+                showUploadProgress((e.loaded / e.total) * 100, 'Шапка');
+            }
+        };
+        xhr.onload = () => {
+            if (typeof hideUploadProgress === 'function') hideUploadProgress();
+            let data = {};
+            try { data = JSON.parse(xhr.responseText || '{}'); } catch (e) {}
+            if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+            else resolve(data.error ? data : { error: 'Ошибка ' + xhr.status });
+        };
+        xhr.onerror = () => {
+            if (typeof hideUploadProgress === 'function') hideUploadProgress();
+            reject(new Error('Сеть'));
+        };
+        xhr.send(fd);
+    });
+}
+
 document.getElementById('btn-set-banner').onclick = () => document.getElementById('banner-input').click();
 document.getElementById('banner-input').onchange = e => {
     const f = e.target.files && e.target.files[0];
@@ -1899,6 +1949,10 @@ document.getElementById('banner-input').onchange = e => {
 document.getElementById('btn-banner-edit-close')?.addEventListener('click', closeBannerEditor);
 document.getElementById('btn-banner-edit-cancel')?.addEventListener('click', closeBannerEditor);
 document.getElementById('btn-banner-edit-save')?.addEventListener('click', saveBannerEditor);
+document.getElementById('btn-banner-stretch')?.addEventListener('click', () => {
+    _bannerEdit.stretch = !_bannerEdit.stretch;
+    _bannerUpdateStretchUI();
+});
 
 
 document.getElementById('btn-set-status').onclick = () => {
@@ -2033,7 +2087,8 @@ async function openUserProfile(userId) {
         document.getElementById('user-banner'),
         document.getElementById('user-banner-video'),
         u.banner || '',
-        u.banner_type || 'image'
+        u.banner_type || 'image',
+        !!u.banner_stretch
     );
 
     applyPlusToProfileHero(u, {

@@ -5337,3 +5337,31 @@ body.xtheme-cashmere_haze .nav-btn.active {
     padding-bottom: 24px;
 }
 
+
+
+/* Banner stretch (cover) when enabled */
+.profile-page .profile-banner.has-stretch {
+    background-size: cover !important;
+}
+.profile-page .profile-banner.has-stretch .profile-banner-video {
+    object-fit: cover !important;
+}
+.banner-edit-viewport.is-stretch .banner-edit-media {
+    max-width: none !important;
+    max-height: none !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+}
+.banner-stretch-btn {
+    margin-top: 12px;
+}
+.banner-stretch-btn.is-on {
+    background: rgba(139, 92, 246, 0.25) !important;
+    border-color: #8b5cf6 !important;
+    color: #c4b5fd !important;
+}
+
