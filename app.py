@@ -1427,13 +1427,69 @@ def buy_theme():
 @login_required
 def my_channels():
     user = current_user()
-    channels = Channel.query.filter_by(owner_id=user.id).all()
-    return jsonify([{
-        'id': ch.id, 'name': ch.name, 'subscribers': ch.subscribers_count,
-        'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '',
-        'accent': ch.accent_color or '#8b5cf6', 'avatar': ch.avatar or '',
-        **channel_plus_payload(ch),
-    } for ch in channels])
+    owned = Channel.query.filter_by(owner_id=user.id).all()
+    sub_ids = [s.channel_id for s in Subscription.query.filter_by(user_id=user.id).all()]
+    subscribed = Channel.query.filter(Channel.id.in_(sub_ids)).all() if sub_ids else []
+    seen = set()
+    result = []
+    for ch in list(owned) + list(subscribed):
+        if ch.id in seen:
+            continue
+        seen.add(ch.id)
+        result.append({
+            'id': ch.id, 'name': ch.name, 'subscribers': ch.subscribers_count,
+            'description': (ch.description or '')[:200],
+            'is_boosted': ch.is_boosted, 'boost_level': ch.boost_level or '',
+            'accent': ch.accent_color or '#8b5cf6', 'avatar': ch.avatar or '',
+            'banner': getattr(ch, 'banner', None) or ch.avatar or '',
+            'is_owner': ch.owner_id == user.id,
+            'is_subscribed': True,
+            **channel_plus_payload(ch),
+        })
+    return jsonify(result)
+
+
+@app.route('/api/channel/<int:channel_id>/subscribers')
+@login_required
+def channel_subscribers(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id and not can_moderate(user, ch):
+        return jsonify({'error': 'Нет доступа'}), 403
+    subs = Subscription.query.filter_by(channel_id=channel_id).all()
+    out = []
+    for s in subs:
+        u = User.query.get(s.user_id)
+        if not u:
+            continue
+        out.append({
+            'user_id': u.id,
+            'username': u.username,
+            'avatar': u.avatar or '',
+        })
+    return jsonify(out)
+
+
+@app.route('/api/channel/<int:channel_id>/kick', methods=['POST'])
+@login_required
+def channel_kick(channel_id):
+    user = current_user()
+    ch = Channel.query.get_or_404(channel_id)
+    if ch.owner_id != user.id and not can_moderate(user, ch):
+        return jsonify({'error': 'Нет доступа'}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        uid = int(data.get('user_id'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'user_id'}), 400
+    if uid == ch.owner_id:
+        return jsonify({'error': 'Нельзя кикнуть владельца'}), 400
+    sub = Subscription.query.filter_by(user_id=uid, channel_id=channel_id).first()
+    if sub:
+        db.session.delete(sub)
+        ch.subscribers_count = max(0, (ch.subscribers_count or 1) - 1)
+        db.session.commit()
+    return jsonify({'status': 'kicked'})
 
 # ==================== ANALYTICS (basic) ====================
 
@@ -2580,3 +2636,5 @@ if __name__ == '__main__':
 
 
 # cache-bust 20260807195406
+
+# redesign-bust 20260808105026

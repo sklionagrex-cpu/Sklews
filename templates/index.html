@@ -41,45 +41,54 @@ window.SKLEWS_BUILD = '20260807m';
         </nav>
 
         <div id="screen-home" class="screen active">
-            <header class="header">
+            <header class="header ch-hub-header">
                 <div class="brand-logo header-logo" id="home-logo-tap" title="×3 = сапёр">
                     <img src="/static/icon-192.png?v=20260807m" alt="Sklews" width="34" height="34">
                     <span>Sklews</span>
                 </div>
             </header>
-            <div class="home-search-wrap">
-                <div class="home-search-box">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    <input type="text" id="home-search" placeholder="Поиск сообществ..." autocomplete="off">
-                    <button type="button" id="btn-clear-home-search" class="home-search-clear hidden"><i class="fa-solid fa-xmark"></i></button>
+            <div class="ch-hub-tabs" id="ch-hub-tabs">
+                <button type="button" class="ch-hub-tab active" data-hub="discover">Каналы</button>
+                <button type="button" class="ch-hub-tab" data-hub="mine">Мои</button>
+            </div>
+            <div id="ch-hub-discover" class="ch-hub-pane">
+                <div class="home-search-wrap">
+                    <div class="home-search-box">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="home-search" placeholder="Поиск каналов..." autocomplete="off">
+                        <button type="button" id="btn-clear-home-search" class="home-search-clear hidden"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div id="home-search-results" class="home-search-results hidden"></div>
                 </div>
-                <div id="home-search-results" class="home-search-results hidden"></div>
-            </div>
-            <div class="filters">
-                <span class="filters-label">Сортировка</span>
-                <div class="filter-buttons">
-                    <button class="filter-btn active" data-sort="today">Сегодня</button>
-                    <button class="filter-btn" data-sort="week">Неделя</button>
-                    <button class="filter-btn" data-sort="month">Месяц</button>
-                    <button class="filter-btn" data-sort="all">Всё время</button>
+                <div class="filters">
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" data-sort="today">Сегодня</button>
+                        <button class="filter-btn" data-sort="week">Неделя</button>
+                        <button class="filter-btn" data-sort="month">Месяц</button>
+                        <button class="filter-btn" data-sort="all">Всё время</button>
+                    </div>
                 </div>
+                <p id="activity-line" class="ch-activity-line">Активность: —</p>
+                <div id="admin-select-bar" class="admin-select-bar hidden">
+                    <button id="btn-admin-select-toggle" class="btn btn-secondary btn-sm"><i class="fa-solid fa-check-double"></i> Выбрать</button>
+                    <button id="btn-admin-select-all" class="btn btn-secondary btn-sm hidden">Все</button>
+                    <button id="btn-admin-bulk-delete" class="btn btn-sm hidden" style="background:#ef4444;border:none;color:#fff"><i class="fa-solid fa-trash"></i> Удалить <span id="admin-sel-count">0</span></button>
+                    <button id="btn-admin-select-cancel" class="btn btn-secondary btn-sm hidden">Отмена</button>
+                </div>
+                <div id="channels-feed" class="feed ch-visiting-feed"></div>
             </div>
-            <p id="activity-line" style="padding:0 16px 10px;font-size:12px;color:var(--muted)">Активность: —</p>
-            <div id="admin-select-bar" class="admin-select-bar hidden">
-                <button id="btn-admin-select-toggle" class="btn btn-secondary btn-sm"><i class="fa-solid fa-check-double"></i> Выбрать</button>
-                <button id="btn-admin-select-all" class="btn btn-secondary btn-sm hidden">Все</button>
-                <button id="btn-admin-bulk-delete" class="btn btn-sm hidden" style="background:#ef4444;border:none;color:#fff"><i class="fa-solid fa-trash"></i> Удалить <span id="admin-sel-count">0</span></button>
-                <button id="btn-admin-select-cancel" class="btn btn-secondary btn-sm hidden">Отмена</button>
+            <div id="ch-hub-mine" class="ch-hub-pane hidden">
+                <div style="padding:12px 16px 8px">
+                    <button id="btn-create-channel" class="btn btn-primary full"><i class="fa-solid fa-plus"></i> Создать канал</button>
+                </div>
+                <div id="my-channels-list" class="feed ch-visiting-feed"></div>
             </div>
-            <div id="channels-feed" class="feed"></div>
         </div>
 
         <div id="screen-create" class="screen">
+            <!-- legacy shell: redirects to home My tab -->
             <header class="header"><h1>Мои каналы</h1></header>
-            <div style="padding:0 16px 12px">
-                <button id="btn-create-channel" class="btn btn-primary full"><i class="fa-solid fa-plus"></i> Создать канал</button>
-            </div>
-            <div id="my-channels-list" class="feed"></div>
+            <div class="empty-state" style="padding:40px 16px">Откройте вкладку «Мои»</div>
         </div>
 
         <div id="screen-analytics" class="screen">
@@ -304,20 +313,36 @@ window.SKLEWS_BUILD = '20260807m';
 
 
         <!-- POSTS PAGE (отдельный экран) -->
-        <div id="screen-posts" class="screen tg-channel-screen">
-            <header class="tg-ch-top" id="tg-ch-top">
+        <div id="screen-posts" class="screen ch-feed-screen">
+            <header class="ch-feed-top" id="tg-ch-top">
                 <button class="btn-back" id="btn-back-posts" aria-label="Назад"><i class="fa-solid fa-arrow-left"></i></button>
-                <div class="tg-ch-top-main" id="tg-ch-top-main">
-                    <div class="tg-ch-top-av" id="tg-ch-top-av">?</div>
-                    <div class="tg-ch-top-meta">
-                        <div class="tg-ch-top-title" id="posts-page-title">Канал</div>
-                        <div class="tg-ch-top-sub" id="tg-ch-top-sub">—</div>
-                    </div>
+                <div class="ch-feed-brand" id="tg-ch-top-main">
+                    <div class="ch-feed-av" id="tg-ch-top-av">?</div>
+                    <div class="ch-feed-title" id="posts-page-title">Канал</div>
                 </div>
-                <button class="btn-icon" id="btn-posts-menu" aria-label="Меню"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+                <button class="btn-icon hidden" id="btn-posts-menu" aria-label="Меню"><i class="fa-solid fa-ellipsis-vertical"></i></button>
             </header>
-            <div id="posts-feed" class="tg-posts-feed"></div>
-            <button id="btn-add-post" class="tg-fab-post hidden" title="Новый пост"><i class="fa-solid fa-pen"></i></button>
+            <div id="ch-pinned-bar" class="ch-pinned-bar hidden"></div>
+            <div id="posts-feed" class="ch-feed-list"></div>
+            <div id="ch-composer" class="ch-composer hidden">
+                <button type="button" class="ch-composer-attach" id="btn-add-post" title="Медиа"><i class="fa-solid fa-paperclip"></i></button>
+                <input type="text" id="ch-composer-input" class="ch-composer-input" placeholder="Новый пост..." readonly>
+            </div>
+        </div>
+
+        <!-- Channel subscribers / roles (owner menu) -->
+        <div id="screen-ch-manage" class="screen">
+            <header class="header">
+                <button class="btn-back" id="btn-back-ch-manage"><i class="fa-solid fa-arrow-left"></i></button>
+                <h1>Управление</h1>
+                <div style="width:40px"></div>
+            </header>
+            <div class="ch-manage-tabs">
+                <button type="button" class="ch-manage-tab active" data-mtab="subs">Подписчики</button>
+                <button type="button" class="ch-manage-tab" data-mtab="roles">Роли</button>
+            </div>
+            <div id="ch-manage-subs" class="feed"></div>
+            <div id="ch-manage-roles" class="feed hidden"></div>
         </div>
 
         <!-- USER PROFILE -->
@@ -438,7 +463,7 @@ window.SKLEWS_BUILD = '20260807m';
         <!-- MODALS -->
 
                 
-        <div id="modal-plus-studio" class="modal hidden">
+        <div id="modal-plus-studio"  class="modal hidden" style="display:none!important">
             <div class="modal-content plus-studio-sheet">
                 <div class="plus-studio-head">
                     <h3><i class="fa-solid fa-wand-magic-sparkles" style="color:#fbbf24"></i> Premium+ студия</h3>
@@ -622,7 +647,7 @@ window.SKLEWS_BUILD = '20260807m';
                 <button id="btn-set-status" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-pen"></i> Изменить статус</button>
                 <button id="btn-set-privacy" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-lock"></i> Приватность</button>
                 <button id="btn-open-theme" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-palette"></i> Палитра и шрифт</button>
-                <button id="btn-open-plus-studio" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-wand-magic-sparkles" style="color:#fbbf24"></i> Premium+ студия</button>
+                <button id="btn-open-plus-studio" class="hidden" style="display:none!important" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-wand-magic-sparkles" style="color:#fbbf24"></i> Premium+ студия</button>
                 <button id="btn-daily" class="btn btn-secondary full" style="margin-bottom:10px"><i class="fa-solid fa-gift"></i> Бонус дня</button>
                 <button id="btn-logout" class="btn btn-secondary full" style="margin-bottom:10px;color:#f87171"><i class="fa-solid fa-right-from-bracket"></i> Выйти</button>
                 <button id="btn-close-settings" class="btn btn-primary full">Закрыть</button>

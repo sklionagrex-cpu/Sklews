@@ -217,7 +217,7 @@ document.querySelectorAll('.nav-btn').forEach(btn => {
             else loadPremiumFeed();
         }
         if (tab === 'profile') loadProfile();
-        if (tab === 'create') loadMyChannels();
+        if (tab === 'create') { showScreen('screen-home', { push: false }); document.querySelector('.ch-hub-tab[data-hub="mine"]')?.click(); }
         if (tab === 'analytics') loadAnalyticsTab();
         if (tab === 'shop') loadShop();
         if (tab === 'chats') {
@@ -510,57 +510,107 @@ async function loadChannels() {
         if (!feed) return;
         feed.innerHTML = '';
         updateAdminSelectBar();
-        if (!channels.length) {
-            feed.innerHTML = '<div class="empty-state">Нет новых каналов</div>';
+        const hideUntil = getJoinHideMap();
+        const now = Date.now();
+        const list = (channels || []).filter(ch => {
+            const t = hideUntil[String(ch.id)];
+            return !(t && t > now);
+        });
+        if (!list.length) {
+            feed.innerHTML = '<div class="empty-state">Нет каналов</div>';
             return;
         }
-        channels.forEach(ch => {
-            const card = document.createElement('div');
-            card.className = 'channel-card' + (ch.is_boosted ? ' boosted boosted-' + (ch.boost_level || 'bronze') : '') + (ch.plus_frame ? ' plus-frame-' + ch.plus_frame : '') + (ch.plus_anim ? ' plus-anim-' + ch.plus_anim : '');
-            card.dataset.channelId = ch.id;
-            if (adminSelectMode && adminSelectedChannels.has(ch.id)) card.classList.add('admin-selected');
-            if (ch.plus_glow) card.style.boxShadow = '0 0 22px ' + ch.plus_glow + '44';
-            const badge = (ch.label ? '<span class="boost-label">' + ch.label + '</span>' : '') + (ch.plus_badge ? '<span class="channel-plus-badge">' + escapeHtml(ch.plus_badge) + '</span>' : '');
-            const check = adminSelectMode ? '<div class="admin-check"></div>' : '';
-            card.innerHTML = check + avatarHtml(ch.name, ch.avatar) +
-                '<div class="channel-info"><h3>' + escapeHtml(ch.name) + ' ' + badge + '</h3><p>' + ch.subscribers + ' участников</p></div>';
-            let longPressed = false;
-            card.onclick = () => {
-                if (longPressed) { longPressed = false; return; }
-                if (adminSelectMode && meIsAdmin) {
-                    toggleAdminChannelSelect(ch.id, card);
-                    return;
-                }
-                openChannel(ch.id);
-            };
-            // Admin: long-press single delete (when not in select mode)
-            if (meIsAdmin) {
-                let t = null;
-                const start = () => {
-                    if (adminSelectMode) return;
-                    longPressed = false;
-                    t = setTimeout(() => {
-                        longPressed = true;
-                        window._deleteChannelId = ch.id;
-                        window._deleteChannelName = ch.name;
-                        const title = document.querySelector('#modal-delete-channel h3');
-                        if (title) title.textContent = 'Удалить канал?';
-                        const p = document.querySelector('#modal-delete-channel p');
-                        if (p) p.textContent = '«' + ch.name + '» — все посты и подписки будут удалены безвозвратно';
-                        document.getElementById('modal-delete-channel').classList.remove('hidden');
-                    }, 550);
-                };
-                const cancel = () => clearTimeout(t);
-                card.addEventListener('touchstart', start, { passive: true });
-                card.addEventListener('touchend', cancel);
-                card.addEventListener('touchmove', cancel);
-                card.addEventListener('mousedown', start);
-                card.addEventListener('mouseup', cancel);
-                card.addEventListener('mouseleave', cancel);
+        list.forEach(ch => feed.appendChild(renderChannelVisitCard(ch, 'discover')));
+    } catch (e) {
+        console.error(e);
+        const feed = document.getElementById('channels-feed');
+        if (feed) feed.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+    }
+}
+
+function getJoinHideMap() {
+    try { return JSON.parse(localStorage.getItem('sklews_join_hide') || '{}'); } catch (e) { return {}; }
+}
+function setJoinHide(id) {
+    const m = getJoinHideMap();
+    m[String(id)] = Date.now() + 60000;
+    localStorage.setItem('sklews_join_hide', JSON.stringify(m));
+}
+
+function renderChannelVisitCard(ch, mode) {
+    const card = document.createElement('div');
+    card.className = 'ch-visit-card';
+    card.dataset.channelId = ch.id;
+    const bg = ch.banner || ch.avatar || '';
+    if (bg) card.style.backgroundImage = 'url(' + bg + ')';
+    const desc = (ch.description || 'Без описания').slice(0, 90);
+    const subs = (ch.subscribers != null ? ch.subscribers : 0);
+    const joined = !!(ch.is_subscribed || ch.is_owner || mode === 'mine');
+    card.innerHTML =
+        '<div class="ch-visit-shade"></div>' +
+        '<div class="ch-visit-row">' +
+          '<div class="ch-visit-av" id="chav-' + ch.id + '"></div>' +
+          '<div class="ch-visit-meta">' +
+            '<div class="ch-visit-name">' + escapeHtml(ch.name || 'Канал') + '</div>' +
+            '<div class="ch-visit-desc">' + escapeHtml(desc) + '</div>' +
+            '<div class="ch-visit-subs"><i class="fa-solid fa-user-group"></i> ' + subs + '</div>' +
+            '<div class="ch-visit-actions">' +
+              (joined
+                ? '<button type="button" class="ch-visit-btn ghost" data-act="leave">Выйти</button>'
+                : '<button type="button" class="ch-visit-btn primary" data-act="join">Вступить</button>') +
+              '<button type="button" class="ch-visit-btn secondary" data-act="read">Читать</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    const av = card.querySelector('.ch-visit-av');
+    if (typeof setAvatarEl === 'function') setAvatarEl(av, ch.avatar, ch.name);
+    else {
+        av.textContent = (ch.name || '?')[0].toUpperCase();
+        if (ch.avatar) { av.style.backgroundImage = 'url(' + ch.avatar + ')'; av.style.backgroundSize = 'cover'; av.textContent = ''; }
+    }
+    card.querySelectorAll('[data-act]').forEach(btn => {
+        btn.onclick = async e => {
+            e.stopPropagation();
+            const act = btn.dataset.act;
+            if (act === 'read') {
+                openPostsPage(ch.id);
+                return;
             }
-            feed.appendChild(card);
-        });
-    } catch (e) { console.error(e); }
+            if (act === 'join') {
+                const r = await fetch('/api/channel/' + ch.id + '/join', { method: 'POST' });
+                const d = await r.json().catch(() => ({}));
+                if (d.error) return showToast('Канал', d.error, '!');
+                setJoinHide(ch.id); // disappears from discover after 60s on next refresh
+                showToast('Канал', 'Вы вступили', '✓');
+                loadMyChannels();
+                // update card buttons in place (still visible ~60s)
+                const actions = card.querySelector('.ch-visit-actions');
+                if (actions) {
+                    actions.innerHTML = '<button type="button" class="ch-visit-btn ghost" data-act="leave">Выйти</button>' +
+                        '<button type="button" class="ch-visit-btn secondary" data-act="read">Читать</button>';
+                    actions.querySelectorAll('[data-act]').forEach(b => {
+                        b.onclick = async ev => {
+                            ev.stopPropagation();
+                            if (b.dataset.act === 'read') openPostsPage(ch.id);
+                            if (b.dataset.act === 'leave') {
+                                await fetch('/api/channel/' + ch.id + '/leave', { method: 'POST' });
+                                loadMyChannels(); loadChannels();
+                            }
+                        };
+                    });
+                }
+                setTimeout(() => { try { card.remove(); } catch(e){} }, 60000);
+                return;
+            }
+            if (act === 'leave') {
+                await fetch('/api/channel/' + ch.id + '/leave', { method: 'POST' });
+                showToast('Канал', 'Вы вышли', '✓');
+                loadMyChannels();
+                loadChannels();
+            }
+        };
+    });
+    return card;
 }
 
 function updateAdminSelectBar() {
@@ -826,26 +876,93 @@ async function openPostsPage(id) {
         const ch = await res.json();
         const title = document.getElementById('posts-page-title');
         if (title) title.textContent = ch.name || 'Канал';
-        const sub = document.getElementById('tg-ch-top-sub');
-        if (sub) sub.textContent = (ch.subscribers != null ? ch.subscribers : '—') + ' подписчиков';
         const av = document.getElementById('tg-ch-top-av');
         if (av) {
             if (typeof setAvatarEl === 'function') setAvatarEl(av, ch.avatar, ch.name);
             else {
                 av.textContent = (ch.name || '?')[0].toUpperCase();
-                if (ch.avatar) {
-                    av.style.backgroundImage = 'url(' + ch.avatar + ')';
-                    av.style.backgroundSize = 'cover';
-                }
+                if (ch.avatar) { av.style.backgroundImage = 'url(' + ch.avatar + ')'; av.style.backgroundSize = 'cover'; av.textContent = ''; }
             }
         }
-        const fab = document.getElementById('btn-add-post');
-        if (fab) fab.classList.toggle('hidden', !(ch.is_owner || ch.role === 'admin' || ch.role === 'editor'));
-        // smooth channel header FX on the info card if present
-        applyChannelHeaderFx(ch);
-    } catch (e) {}
+        const isOwner = !!(ch.is_owner || ch.role === 'admin' || ch.role === 'editor' || ch.role === 'coauthor');
+        const menu = document.getElementById('btn-posts-menu');
+        if (menu) {
+            menu.classList.toggle('hidden', !ch.is_owner);
+            menu.onclick = () => openChannelManage(id);
+        }
+        const composer = document.getElementById('ch-composer');
+        if (composer) composer.classList.toggle('hidden', !isOwner);
+        const addBtn = document.getElementById('btn-add-post');
+        if (addBtn) {
+            addBtn.classList.remove('hidden');
+            addBtn.onclick = () => {
+                // open existing create post modal if any
+                const m = document.getElementById('modal-post') || document.getElementById('modal-add-post');
+                if (m) m.classList.remove('hidden');
+                else {
+                    const inp = document.getElementById('ch-composer-input');
+                    if (inp) inp.focus();
+                }
+            };
+        }
+        const cin = document.getElementById('ch-composer-input');
+        if (cin) {
+            cin.onclick = () => {
+                const m = document.getElementById('modal-post') || document.getElementById('modal-add-post');
+                if (m) m.classList.remove('hidden');
+            };
+        }
+    } catch (e) { console.error(e); }
     loadPosts(id);
 }
+
+async function openChannelManage(channelId) {
+    showScreen('screen-ch-manage');
+    const subsBox = document.getElementById('ch-manage-subs');
+    const rolesBox = document.getElementById('ch-manage-roles');
+    if (subsBox) subsBox.innerHTML = '<div class="empty-state">Загрузка…</div>';
+    try {
+        const res = await fetch('/api/channel/' + channelId + '/subscribers');
+        let subs = await res.json();
+        if (!Array.isArray(subs)) {
+            // fallback roles endpoint users
+            const r2 = await fetch('/api/channel/' + channelId + '/roles');
+            subs = await r2.json();
+        }
+        if (subsBox) {
+            subsBox.innerHTML = '';
+            (subs || []).forEach(u => {
+                const row = document.createElement('div');
+                row.className = 'ch-manage-row';
+                const name = u.username || u.name || '?';
+                const uid = u.user_id || u.id;
+                row.innerHTML = '<div class="ch-manage-av"></div><div class="ch-manage-name">' + escapeHtml(name) + '</div>' +
+                    '<button type="button" class="btn btn-sm ch-kick-btn">Кикнуть</button>';
+                const av = row.querySelector('.ch-manage-av');
+                if (typeof setAvatarEl === 'function') setAvatarEl(av, u.avatar, name);
+                else av.textContent = name[0].toUpperCase();
+                row.querySelector('.ch-kick-btn').onclick = async () => {
+                    await fetch('/api/channel/' + channelId + '/kick', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: uid })
+                    });
+                    row.remove();
+                    showToast('Канал', 'Пользователь удалён', '✓');
+                };
+                subsBox.appendChild(row);
+            });
+            if (!(subs || []).length) subsBox.innerHTML = '<div class="empty-state">Нет подписчиков</div>';
+        }
+    } catch (e) {
+        if (subsBox) subsBox.innerHTML = '<div class="empty-state">Не удалось загрузить</div>';
+    }
+    // roles tab reuses openRolesModal data lightly
+    if (rolesBox) {
+        rolesBox.innerHTML = '<button type="button" class="btn btn-primary full" id="btn-open-roles-from-manage">Назначить роли</button>';
+        document.getElementById('btn-open-roles-from-manage')?.addEventListener('click', () => openRolesModal());
+    }
+}
+
 document.getElementById('btn-back-posts').onclick = () => { if (NAV_STACK.length) navGoBack(); else openChannel(currentChannelId); };
 
 
@@ -964,66 +1081,124 @@ async function loadPosts(channelId) {
     const res = await fetch('/api/channel/' + channelId + '/posts');
     const posts = await res.json();
     const feed = document.getElementById('posts-feed');
+    if (!feed) return;
     feed.innerHTML = '';
-    if (!posts.length) { feed.innerHTML = '<div class="empty-state">Пока нет постов</div>'; return; }
+    // Pinned bar
+    const pinBar = document.getElementById('ch-pinned-bar');
+    const pinned = (posts || []).find(p => p.is_pinned);
+    if (pinBar) {
+        if (pinned) {
+            const snippet = (pinned.content || 'Медиа').replace(/\s+/g, ' ').slice(0, 72);
+            pinBar.classList.remove('hidden');
+            pinBar.innerHTML = '<i class="fa-solid fa-thumbtack"></i><span>' + escapeHtml(snippet) + (snippet.length >= 72 ? '…' : '') + '</span>';
+            pinBar.onclick = () => {
+                const el = feed.querySelector('[data-post-id="' + pinned.id + '"]');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            };
+        } else {
+            pinBar.classList.add('hidden');
+            pinBar.innerHTML = '';
+        }
+    }
+    if (!posts.length) {
+        feed.innerHTML = '<div class="empty-state">Пока нет постов</div>';
+        return;
+    }
+    const reactIcons = [
+        { k: 'fire', icon: 'fa-fire', label: 'Огонь' },
+        { k: 'heart', icon: 'fa-heart', label: 'Лайк' },
+        { k: 'laugh', icon: 'fa-face-smile', label: 'Смех' },
+        { k: 'wow', icon: 'fa-face-surprise', label: 'Вау' },
+        { k: 'sad', icon: 'fa-face-sad-tear', label: 'Грусть' },
+        { k: 'clap', icon: 'fa-hands-clapping', label: 'Клап' },
+        { k: 'star', icon: 'fa-star', label: 'Звезда' },
+        { k: 'rocket', icon: 'fa-rocket', label: 'Ракета' },
+    ];
+    // map old emoji reactions to keys for display
+    const emojiToKey = { '🔥':'fire','❤️':'heart','😂':'laugh','😮':'wow','😢':'sad','👏':'clap','✨':'star','🚀':'rocket','👍':'heart','💯':'star' };
+
     posts.forEach(p => {
-        const card = document.createElement('div');
-        card.className = 'tg-post' + (p.is_pinned ? ' is-pinned' : '');
-        const pin = p.is_pinned ? '<i class="fa-solid fa-thumbtack" style="color:var(--accent);font-size:12px"></i> ' : '';
+        const card = document.createElement('article');
+        card.className = 'ch-post' + (p.is_pinned ? ' is-pinned' : '');
+        card.dataset.postId = p.id;
+        card.id = 'ch-post-' + p.id;
+
         let media = '';
         if (p.media_type === 'photo' && p.media_url) {
-            media = '<img class="media-clickable" data-type="photo" data-src="' + p.media_url + '" src="' + p.media_url + '" style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;object-fit:cover">';
+            media = '<div class="ch-post-media"><img class="ch-media-photo media-clickable" data-type="photo" data-src="' + p.media_url + '" src="' + p.media_url + '" alt=""></div>';
+        } else if (p.media_type === 'video' && p.media_url) {
+            media = '<div class="ch-post-media"><video class="ch-media-video media-clickable" data-type="video" data-src="' + p.media_url + '" src="' + p.media_url + '" controls playsinline preload="metadata"></video></div>';
+        } else if (p.media_type === 'circle' && p.media_url) {
+            media = '<div class="ch-post-media ch-post-circle"><video class="circle-video" src="' + p.media_url + '" playsinline loop muted></video></div>';
+        } else if (p.media_type === 'voice' && p.media_url) {
+            media = '<div class="ch-post-voice"><i class="fa-solid fa-waveform"></i><audio controls src="' + p.media_url + '"></audio></div>';
         }
-        if (p.media_type === 'circle' && p.media_url) {
-            media = '<div class="post-circle-wrap"><video class="circle-video" src="' + p.media_url + '" playsinline loop muted onclick="this.muted=!this.muted;this.paused?this.play():this.pause()"></video></div>';
-        }
-        if (p.media_type === 'video' && p.media_url) {
-            media = '<video class="media-clickable" data-type="video" data-src="' + p.media_url + '" src="' + p.media_url + '" controls playsinline style="width:100%;border-radius:12px;margin-bottom:10px;max-height:280px;background:#000"></video>';
-        }
+
         const reacts = p.reactions || {};
-        const myReact = p.my_reaction || null;
-        let pillsHtml = '';
+        let pills = '';
         const entries = Object.entries(reacts);
         if (entries.length) {
-            pillsHtml = '<div class="react-pills">' + entries.map(([e, n]) => {
-                const mine = (myReact === e) ? ' mine' : '';
-                return '<span class="react-pill' + mine + '" data-id="' + p.id + '" data-emoji="' + e + '"><span>' + e + '</span><span class="cnt">' + n + '</span></span>';
+            pills = '<div class="ch-react-pills">' + entries.map(([e, n]) => {
+                const key = emojiToKey[e] || e;
+                const ic = reactIcons.find(r => r.k === key);
+                const inner = ic ? '<i class="fa-solid ' + ic.icon + '"></i>' : '<span>' + e + '</span>';
+                return '<span class="ch-react-pill" data-id="' + p.id + '" data-emoji="' + e + '">' + inner + '<span class="n">' + n + '</span></span>';
             }).join('') + '</div>';
         }
-        const authorNick = premiumNickHtml(p.author, p.author_premium);
-        const authorHtml = '<span class="post-author-link" data-author-id="' + (p.author_id || '') + '">' + pin + authorNick + '</span>';
-        const stripEmojis = ['🔥','❤️','😂','😮','😢','👏','✨','💯','🚀','❤️‍🔥','👍','👎','🤯','🥰','💀'];
-        const stripHtml = '<div class="react-strip" data-post-id="' + p.id + '">' +
-            stripEmojis.map(e => '<button type="button" class="react-strip-item" data-emoji="' + e + '">' + e + '</button>').join('') +
+
+        const strip = '<div class="ch-react-sheet" data-post-id="' + p.id + '">' +
+            reactIcons.map(r => '<button type="button" class="ch-react-ico" data-emoji="' + ({fire:'🔥',heart:'❤️',laugh:'😂',wow:'😮',sad:'😢',clap:'👏',star:'✨',rocket:'🚀'}[r.k]) + '" title="' + r.label + '"><i class="fa-solid ' + r.icon + '"></i></button>').join('') +
             '</div>';
-        const pinBadge = p.is_pinned ? '<div class="tg-post-pin"><i class="fa-solid fa-thumbtack"></i> Закреплено</div>' : '';
-        card.innerHTML = pinBadge +
-            '<div class="tg-post-body post-text-wrap" data-post-id="' + p.id + '">' +
-            stripHtml +
-            (media ? '<div class="tg-post-media">' + media + '</div>' : '') +
-            '<div class="post-text tg-post-text">' + linkifyMentions(p.content || '') + '</div>' +
-            (pillsHtml || '') +
-            '<div class="tg-post-foot">' +
-              '<div class="tg-post-actions">' +
-                '<button type="button" class="tg-act comment-btn" data-id="' + p.id + '"><i class="fa-solid fa-comment"></i><span>' + (p.comments || 0) + '</span></button>' +
-                '<button type="button" class="tg-act like-btn' + (p.liked ? ' on' : '') + '" data-id="' + p.id + '"><i class="fa-solid fa-heart"></i><span>' + (p.likes || 0) + '</span></button>' +
-                (p.can_delete || p.is_pinned !== undefined ? '<button type="button" class="tg-act pin-btn" data-id="' + p.id + '" title="Закрепить"><i class="fa-solid fa-thumbtack"></i></button>' : '') +
+
+        card.innerHTML =
+            media +
+            '<div class="ch-post-body">' +
+              (p.content ? '<div class="ch-post-text">' + linkifyMentions(p.content) + '</div>' : '') +
+              pills +
+              strip +
+              '<div class="ch-post-foot">' +
+                '<button type="button" class="ch-comment-btn comment-btn" data-id="' + p.id + '"><i class="fa-solid fa-comments"></i><span>Комментарии' + (p.comments ? ' · ' + p.comments : '') + '</span></button>' +
+                '<span class="ch-post-meta"><i class="fa-solid fa-eye"></i> ' + (p.views || 0) + ' · ' + (p.created_at || '') + '</span>' +
               '</div>' +
-              '<div class="tg-post-meta">' +
-                '<span class="tg-post-views"><i class="fa-solid fa-eye"></i> ' + (p.views || 0) + '</span>' +
-                '<span class="tg-post-time">' + (p.created_at || '') + '</span>' +
-              '</div>' +
-            '</div></div>';
-        card.querySelector('.post-author-link')?.addEventListener('click', e => {
-            e.stopPropagation();
-            if (p.author_id) openUserProfile(p.author_id);
+            '</div>';
+
+        // text click -> reactions sheet
+        const textEl = card.querySelector('.ch-post-text');
+        const sheet = card.querySelector('.ch-react-sheet');
+        if (textEl && sheet) {
+            textEl.addEventListener('click', e => {
+                if (e.target.closest('a')) return;
+                document.querySelectorAll('.ch-react-sheet.open').forEach(s => { if (s !== sheet) s.classList.remove('open'); });
+                sheet.classList.toggle('open');
+            });
+        }
+        sheet?.querySelectorAll('.ch-react-ico').forEach(btn => {
+            btn.onclick = async e => {
+                e.stopPropagation();
+                await fetch('/api/post/' + p.id + '/react', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emoji: btn.dataset.emoji })
+                });
+                sheet.classList.remove('open');
+                if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
+            };
+        });
+        card.querySelectorAll('.ch-react-pill').forEach(pill => {
+            pill.onclick = async e => {
+                e.stopPropagation();
+                await fetch('/api/post/' + pill.dataset.id + '/react', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ emoji: pill.dataset.emoji })
+                });
+                if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
+            };
         });
         if (p.can_delete) {
             let lt;
             const startLP = () => { lt = setTimeout(() => {
                 window._deletePostId = p.id;
-                document.getElementById('modal-delete-post').classList.remove('hidden');
-            }, 550); };
+                document.getElementById('modal-delete-post')?.classList.remove('hidden');
+            }, 600); };
             const cancelLP = () => clearTimeout(lt);
             card.addEventListener('touchstart', startLP, { passive: true });
             card.addEventListener('mousedown', startLP);
@@ -1035,85 +1210,18 @@ async function loadPosts(channelId) {
         feed.appendChild(card);
         enhanceLinkPreviews(card);
     });
-    document.querySelectorAll('.react-pill').forEach(pill => {
-        pill.onclick = async e => {
-            e.stopPropagation();
-            await fetch('/api/post/' + pill.dataset.id + '/react', {
-                method: 'POST', headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({ emoji: pill.dataset.emoji })
-            });
-            if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
-        };
-    });
-    document.querySelectorAll('.post-text-wrap').forEach(wrap => {
-        const strip = wrap.querySelector('.react-strip');
-        if (!strip) return;
-        // Long-press / right-click on post opens reactions (no separate 😊 button)
-        let lt = null;
-        const openStrip = () => {
-            document.querySelectorAll('.react-strip.open').forEach(s => { if (s !== strip) s.classList.remove('open'); });
-            strip.classList.add('open');
-        };
-        const startLP = e => {
-            if (e.target.closest('a,button,video,img,.react-strip,.tg-act,.react-pill')) return;
-            lt = setTimeout(openStrip, 420);
-        };
-        const cancelLP = () => { if (lt) clearTimeout(lt); lt = null; };
-        wrap.addEventListener('touchstart', startLP, { passive: true });
-        wrap.addEventListener('mousedown', startLP);
-        wrap.addEventListener('touchend', cancelLP);
-        wrap.addEventListener('mouseup', cancelLP);
-        wrap.addEventListener('touchmove', cancelLP);
-        wrap.addEventListener('mouseleave', cancelLP);
-        wrap.addEventListener('contextmenu', e => {
-            if (e.target.closest('a,button,video,img,.react-strip')) return;
-            e.preventDefault();
-            openStrip();
-        });
-        strip.querySelectorAll('.react-strip-item').forEach(btn => {
-            btn.onclick = async e => {
-                e.stopPropagation();
-                await fetch('/api/post/' + wrap.dataset.postId + '/react', {
-                    method: 'POST', headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({ emoji: btn.dataset.emoji })
-                });
-                strip.classList.remove('open');
-                if (currentChannelId && viewingPosts) loadPosts(currentChannelId);
-            };
-        });
-    });
-    // close strips on outside tap
-    if (!window._reactStripDocBound) {
-        window._reactStripDocBound = true;
-        document.addEventListener('click', e => {
-            if (!e.target.closest('.post-text-wrap') && !e.target.closest('.react-open-btn')) {
-                document.querySelectorAll('.react-strip.open').forEach(s => s.classList.remove('open'));
-            }
-        });
-    }
-    document.querySelectorAll('.like-btn').forEach(btn => {
-        btn.onclick = async e => {
-            e.stopPropagation();
-            const r = await fetch('/api/post/' + btn.dataset.id + '/like', { method: 'POST' });
-            const d = await r.json();
-            btn.innerHTML = '<i class="fa-solid fa-heart"></i> ' + d.likes;
-            btn.style.color = d.liked ? 'var(--accent)' : '';
-        };
-    });
     document.querySelectorAll('.comment-btn').forEach(btn => {
         btn.onclick = e => { e.stopPropagation(); openComments(btn.dataset.id); };
     });
     bindMentions(feed);
-    document.querySelectorAll('.pin-btn').forEach(btn => {
-        btn.onclick = async e => {
-            e.stopPropagation();
-            await fetch('/api/post/' + btn.dataset.id + '/pin', { method: 'POST' });
-            loadPosts(channelId);
-        };
-    });
     document.querySelectorAll('.media-clickable').forEach(el => {
         el.onclick = e => { e.stopPropagation(); openLightbox(el.dataset.type, el.dataset.src); };
     });
+    document.addEventListener('click', function _closeSheet(e) {
+        if (!e.target.closest('.ch-react-sheet') && !e.target.closest('.ch-post-text')) {
+            document.querySelectorAll('.ch-react-sheet.open').forEach(s => s.classList.remove('open'));
+        }
+    }, { once: false });
 }
 
 
@@ -1375,33 +1483,27 @@ document.getElementById('btn-save-edit-ch').onclick = async () => {
 };
 
 async function loadMyChannels() {
-    const res = await fetch('/api/my_channels');
-    const channels = await res.json();
     const list = document.getElementById('my-channels-list');
-    list.innerHTML = '';
-    if (!channels.length) { list.innerHTML = '<div class="empty-state">Нет каналов</div>'; return; }
-    channels.forEach(ch => {
-        const card = document.createElement('div');
-        card.className = 'channel-card';
-        const badge = ch.is_boosted ? '<span class="boost-label">' + ch.boost_level + '</span>' : '';
-        card.innerHTML = avatarHtml(ch.name, ch.avatar) +
-            '<div class="channel-info"><h3>' + escapeHtml(ch.name) + ' ' + badge + '</h3><p>' + ch.subscribers + ' участников</p></div>';
-        card.onclick = () => openChannel(ch.id);
-        let t = null;
-        const start = e => { t = setTimeout(() => {
-            window._deleteChannelId = ch.id;
-            document.getElementById('modal-delete-channel').classList.remove('hidden');
-        }, 550); };
-        const cancel = () => clearTimeout(t);
-        card.addEventListener('touchstart', start, { passive: true });
-        card.addEventListener('touchend', cancel);
-        card.addEventListener('touchmove', cancel);
-        card.addEventListener('mousedown', start);
-        card.addEventListener('mouseup', cancel);
-        card.addEventListener('mouseleave', cancel);
-        list.appendChild(card);
-    });
+    if (!list) return;
+    list.innerHTML = '<div class="empty-state">Загрузка…</div>';
+    try {
+        const res = await fetch('/api/my_channels');
+        let channels = await res.json();
+        if (!Array.isArray(channels)) channels = [];
+        list.innerHTML = '';
+        if (!channels.length) {
+            list.innerHTML = '<div class="empty-state">Пока нет каналов и подписок</div>';
+            return;
+        }
+        channels.forEach(ch => {
+            ch.is_subscribed = true;
+            list.appendChild(renderChannelVisitCard(ch, 'mine'));
+        });
+    } catch (e) {
+        list.innerHTML = '<div class="empty-state">Ошибка загрузки</div>';
+    }
 }
+
 document.getElementById('btn-cancel-delete-channel')?.addEventListener('click', () => {
     document.getElementById('modal-delete-channel').classList.add('hidden');
     window._deleteChannelId = null;
@@ -3889,3 +3991,31 @@ document.addEventListener('click', function (e) {
     e.stopPropagation();
     openPostsPage(currentChannelId);
 }, true);
+
+// Channel hub tabs
+document.addEventListener('click', e => {
+    const tab = e.target.closest('.ch-hub-tab');
+    if (!tab) return;
+    document.querySelectorAll('.ch-hub-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const hub = tab.dataset.hub;
+    document.getElementById('ch-hub-discover')?.classList.toggle('hidden', hub !== 'discover');
+    document.getElementById('ch-hub-mine')?.classList.toggle('hidden', hub !== 'mine');
+    if (hub === 'discover') loadChannels();
+    else loadMyChannels();
+});
+
+
+document.getElementById('btn-back-ch-manage')?.addEventListener('click', () => {
+    if (currentChannelId) openPostsPage(currentChannelId);
+    else showScreen('screen-home');
+});
+document.querySelectorAll('.ch-manage-tab').forEach(t => {
+    t.addEventListener('click', () => {
+        document.querySelectorAll('.ch-manage-tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        const m = t.dataset.mtab;
+        document.getElementById('ch-manage-subs')?.classList.toggle('hidden', m !== 'subs');
+        document.getElementById('ch-manage-roles')?.classList.toggle('hidden', m !== 'roles');
+    });
+});
